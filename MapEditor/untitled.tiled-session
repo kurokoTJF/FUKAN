@@ -1,0 +1,123 @@
+{
+    "Map/SizeTest": {
+        "height": 4300,
+        "width": 2
+    },
+    "activeFile": "",
+    "automapping.whileDrawing": true,
+    "expandedProjectPaths": [
+        "."
+    ],
+    "exportAsImage.useCurrentScale": false,
+    "file.lastUsedOpenFilter": "All Files (*)",
+    "fileStates": {
+        "32x32_spr_arcade_02.tsx": {
+            "scaleInDock": 1
+        },
+        "Background.tsx": {
+            "scaleInDock": 1,
+            "scaleInEditor": 1
+        },
+        "Explosion SpriteSheet.tsx": {
+            "scaleInDock": 1,
+            "scaleInEditor": 1
+        },
+        "Props.tsx": {
+            "scaleInDock": 1,
+            "scaleInEditor": 1
+        },
+        "bg_00.tsx": {
+            "scaleInDock": 1
+        },
+        "bg_02.tsx": {
+            "scaleInDock": 1
+        },
+        "char_red_1.tsx": {
+            "scaleInDock": 0.75,
+            "scaleInEditor": 1
+        },
+        "char_red_2.tsx": {
+            "scaleInDock": 1,
+            "scaleInEditor": 1
+        },
+        "grass villege 2.tsx": {
+            "scaleInDock": 1,
+            "scaleInEditor": 1
+        },
+        "grass villige.tsx": {
+            "scaleInDock": 1,
+            "scaleInEditor": 1
+        },
+        "sky_blue.tsx": {
+            "scaleInDock": 1,
+            "scaleInEditor": 1
+        },
+        "spr_tile_decor.tsx": {
+            "scaleInDock": 1,
+            "scaleInEditor": 1
+        },
+        "spr_tile_floor_and_walls.tsx": {
+            "scaleInDock": 1,
+            "scaleInEditor": 1
+        },
+        "spr_tile_platform.tsx": {
+            "scaleInDock": 1,
+            "scaleInEditor": 1
+        },
+        "spritesheet.tsx": {
+            "scaleInDock": 1,
+            "scaleInEditor": 1
+        },
+        "test_map.tmx": {
+            "expandedGroupLayers": [
+                6,
+                15
+            ],
+            "expandedObjectLayers": [
+                6,
+                15
+            ],
+            "scale": 1.5,
+            "selectedLayer": 3,
+            "viewCenter": {
+                "x": 160,
+                "y": 95.66666666666666
+            }
+        }
+    },
+    "last.exportedFilePath": "E:/Games/KirbyAtHome/MapEditor",
+    "last.imagePath": "E:/Games/KirbyAtHome/Sprites/Fire Effect 2",
+    "map.height": 28,
+    "map.lastUsedExportFilter": "JavaScript map files (*.js)",
+    "map.lastUsedFormat": "tmx",
+    "map.orientation": null,
+    "map.tileHeight": 16,
+    "map.tileWidth": 32,
+    "map.width": 16,
+    "openFiles": [
+        "test_map.tmx",
+        "spr_tile_decor.tsx",
+        "spr_tile_floor_and_walls.tsx",
+        "spr_tile_platform.tsx"
+    ],
+    "project": "untitled.tiled-project",
+    "recentFiles": [
+        "test_map.tmx",
+        "spr_tile_decor.tsx",
+        "spr_tile_floor_and_walls.tsx",
+        "spr_tile_platform.tsx",
+        "spritesheet.tsx",
+        "sky_blue.tsx",
+        "Props.tsx",
+        "grass villige.tsx",
+        "grass villege 2.tsx",
+        "Explosion SpriteSheet.tsx",
+        "char_red_2.tsx",
+        "char_red_1.tsx"
+    ],
+    "tileset.lastUsedFormat": "tsx",
+    "tileset.tileSize": {
+        "height": 16,
+        "width": 32
+    }
+}
