@@ -35,11 +35,11 @@ class dialogBox{
 		this.remove = true
 	}
 	
-	EndEvent(){
+	setEventEnd(){
 		pp('Dialog終了、Puppets開放')
 		this.setRemove()
 		this.puppets.forEach((pop)=>{
-			pop.openInput()
+			pop.setInputOpen()
 		})
 	}
 	
@@ -47,11 +47,11 @@ class dialogBox{
 		this.content_text = txt
 	}
 	
-	reset_dialog(){
+	resetDialog(){
 		this.content_text = txt_floor15
 	}	
 
-	toCount(time){
+	updateCounter(time){
 		if(this.counter<time){
 			this.counter++
 			return false
@@ -73,7 +73,7 @@ class dialogBox{
 		this.counter=0
 	}
 	
-	showProcess(counter=this.counter,max=100){
+	drawProcess(counter=this.counter,max=100){
 		let string = ''
 		let process = Math.ceil(counter/max*10)
 		for(let i=0;i<process;i++){
@@ -92,7 +92,7 @@ class dialogBox{
 		/*
 			if(player.isMovieMode())
 				characters.forEach((c)=>{
-					c.openInput()
+					c.setInputOpen()
 				})
 		*/
 		let regex 
@@ -104,7 +104,7 @@ class dialogBox{
 		if(!this.load){//初回のKeyイベントをスキップできる
 			this.load = true
 			this.puppets.forEach((pop)=>{
-				pop.closeInput()
+				pop.setInputClose()
 			})
 			this.pages = this.content_text.split('|')
 			this.page_num = 0
@@ -113,19 +113,19 @@ class dialogBox{
 			if(temp=='false')
 				this.skippable = false
 		}else{
-			if(onPress('e')){
+			if(getOnPress('e')){
 				pp('dialog取消')
-				this.EndEvent()
+				this.setEventEnd()
 				
 			}
 			
 			// handle Input
 			
 			if(!this.print_finished){
-				if(this.skippable&&onPress('right'))
+				if(this.skippable&&getOnPress('right'))
 					this.print_finished = true
 			}else{
-				if((this.skippable&&onPress('right'))||(this.autoPlay&&this.toCount(100))){
+				if((this.skippable&&getOnPress('right'))||(this.autoPlay&&this.updateCounter(100))){
 					if(found && this.in_page_num<found.length-1){
 						in_page_num++
 					}
@@ -133,7 +133,7 @@ class dialogBox{
 						this.page_num++
 						this.init_page()
 						if(this.page_num>=this.pages.length){
-							this.EndEvent()						
+							this.setEventEnd()						
 							return
 						}
 					}

@@ -59,7 +59,7 @@ class Player{
 		this.position.y=py*tile_size
 		this.height = height
 		this.width = width
-		this.openInput()
+		this.setInputOpen()
 
 	}
 
@@ -147,8 +147,8 @@ class Player{
 		}else if(name == 'enter'){
 			this.cst('idle')
 			//console.log('enter the door of: ' + this.interTarget.ID)
-			change_level_request(this.interTarget.nextLevel)
-			world_fade_out()
+			requestSetLevel(this.interTarget.nextLevel)
+			handleWorldFadeOut()
 			pp(screenPainter.currentClip)
 			
 		}
@@ -184,14 +184,14 @@ class Player{
 			this.velocity.y = 0
 		
 		if(this.requests['endMovie'])
-			this.openInput()
+			this.setInputOpen()
 		
 		if(this.requests['call']){
 			if(this.toComfirm())
 				this.requests['call']=false
 		}
 	}
-	// reste 1-frame request
+	// reset 1-frame request
 	resetRequests(){
 		if(this.requests['land']){
 			this.falling = false
@@ -209,13 +209,13 @@ class Player{
 		return this.movieMode
 	}
 
-	closeInput(){
+	setInputClose(){
 		this.movieMode = true
 	}
 
-	openInput(){
+	setInputOpen(){
 		if(this.requests['moving']){
-			pp('移動中のため、openInput再試行中')
+			pp('移動中のため、setInputOpen再試行中')
 			this.requests['endMovie'] = true
 			return false
 		}else
@@ -223,7 +223,7 @@ class Player{
 			this.movieMode = false
 	}
 	
-	clearInput(){
+	resetInput(){
 		for(let input in this.inputs)
 			if(this.inputs[input]){
 				pp('Inputs['+input+'] クリア')
@@ -274,7 +274,7 @@ class Player{
 		
 	}
 	
-	toCount(time){
+	updateCounter(time){
 		if(this.body_clock<time){
 			this.body_clock++
 			return false
@@ -285,7 +285,7 @@ class Player{
 	}
 	
 	// 受肉
-	incarnate(){
+	setIncarnate(){
 		this.incarnation = true
 		this.actionPlan=[]
 	}
@@ -311,7 +311,7 @@ class Player{
 					this.actionPlan.shift()
 			break
 			case 'wait':
-				if(this.toCount(plan.time)){
+				if(this.updateCounter(plan.time)){
 					this.actionPlan.shift()
 				}else if(this.requests['cancel_wait']){
 					this.actionPlan.shift()
@@ -343,7 +343,7 @@ class Player{
 	
 	toCall(target){
 		console.log('A:あの～')
-		if(this.toCount(100)){
+		if(this.updateCounter(100)){
 			target.beCalled(this)
 			return true				
 		}else{
@@ -359,7 +359,7 @@ class Player{
 	}
 	
 	toComfirm(){
-		if(this.toCount(100)){
+		if(this.updateCounter(100)){
 			console.log('B:あっごめん、どしたの？')
 			this.requests['call_target'].beConfirmed(this,1)
 			return true
@@ -378,7 +378,7 @@ class Player{
 
 		
 	handleInput(){
-		if(onPress('jump')){
+		if(getOnPress('jump')){
 			if(this.requests['land']||(this.requests['stop']&&this.velocity.y>0)){
 				this.attacking = false
 				this.wallSlide = false
@@ -392,16 +392,16 @@ class Player{
 			}
 		}
 		
-		if(onPress('up')){
+		if(getOnPress('up')){
 			if(this.requests['interact'] ){
 				if(this.interTarget.ID==1){
-					this.closeInput()
+					this.setInputClose()
 					this.cst('enchant')
 					this.velocity.x = 0
 					this.velocity.y = 0
 					
 				}else{
-					this.closeInput()
+					this.setInputClose()
 					this.cst('enter')
 					this.velocity.x = 0
 					this.velocity.y = 0
@@ -435,7 +435,7 @@ class Player{
 			this.velocity.x=0
 		}
 		
-		if(onPress('atk')){
+		if(getOnPress('atk')){
 			if(this.state=='idle'|| this.state =='land'){
 				this.attacking = true
 				this.cst('gd_atk')
@@ -461,7 +461,7 @@ class Player{
 			if(this.incarnation){
 				// 時間を動かす…
 				if(this.actionPlan.length==0){
-					if(this.toCount(300))
+					if(this.updateCounter(300))
 						this.addPlan()
 				// やることを処理
 				}else{
@@ -487,7 +487,7 @@ class Player{
 					this.velocity.y = 1
 				}
 				
-				if(onPress('e')){
+				if(getOnPress('e')){
 					if(this.requests['interact']){
 						let target = this.interTarget.getMaster()
 						if(target){
@@ -500,14 +500,14 @@ class Player{
 					}else{
 						console.log('get close to the inventable point')
 						world_addDialogs(txt_floor15)
-						this.closeInput()
+						this.setInputClose()
 					}
 				}
 				
-				if(onPress('atk')){
+				if(getOnPress('atk')){
 					if(this.requests['interact'] ){
 						if(this.interTarget.nextLevel){
-							this.closeInput()
+							this.setInputClose()
 							this.cst('enter')
 							this.velocity.x = 0
 							this.velocity.y = 0

@@ -5,8 +5,7 @@
 // iso:
 // 4 static, 5 static+collision, 6 depth objects
 class Tiles{
-	constructor(
-	{
+	constructor({
 		position={x:0,y:0},
 		velocity={x:0,y:0},
 		width=1,height=1,
@@ -245,7 +244,7 @@ class Tiles{
 			}else{
 				if(player.getInterTarget() == this){
 					player.resetInterTarget()
-					dialog_box.reset_dialog()
+					dialog_box.resetDialog()
 				}
 			}
 				

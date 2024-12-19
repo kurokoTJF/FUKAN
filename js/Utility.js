@@ -176,7 +176,7 @@ function offset_bottom(_osize_x,_osize_y,_size_x,_size_y,_scale){
 	return {x:(_osize_x-_size_x*_scale)/2,y:(_osize_y-_size_y*_scale)}
 }
 
-function onPress(_key){
+function getOnPress(_key){
 	return !keys[_key].press && keys[_key].pressed
 }
 
@@ -191,7 +191,7 @@ let DIP_page_num=0
 
 function DIP(){
 	
-	if(onPress('q')){
+	if(getOnPress('q')){
 		if(!showDIP)
 			showDIP=true
 		else

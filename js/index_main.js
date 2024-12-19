@@ -429,9 +429,9 @@ let levels = {
 			test_objects = []
 			player.init(10,12,24,24)
 			NPC0.init(10,20,24,24)
-			NPC0.incarnate()
+			NPC0.setIncarnate()
 			NPC1.init(10,25,24,24)
-			NPC1.incarnate()
+			NPC1.setIncarnate()
 		    console.log('level '+level+' generating')
 			generate_from_array2D(array_parse2D(level3Col,16))
 			generate_from_array2D(array_parse2D(level3OBJ,16))
@@ -451,18 +451,18 @@ let levels = {
 let world_fade_in_RQ = false
 let world_fade_out_RQ = false
 
-function resetRequest(){
+function resetFadeRequest(){
 	if(world_fade_in_RQ)
 		world_fade_in_RQ =false
 	if(world_fade_out_RQ)
 		world_fade_out_RQ = false
 }
 
-function world_fade_in(){
+function handleWorldFadeIn(){
 	screenPainter.switchMovieClip('fade_in')
 }
 
-function world_fade_out(){
+function handleWorldFadeOut(){
 	screenPainter.switchMovieClip('fade_out')
 }
 
@@ -471,7 +471,7 @@ function world_fade_out(){
 
 
 
-function change_level_request(_level){
+function requestSetLevel(_level){
 	if(_level == undefined)
 		level = 0
 	else 
@@ -549,13 +549,13 @@ window.addEventListener('keyup',(event)=>{
 ///////////////////////////////////////////
 
 levels[level].init()
-world_update()
+updateWorld()
 
 
 
 
-function world_update(){
-	window.requestAnimationFrame(world_update)
+function updateWorld(){
+	window.requestAnimationFrame(updateWorld)
 	if (!keys.pause.pressed) {
 		//console.log(PERSPECTIVE)
 	    switch (PERSPECTIVE) {
@@ -582,7 +582,7 @@ function world_update(){
 	    
 		case 'iso':
 			
-			if(onPress('jump')){
+			if(getOnPress('jump')){
 				let plan = 
 				NPC0.body_clock=0
 				NPC0.actionPlan.push(
