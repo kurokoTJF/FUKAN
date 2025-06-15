@@ -1,0 +1,77 @@
+<div class=container>
+    <div class=left-column>
+        ＝qte, atk, enemy, select Gauge, animation
+        Counter-based-delayed-Input
+    </div>
+    <div class=right-column>
+        <canvas></canvas>
+    </div>
+
+</div>
+
+<p>
+    <button class="b1" > </button>
+    <button class="b1" onmousedown="keyPress('up')">↑</button>
+    <button class="b1" > </button>
+</p>
+<p>
+    <button class="b1" onmousedown="keyPress('left')">←</button>
+    <button class="b1" onmousedown="keyPress('down')">↓</button>
+    <button class="b1" onmousedown="keyPress('right')">→</button>
+    <button class="b1" > </button> 
+    <button onmousedown="keyPress('atk')">attack</button>
+</p>
+
+<div>
+    <p>
+        <button onmousedown="keyPress('add_sword')">add sword</button>
+        <button onmousedown="keyPress('select')">pause and select</button>
+        <button onmousedown="keyPress('use_chip')">use the chip</button>
+    </p>
+</div>
+<button onmousedown="keyPress('test')">Timing </button>
+<button onmousedown="clearLog()">clear log </button>
+
+<p>
+<div id="chips"></div>
+<div id="log"></div>
+</p>
+
+<style>
+    .b1{
+        width:20px;
+        height:20px;
+    }
+    .container {
+        display: flex;
+    }
+
+    .left-column {
+        font-size: 12px;
+        width: 30%;
+        background-color: #f0f0f0;
+        padding: 10px;
+    }
+
+    .right-column {
+        width: 70%;
+        background-color: #8f8f8f;
+        padding: 10px;
+    }
+</style>
+
+<script>
+    function log(msg) {
+        document.getElementById("log").innerText += msg + "\n_"
+    }
+    function showChips(msg) {
+        document.getElementById("chips").innerText = "battle chips:" + "\n_" + msg
+    }
+    function clearLog() {
+        document.getElementById('log').innerText = "my console:\n"
+    }
+    clearLog()
+    showChips("no chips")
+</script>
+
+<script src="main.js"></script>
