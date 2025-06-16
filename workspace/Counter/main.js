@@ -1,10 +1,17 @@
 // classes.js
 // difficult to split files
+
+const CharID = {
+  Player: 0,
+  Enemy: 1,
+}
+
 class Player {
   constructor() {
     console.log("player online")
     this.position = { x: 1, y: 1 }
     this.HP = 100
+    this.ID = CharID.Player
     this.stance = 100
     this.isFree = true
     this.state = {
@@ -65,10 +72,11 @@ class Player {
               GM._addCounterGen({
                 _endtime: 30,
                 _msg: "qte counting...",
-                _endCall: () => player.HP -= 25,
+                _endCall: () => (player.HP -= 25),
                 _qteCall: () => {
                   player.state["buffed"] = true
                   GM.addSPCounter()
+                  enemy.HP -= 20
                   log("PERFECT!")
                 },
               }),
@@ -83,6 +91,9 @@ class Player {
   }
 
   _handleInput() {
+    if (this.ID == CharID.Enemy) {
+      return
+    }
     if (this.state["usingChip"] || this.state["moving"]) return
     if (keys.use_chip.pressed) {
       this.#startUseChip()
@@ -141,6 +152,13 @@ class Player {
       )
     }
     let temp_draw_gauge2 = (_current, _max) => {
+      c.fillStyle = "rgba(0,0,0,1)"
+      c.fillRect(
+        ((this.position.x - 1) * canvas.width) / 6 + 10,
+        (this.position.y * canvas.height) / 6 + 10,
+        tileSize,
+        5,
+      )
       c.fillStyle = "rgba(255,0,0,1)"
       c.fillRect(
         ((this.position.x - 1) * canvas.width) / 6 + 10,
@@ -154,8 +172,8 @@ class Player {
     if (this.state["buffed"]) {
       c.fillStyle = "rgb(251, 255, 0)"
       c.fillRect(
-        ((this.position.x - 1) * canvas.width) / 6+10,
-        (this.position.y * canvas.height) / 6+20,
+        ((this.position.x - 1) * canvas.width) / 6 + 10,
+        (this.position.y * canvas.height) / 6 + 20,
         tileSize,
         5,
       )
@@ -245,10 +263,12 @@ class GameManager {
     this.counters = []
     this.dominantCounter = null
     this.state = {
-      pause: true,
+      pause: false,
       title: false,
       world: false,
       dialog: false,
+      battle: true,
+      battle_win:false,
     }
   }
 
@@ -311,9 +331,11 @@ class GameManager {
     _c.processCall = () => {
       let _t = _c.time
       if (_c.time == 1) PP.state["darken"] = true
-      if (_c.time == 10) 
-      if (_c.time == 40) log("player animation")
-      if (_c.time == 100) {log("over");PP.state["darken"] = false;}
+      if (_c.time == 10) if (_c.time == 40) log("player animation")
+      if (_c.time == 100) {
+        log("over")
+        PP.state["darken"] = false
+      }
 
       if (_t < 10) {
         PP.fillStyle = `rgba(255,255,255,${Math.min(_t * 0.1, 1) * 0.5})`
@@ -360,6 +382,14 @@ class GameManager {
       c.fillRect(0, 0, canvas.width, canvas.height)
       c.fillStyle = "rgba(255,255,255,1)"
       c.fillText("press select key to start", 10, canvas.height / 2)
+      return
+    }
+
+    if(this.state['battle_win']){
+      c.fillStyle = "rgba(255,255,255,1)"
+      c.fillRect(0, 0, canvas.width, canvas.height)
+      c.fillStyle = "rgba(0,20,0,1)"
+      c.fillText("you win!", 10, canvas.height / 2)
       return
     }
     c.fillStyle = "rgba(200,230,250,1)"
@@ -410,6 +440,7 @@ class GameManager {
     PP.draw()
 
     player.draw()
+    enemy.draw()
   }
   #update_counters() {
     if (this.dominantCounter) {
@@ -429,9 +460,15 @@ class GameManager {
     if (this.state["title"]) {
     } else if (this.state["pause"]) {
       //     console.log('paused')
-    } else {
+    }else {
       this.#update_counters()
       player.update()
+      enemy.update()
+      if(this.state['battle']){
+        if(enemy.HP<=0){this.state['battle_win']=true;this.state['battle']=false}
+      }
+      if(this.state['battle_win']){log('win!')}   
+      
     }
 
     for (let _key in keys) keys[_key].pressed = false
@@ -587,6 +624,9 @@ const tileSize = 50
 
 let counter = 0
 let player = new Player()
+let enemy = new Player()
+enemy.ID = CharID.Enemy
+enemy.position = { x: 5, y: 2 }
 const PP = new PostProcessor()
 const GM = new GameManager()
 
