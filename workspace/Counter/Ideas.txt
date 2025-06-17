@@ -1,3 +1,4 @@
+なかなか反映しない？
 ✅qte,enemy,animation,勝利判定、
 素材を入れたい。StateMachineの衝突を回避
 攻撃判定、Skill演出
