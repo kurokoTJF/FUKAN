@@ -1,14 +1,8 @@
 <div class=container>
     <div class=left-column>
-      <p>✅qte,enemy,animation,勝利判定、</p>
-      <p>攻撃判定、Skill演出
-          Counterも、本当はProcessCall()だけでいけるはず、gen_listの仕様はややこしいかも、整合したい…
-           Counterでキャラを動かせば色々できそうな気がするけど、想像力に囚われてる
-          Player関連の Counterを更新しないようにする？ CounterにTargetのパラメーターを追加して、Target.state['pause']だったら更新しないとか
-        select Gauge, 
-        Counter-based-delayed-Input
-      </p>
-         
+        <p id="content"></p>
+        <p>
+
     </div>
     <div class=right-column>
         <canvas></canvas>
@@ -17,15 +11,15 @@
 </div>
 
 <p>
-    <button class="b1" > </button>
+    <button class="b1"> </button>
     <button class="b1" onmousedown="keyPress('up')">↑</button>
-    <button class="b1" > </button>
+    <button class="b1"> </button>
 </p>
 <p>
     <button class="b1" onmousedown="keyPress('left')">←</button>
     <button class="b1" onmousedown="keyPress('down')">↓</button>
     <button class="b1" onmousedown="keyPress('right')">→</button>
-    <button class="b1" > </button> 
+    <button class="b1"> </button>
     <button onmousedown="keyPress('atk')">attack</button>
 </p>
 
@@ -45,16 +39,17 @@
 </p>
 
 <style>
-    .b1{
-        width:20px;
-        height:20px;
+    .b1 {
+        width: 20px;
+        height: 20px;
     }
+
     .container {
         display: flex;
     }
 
     .left-column {
-        font-size: 8px;
+        font-size: 10px;
         width: 30%;
         background-color: #f0f0f0;
         padding: 10px;
@@ -68,6 +63,16 @@
 </style>
 
 <script>
+    const rawUrl = "https://raw.githubusercontent.com/kurokoTJF/FUKAN/refs/heads/main/workspace/Counter/Ideas.txt";
+
+    fetch(rawUrl)
+        .then(response => response.text())
+        .then(data => {
+            document.getElementById("content").textContent = data;
+        })
+        .catch(error => {
+            document.getElementById("content").textContent = "読み込み失敗: " + error;
+        });
     function log(msg) {
         document.getElementById("log").innerText += msg + "\n_"
     }
