@@ -1,1 +1,8 @@
-やりたいことはここに描いておく
+✅qte,enemy,animation,勝利判定、
+素材を入れたい。StateMachineの衝突を回避
+攻撃判定、Skill演出
+    Counterも、本当はProcessCall()だけでいけるはず、gen_listの仕様はややこしいかも、整合したい…
+    Counterでキャラを動かせば色々できそうな気がするけど、想像力に囚われてる
+    Player関連の Counterを更新しないようにする？ CounterにTargetのパラメーターを追加して、Target.state['pause']だったら更新しないとか
+    select Gauge,
+    Counter-based-delayed-Input
