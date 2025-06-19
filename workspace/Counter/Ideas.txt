@@ -35,3 +35,35 @@ user input
 で、それを描画していく
 
 
+カードゲームっぽさも出したいな
+zzzニコの大技のスクショとか
+イラスト、カードを表示させる。
+ここで見栄えを稼げそう
+
+とか行けそうかね
+GUI系はまだやったことないけど。
+カーソル、とその対応
+GUI.handleInput
+GUI.cursorPosition
+まずはカーソル描画、選択したものの名前をOutputするDEMOを作るか
+
+
+
+攻撃
+
+charge
+
+一回押してCharge開始、二回押したら放つ
+
+counter
+endtime:0
+
+counter.update
+if(!endtime){
+	process_Call()
+	return
+}
+
+
+無限に打って来る敵。でタイミング練習
+MHの練習用ロボットみたいな
