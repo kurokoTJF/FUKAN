@@ -1,7 +1,7 @@
 <div class=container>
     <div class=left-column>
         <p id="content"></p>
-        <p>
+        <p>idle infinite counter</p>
 
     </div>
     <div class=right-column>
@@ -63,16 +63,33 @@
 </style>
 
 <script>
+    keyPress = function (key) {
+        keys[key].pressed = true
+    }
+
+    var keys = {
+        up: { press: false, pressed: false },
+        down: { press: false, pressed: false },
+        left: { press: false, pressed: false },
+        right: { press: false, pressed: false },
+        select: { press: false, pressed: false },
+        use_chip: { press: false, pressed: false },
+        atk: { press: false, pressed: false },
+        add_sword: { press: false, pressed: false },
+        test: { press: false, pressed: false },
+    }
     const rawUrl = "https://raw.githubusercontent.com/kurokoTJF/FUKAN/refs/heads/main/workspace/Counter/Ideas.txt";
 
+    /*
     fetch(rawUrl)
         .then(response => response.text())
         .then(data => {
-            document.getElementById("content").textContent = data;
+            document.getElementById("content2").textContent = data;
         })
         .catch(error => {
-            document.getElementById("content").textContent = "読み込み失敗: " + error;
+            document.getElementById("content2").textContent = "読み込み失敗: " + error;
         });
+    */
     function log(msg) {
         document.getElementById("log").innerText += msg + "\n_"
     }

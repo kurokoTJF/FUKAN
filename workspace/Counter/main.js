@@ -19,6 +19,7 @@ class Player {
       usingChip: false,
       buffed: false,
       idle: false,
+      attack: false,
     }
     this.moveGridStop = 20
     this.chipName = ""
@@ -54,7 +55,7 @@ class Player {
       })
       this.counter.processCall = () => {
         if (this.counter.time == this.moveGridStop / 2) { this._moveGrid(_x, _y); }
-        else if (this.counter.time == this.moveGridStop) { this.state["moving"] = false; this.counter = null; }
+        else if (this.counter.time == this.moveGridStop) { this.est('moving'); this.counter.end=true;this.counter = null; }
       }
     }
   }
@@ -63,17 +64,18 @@ class Player {
     this.position.y += _y
   }
 
+  resetCounter0() {
+    log('reset counter')
+    if (this.counter) { this.counter.end = true; this.counter = null; }
+  }
 
-  #startUseChip() {
-    if (!this.state["usingChip"]) {
-      if (chip_selected.length < 1) {
-        console.log("no chip selected")
-        return
-      }
+  startUseChip() {
+    if (chip_selected.length < 1) { console.log("no chip selected"); return; }
+    if (this.cst('usingChip')) {
+
       // use the first chip
       this.chipName = chip_selected[0].name
       chip_selected.splice(0, 1)
-      this.state["usingChip"] = true
       //this.counter = GM._addCounter(40, "[GM]player using chip", () => this._endUseChip())
       this.counter = GM._addCounterGen({
         _endtime: 100,
@@ -86,7 +88,7 @@ class Player {
               GM._addCounterGen({
                 _endtime: 30,
                 _msg: "qte counting...",
-                _endCall: () => (player.HP -= 25),
+                _endCall: () => player.HP -= 25,
                 _qteCall: () => {
                   player.state["buffed"] = true
                   GM.addSPCounter()
@@ -100,17 +102,37 @@ class Player {
     }
   }
   _endUseChip() {
-    this.state["usingChip"] = false
-    this.counter = undefined
+    this.est('usingChip')
+    this.resetCounter0()
+  }
+
+  endAttack() {
+    this.est('attack')
+    this.resetCounter0()
+
+  }
+  startAtk() {
+    if (this.cst('attack')) {
+      this.resetCounter0()
+      this.counter = GM._addCounterGen({
+        _endtime: 30,
+        _msg: 'attaking',
+        _processCall:()=>{},
+        _endCall: () => { log('end atk'); this.endAttack();enemy.HP-=2;}
+      })
+      this.counter.processCall=()=>{
+        if(keys.atk.pressed && this.counter.time>this.counter.end_time/2) 
+          this.counter.time = 0
+      }
+    }
   }
 
   _handleInput() {
-    if (this.ID == CharID.Enemy) {
-      return
-    }
-    if (this.state["usingChip"] || this.state["moving"]) return
+    if (this.ID == CharID.Enemy) return
+    if (!this.state['idle']) return
+    if (keys.atk.pressed) { log('atk'); this.startAtk(); }
     if (keys.use_chip.pressed) {
-      this.#startUseChip()
+      this.startUseChip()
     }
 
     if (keys.down.pressed) {
@@ -142,38 +164,43 @@ class Player {
     //Counterの更新はこの時点で済んでる
     this._handleInput()
     //change the postion
+
+    // back to idle
     let _state_true = 0
     for (let s in this.state) {
-      if (this.state[s]) if (s != ('buffed' && 'idle')) { _state_true++; }
+      if (this.state[s]) 
+        if (!['buffed','idle'].includes(s)) { 
+          _state_true++;
+            console.log('current state: '+s); 
+        }
     }
-
-    if (!_state_true) {
+    if (_state_true==0) {
       if (this.cst('idle')) {
-        log(_state_true + ' nothing to do')
+        console.log(_state_true + ' back to idle')
       }
     } else {
       if (this.est('idle')) {
-        log(_state_true + ' doing sth')
+        console.log(_state_true + ' end idle')
       }
     }
 
   }
 
   draw() {
-    let temp_draw = () =>
+    const temp_draw = () =>
       c.fillRect(
         ((this.position.x - 1) * canvas.width) / 6 + 10,
         (this.position.y * canvas.height) / 6 + 40,
         20,
         tileSize,
       )
-    let temp_print = (msg) =>
+    const temp_print = (msg) =>
       c.fillText(
         msg,
         10 + ((this.position.x - 1) * canvas.width) / 6,
         (this.position.y * canvas.height) / 6 + 40 + 10,
       )
-    let temp_draw_gauge = (_counter) => {
+    const temp_draw_gauge = (_counter) => {
       c.fillStyle = "rgba(0,0,0,1)"
       c.fillRect(
         ((this.position.x - 1) * canvas.width) / 6 + 10,
@@ -189,7 +216,7 @@ class Player {
         5,
       )
     }
-    let temp_draw_gauge2 = (_current, _max) => {
+    const temp_draw_gauge2 = (_current, _max) => {
       c.fillStyle = "rgba(0,0,0,1)"
       c.fillRect(
         ((this.position.x - 1) * canvas.width) / 6 + 10,
@@ -229,9 +256,16 @@ class Player {
       temp_draw()
       c.fillStyle = "rgba(255,255,255,1)"
       temp_print("moving")
-    } else {
+    } else if(this.state['attack']){
+      c.fillStyle = "rgb(196, 92, 92)"
+      temp_draw()
+      c.fillStyle = "rgba(255,255,255,1)"
+      temp_print("attack")
+    }else {
       c.fillStyle = "rgba(255,0,255,1)"
       temp_draw()
+      c.fillStyle = "rgba(255,255,255,1)"
+      temp_print("idle")
     }
 
     if (this.counter) {
@@ -248,7 +282,7 @@ class MovieRenderer {
     this.master = master
     this.drawposition = { x: 0, y: 0 }
     this.MovieClips = {}
-    this.length = 0
+    this.length = 1 // numbers of frames
     this.currentFrame = 0
     this.cropbox = {}
     this.sprite = {
@@ -270,6 +304,10 @@ class MovieRenderer {
     } else if (this.master.state['moving']) {
       this.length = 8
       this.sprite = { width: 40, height: 64 }
+
+    }else if (this.master.state['attack']) {
+      this.length = 4
+      this.sprite = { width: 44, height: 56 }
 
     }
 
@@ -318,6 +356,20 @@ class MovieRenderer {
         this.drawposition.y,
         40,
         64,
+      )
+    }else if(this.master.state['attack']){
+      if(!img3Loaded) return
+      c.drawImage(
+        img3,
+        cropbox.position.x,
+        cropbox.position.y,
+        cropbox.width,
+        cropbox.height,
+
+        this.drawposition.x,
+        this.drawposition.y,
+        44,
+        56,
       )
     }
 
@@ -538,7 +590,7 @@ class GameManager {
       if (this.state['battle']) {
         if (enemy.HP <= 0) { this.state['battle_win'] = true; this.state['battle'] = false }
       }
-      if (this.state['battle_win']) { log('win!') }
+      if (this.state['battle_win']) { console.log('win!') }
 
     }
 
@@ -632,11 +684,15 @@ class Counter {
   }
 
   update() {
+    if (!this.end_time) {
+      log('infinite Counter!')
+      this.time++
+      if (this.processCall) { this.processCall() }
+      return
+    }
     if (this.time < this.end_time) {
       this.time++
-      if (this.processCall) {
-        this.processCall()
-      }
+      if (this.processCall) { this.processCall() }
       if (this.gen_list) {
         let _length = Object.keys(this.gen_list).length
         for (let i = 0; i < _length; i++) {
@@ -702,20 +758,7 @@ const PP = new PostProcessor()
 const GM = new GameManager()
 
 // for html
-keyPress = function (key) {
-  keys[key].pressed = true
-}
 
-var keys = {
-  up: { press: false, pressed: false },
-  down: { press: false, pressed: false },
-  left: { press: false, pressed: false },
-  right: { press: false, pressed: false },
-  select: { press: false, pressed: false },
-  use_chip: { press: false, pressed: false },
-  add_sword: { press: false, pressed: false },
-  test: { press: false, pressed: false },
-}
 
 let img = new Image()
 let imgLoaded = false
@@ -731,6 +774,14 @@ img2.src =
   'https://raw.githubusercontent.com/kurokoTJF/FUKAN/refs/heads/main/Sprites/Char/IMG_4861.png'
 img2.onload = () => {
   img2Loaded = true
+}
+
+let img3 = new Image()
+let img3Loaded = false
+img3.src =
+  'https://raw.githubusercontent.com/kurokoTJF/FUKAN/refs/heads/main/Sprites/Char/IMG_4863.png'
+img3.onload = () => {
+  img3Loaded = true
 }
 
 function update() {
