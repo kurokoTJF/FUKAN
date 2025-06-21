@@ -35,12 +35,13 @@
 
 <p>
 <div id="chips"></div>
+<div id="counters"></div>
 <div id="log"></div>
 </p>
 
 <style>
     .b1 {
-        width: 20px;
+        width: 40px;
         height: 20px;
     }
 
@@ -94,10 +95,13 @@
         document.getElementById("log").innerText += msg + "\n_"
     }
     function showChips(msg) {
-        document.getElementById("chips").innerText = "battle chips:" + "\n_" + msg
+        document.getElementById("chips").innerText = "[battle chips]:" + "\n_" + msg
+    }
+    function showCounters(msg) {
+        document.getElementById("counters").innerText = "[Counters]:" + "\n_" + msg
     }
     function clearLog() {
-        document.getElementById('log').innerText = "my console:\n"
+        document.getElementById('log').innerText = "[my console]:\n"
     }
     clearLog()
     showChips("no chips")
