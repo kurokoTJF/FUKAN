@@ -6,6 +6,206 @@ const CharID = {
   Enemy: 1,
 }
 
+class PolygonRenderer {
+  constructor() {
+    console.log('polygon renderer online')
+  }
+
+
+  // get x,y,z in screen space
+  project(v, angle = 0.5) {
+    // Y軸回転
+    const cos = Math.cos(angle), sin = Math.sin(angle);
+    const x = v.x * cos - v.z * sin;
+    const z = v.x * sin + v.z * cos + 9; // zをずらして奥へ
+    const y = v.y - 2;
+
+    // to screen space
+    return {
+      x: x / z * 400 + canvas.width / 2,
+      y: -y / z * 400 + canvas.height / 2,
+      z: z
+    };
+  }
+
+  // x,y と　３つの頂点情報で　座標のWeightを求める
+  getBarycentric(x, y, p0, p1, p2) {
+    //やめとけ
+    // console.log('doing math')
+    const det = (p1.y - p2.y) * (p0.x - p2.x) + (p2.x - p1.x) * (p0.y - p2.y);
+    const w0 = ((p1.y - p2.y) * (x - p2.x) + (p2.x - p1.x) * (y - p2.y)) / det;
+    const w1 = ((p2.y - p0.y) * (x - p2.x) + (p0.x - p2.x) * (y - p2.y)) / det;
+    const w2 = 1 - w0 - w1;
+    return [w0, w1, w2];
+  }
+
+  render2(_vertices, _faces, _colors, _uv, angle, ctx, sampleuv = false) {
+    //ctx.clearRect(0, 0, ctx.width, ctx.height);
+
+    // 投影した頂点
+    const projected = _vertices.map(v => this.project(v, angle));
+
+    // 各三角形に z（平均深度）を与えてソート
+    const triangles = _faces.map((_face, i) => {
+      // _face は[vertex_id0,vertex_id1,vertex_id2]
+      // そのvertex_idを実際の頂点情報に置き換える
+      const combined = projected.map((v, i) => ({
+        x: v.x,
+        y: v.y,
+        z: v.z,
+        u: _uv[i].u,
+        v: _uv[i].v
+      }));
+      const [a, b, c] = _face.map(idx => combined[idx]);
+      const depth = (a.z + b.z + c.z) / 3;
+
+      // return 一つの三角形が必要なデータを組み立てして返す
+      return { a, b, c, color: _colors[i], depth };
+    }).sort((t1, t2) => t2.depth - t1.depth); // 奥から描画
+
+
+    if (!sampleuv) {
+      for (const tri of triangles) {
+        // uv sampling!
+
+        // 
+        const output = ctx.createImageData(500, 500);
+        const outData = output.data;
+
+        // Screen Spaceでバウンディングボックスを計算する
+        const triangle = [tri.a, tri.b, tri.c]
+        const xs = triangle.map(p => p.x);
+        const ys = triangle.map(p => p.y);
+        const minX = Math.floor(Math.min(...xs));
+        const maxX = Math.ceil(Math.max(...xs));
+        const minY = Math.floor(Math.min(...ys));
+        const maxY = Math.ceil(Math.max(...ys));
+
+        for (let y = minY; y <= maxY; y++) {
+          for (let x = minX; x <= maxX; x++) {
+            const [w0, w1, w2] = this.getBarycentric(x, y, triangle[0], triangle[1], triangle[2]);//(u,v,p0,p1,p2)
+            if (w0 >= 0 && w1 >= 0 && w2 >= 0) {
+              const outIdx = (y * 500 + x) * 4;
+              outData[outIdx + 0] = 255;
+              outData[outIdx + 1] = 255;
+              outData[outIdx + 2] = 255;
+              outData[outIdx + 3] = 255;
+            }
+          }
+        }
+
+        for (let i = 0; i < projected.length; i++) {
+          const p = projected[i]
+          ctx.fillStyle = 'black';
+          ctx.fillRect(p.x - 7, p.y - 7, 14, 14)
+          ctx.font = '14px sans-serif'
+          ctx.textBaseline = 'middle'
+          ctx.fillStyle = 'white'
+          ctx.textAlign = 'center'
+          ctx.fillText(i, p.x, p.y)
+        }
+
+        return
+      }
+
+    } else {
+      for (const tri of triangles) {
+        // uv sampling!
+        if (imageLoaded) {
+          // texture を一回描いてからじゃないとgetImageDataができない
+          const tempCanvas = document.createElement("canvas");
+          const tempCtx = tempCanvas.getContext("2d");
+          tempCanvas.width = image.width;
+          tempCanvas.height = image.height;
+          tempCtx.drawImage(image, 0, 0);
+          const imageData = tempCtx.getImageData(0, 0, image.width, image.height);
+          const texData = imageData.data;
+          const texWidth = imageData.width;
+          const texHeight = imageData.height;
+
+          // 
+          const output = ctx.createImageData(500, 500);
+          const outData = output.data;
+
+
+          // Screen Spaceでバウンディングボックスを計算する
+          const triangle = [tri.a, tri.b, tri.c]
+          const xs = triangle.map(p => p.x);
+          const ys = triangle.map(p => p.y);
+          const minX = Math.floor(Math.min(...xs));
+          const maxX = Math.ceil(Math.max(...xs));
+          const minY = Math.floor(Math.min(...ys));
+          const maxY = Math.ceil(Math.max(...ys));
+
+          for (let y = minY; y <= maxY; y++) {
+            for (let x = minX; x <= maxX; x++) {
+              const [w0, w1, w2] = this.getBarycentric(x, y, triangle[0], triangle[1], triangle[2]);//(u,v,p0,p1,p2)
+              if (w0 >= 0 && w1 >= 0 && w2 >= 0) {
+                const u = triangle[0].u * w0 + triangle[1].u * w1 + triangle[2].u * w2;
+                const v = triangle[0].v * w0 + triangle[1].v * w1 + triangle[2].v * w2;
+                // あらかじめ三角形の各頂点に z, u/z, v/z を持たせておく
+                const _u = (w0 * (triangle[0].u / triangle[0].z) + w1 * (triangle[1].u / triangle[1].z) + w2 * (triangle[2].u / triangle[2].z));
+                const _v = (w0 * (triangle[0].v / triangle[0].z) + w1 * (triangle[1].v / triangle[1].z) + w2 * (triangle[2].v / triangle[2].z));
+                const w = (w0 / triangle[0].z + w1 / triangle[1].z + w2 / triangle[2].z);
+
+                // 最後に割り戻す
+                const correctedU = _u / w;
+                const correctedV = _v / w;
+
+                const texX = Math.floor(correctedU * texWidth);
+                const texY = Math.floor(correctedV * texHeight);
+                const idx = (texY * texWidth + texX) * 4;
+
+                const r = texData[idx];
+                const g = texData[idx + 1];
+                const b = texData[idx + 2];
+                const a = texData[idx + 3];
+
+                ctx.fillStyle = `rgb(${r},${g},${b},${a})`;
+                const outIdx = (y * 500 + x) * 4;
+                outData[outIdx + 0] = r;
+                outData[outIdx + 1] = g;
+                outData[outIdx + 2] = b;
+                outData[outIdx + 3] = a;
+              }
+            }
+          }
+
+          createImageBitmap(output).then(bitmap => {
+            ctx.drawImage(bitmap, 0, 0);
+            //この中に入れて置かないと、JSの描画の順番が狂う
+            for (let i = 0; i < projected.length; i++) {
+              const p = projected[i]
+              ctx.fillStyle = 'black';
+              ctx.fillRect(p.x - 7, p.y - 7, 14, 14)
+              ctx.font = '14px sans-serif'
+              ctx.textBaseline = 'middle'
+              ctx.fillStyle = 'white'
+              ctx.textAlign = 'center'
+              ctx.fillText(i, p.x, p.y)
+            }
+          });
+
+        }
+
+      }
+    }
+
+    // vertex index overlay
+
+  }
+
+  render() {
+    this.render2(vertices2, faces2, colors2, uv2, R_angle, c, true);
+    this.render2(player.vertices, player.faces, player.color, player.uv, R_angle, c, true);
+
+  }
+}
+
+
+
+
+
 class Player {
   constructor() {
     console.log("player online")
@@ -27,6 +227,33 @@ class Player {
     //this.position.y=10
     this.counter = null
     this.renderer = new MovieRenderer(this)
+
+    this.local_vertices = [
+      { x: -3, y: 1.5, z: 2.5 },
+      { x: -3, y: 0, z: 2.5 },
+      { x: -2, y: 0, z: 2.5 },
+      { x: -2, y: 1.5, z: 2.5 }
+    ]
+    this.vertices = [{ x: -3, y: 1.5, z: 2.5 },
+    { x: -3, y: 0, z: 2.5 },
+    { x: -2, y: 0, z: 2.5 },
+    { x: -2, y: 1.5, z: 2.5 }]
+    this.uv = [
+      { u: 0, v: 0 },
+      { u: 0, v: 1 },
+      { u: 1, v: 1 },
+      { u: 1, v: 0 }
+    ]
+    this.faces = [[0, 1, 2], [0, 2, 3]]
+    this.color = ['white', 'white']
+  }
+
+  update_vertices() {
+    this.vertices = this.local_vertices.map(v => ({
+      x: v.x + this.position.x - 1,
+      y: v.y,
+      z: v.z - this.position.y + 1
+    }))
   }
 
   cst(_state) {
@@ -159,6 +386,7 @@ class Player {
 
 
   update() {
+    this.update_vertices()
     if (this.ID == CharID.Enemy) return
     //key event
     //Counterの更新はこの時点で済んでる
@@ -257,10 +485,10 @@ class Player {
     }
 
 
-    if(this.ID == CharID.Enemy){
+    if (this.ID == CharID.Enemy) {
       c.fillStyle = "rgba(255,0,255,1)"
       temp_draw()
-      
+
     }
 
     if (this.state["usingChip"]) {
@@ -306,7 +534,7 @@ class MovieRenderer {
           'https://raw.githubusercontent.com/kurokoTJF/FUKAN/refs/heads/main/Sprites/Char/IMG_4867.png',
         rect: { w: 40, h: 64 },
         length: 8,
-        flip:true,
+        flip: true,
       },
       idle: {
         path:
@@ -326,7 +554,7 @@ class MovieRenderer {
         ,
         rect: { w: 100, h: 64 },
         length: 12,
-        flip:true,
+        flip: true,
       }
     }
     this.length = 1 // numbers of frames
@@ -397,7 +625,7 @@ class MovieRenderer {
 
     if (this.spriteImage) {
       if (!this.spriteLoad) return
-      if(!this.spriteFlip){
+      if (!this.spriteFlip) {
         c.drawImage(
           this.spriteImage,
           cropbox.position.x,
@@ -410,7 +638,7 @@ class MovieRenderer {
           this.sprite.width,
           this.sprite.height,
         )
-      }else{
+      } else {
         c.save()
         c.scale(-1, 1);
         let _temp = -this.sprite.width
@@ -428,7 +656,7 @@ class MovieRenderer {
         )
         c.restore()
       }
-     
+
     }
 
     c.fillStyle = 'rgba(0,0,0,1)'
@@ -466,7 +694,7 @@ class GameManager {
   #showChips() {
     let _table = ""
     for (let chip of chip_selected) {
-      _table += chip.name+", " 
+      _table += chip.name + ", "
     }
     showChips(_table)
   }
@@ -812,50 +1040,46 @@ const GM = new GameManager()
 
 // for html
 
+const vertices2 = [
+  { x: -3, y: 0, z: 3 },
+  { x: -3, y: 0, z: 0 },
+  { x: 3, y: 0, z: 0 },
+  { x: 3, y: 0, z: 3 },
+]
 
-let img = new Image()
-let imgLoaded = false
-img.src =
-  "https://raw.githubusercontent.com/kurokoTJF/FUKAN/refs/heads/main/Sprites/red/enchant.png"
-img.onload = () => {
-  imgLoaded = true
-}
+// uv, v inversed
+const uv2 = [
+  { u: 0, v: 0 },
+  { u: 0, v: 1 },
+  { u: 1, v: 1 },
+  { u: 1, v: 0 },
+]
+const faces2 = [
+  [0, 1, 2], [0, 2, 3], // floor
+]
+const colors2 = [
+  "#999", "#999",
+]
 
-let img2 = new Image()
-let img2Loaded = false
-img2.src =
-  'https://raw.githubusercontent.com/kurokoTJF/FUKAN/refs/heads/main/Sprites/Char/IMG_4861.png'
-img2.onload = () => {
-  img2Loaded = true
-}
 
-let img3 = new Image()
-let img3Loaded = false
-img3.src =
-  'https://raw.githubusercontent.com/kurokoTJF/FUKAN/refs/heads/main/Sprites/Char/IMG_4863.png'
-img3.onload = () => {
-  img3Loaded = true
-}
+let imageLoaded = false
+let image = new Image()
+image.crossOrigin = "anonymous";//これ入れても行けないケースがいるらしい
+image.src = 'https://raw.githubusercontent.com/kurokoTJF/FUKAN/refs/heads/main/Sprites/Char/battle_floor.png'
 
-let img4 = new Image()
-let img4Loaded = false
-img4.src =
-  'https://raw.githubusercontent.com/kurokoTJF/FUKAN/refs/heads/main/Sprites/Char/IMG_4865.png'
-img4.onload = () => {
-  img4Loaded = true
+image.onload = () => {
+  imageLoaded = true
 }
+let R_angle = 0;
 
-const Sprites = {
-  img1: {
-    path: 'shit',
-    size: 43,
-    num: 4
-  }
-}
+const Renderer = new PolygonRenderer()
 
 function update() {
   //console.log(keys.down.pressed);
+  R_angle+=0.001
+  Renderer.render()
   GM.update()
+  //player render
   requestAnimationFrame(update)
 }
 
