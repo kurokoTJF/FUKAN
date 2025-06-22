@@ -836,10 +836,15 @@
                         }
                     })
                     c.processCall = () => {
+                        // プレイヤーキャラを使って制御のテストする
+						// 懐かしいな。ムービーゲーの可能性を見つけたあの午後の雰囲気を思い出す
+
                         if (c.time == 30) {
                             player.startMove(0, 1)
                         } else if (c.time == 80) {
                             player.startAtk()
+                        } else if (c.time == 100){
+                            enemy.HP -=50
                         }
                     }
                 }
