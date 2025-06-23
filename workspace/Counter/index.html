@@ -1,35 +1,35 @@
 <div class=container>
-    <div class=left-column>
-        <p id="content"></p>
-        <p>idle infinite counter</p>
+  <div class=left-column>
+    <p id="content"></p>
+    <p>idle infinite counter</p>
 
-    </div>
-    <div class=right-column>
-        <canvas></canvas>
-    </div>
+  </div>
+  <div class=right-column>
+    <canvas></canvas>
+  </div>
 
 </div>
 
 <p>
-    <button class="b1"> </button>
-    <button class="b1" onmousedown="keyPress('up')">↑</button>
-    <button class="b1"> </button>
+  <button class="b1"> </button>
+  <button class="b1" onmousedown="keyPress('up')">↑</button>
+  <button class="b1"> </button>
 </p>
 <p>
-    <button class="b1" onmousedown="keyPress('left')">←</button>
-    <button class="b1" onmousedown="keyPress('down')">↓</button>
-    <button class="b1" onmousedown="keyPress('right')">→</button>
-    <button class="b1"> </button>
-    <button onmousedown="keyPress('atk')">attack</button>
-    <button onmousedown="keyPress('test')">add control counter</button>
+  <button class="b1" onmousedown="keyPress('left')">←</button>
+  <button class="b1" onmousedown="keyPress('down')">↓</button>
+  <button class="b1" onmousedown="keyPress('right')">→</button>
+  <button class="b1"> </button>
+  <button onmousedown="keyPress('atk')">attack</button>
+  <button onmousedown="keyPress('test')">add control counter</button>
 </p>
 
 <div>
-    <p>
-        <button onmousedown="keyPress('add_sword')">add sword</button>
-        <button onmousedown="keyPress('select')">pause and select</button>
-        <button onmousedown="keyPress('use_chip')">use the chip</button>
-    </p>
+  <p>
+    <button onmousedown="keyPress('add_sword')">add sword</button>
+    <button onmousedown="keyPress('select')">pause and select</button>
+    <button onmousedown="keyPress('use_chip')">use the chip</button>
+  </p>
 </div>
 <button onmousedown="keyPress('test')">Timing </button>
 <button onmousedown="clearLog()">clear log </button>
@@ -41,31 +41,31 @@
 </p>
 
 <style>
-    .b1 {
-        width: 40px;
-        height: 20px;
-    }
+  .b1 {
+    width: 40px;
+    height: 20px;
+  }
 
-    .container {
-        display: flex;
-    }
+  .container {
+    display: flex;
+  }
 
-    .left-column {
-        font-size: 10px;
-        width: 30%;
-        background-color: #f0f0f0;
-        padding: 10px;
-    }
+  .left-column {
+    font-size: 10px;
+    width: 30%;
+    background-color: #f0f0f0;
+    padding: 10px;
+  }
 
-    .right-column {
-        width: 70%;
-        background-color: #8f8f8f;
-        padding: 10px;
-    }
+  .right-column {
+    width: 70%;
+    background-color: #8f8f8f;
+    padding: 10px;
+  }
 </style>
 
 <script>
-    keyPress = function (key) {
+  keyPress = function (key) {
         keys[key].pressed = true
     }
 
@@ -86,6 +86,7 @@
     const CharID = {
         Player: 0,
         Enemy: 1,
+        Actor:2,
     }
 
     /*
@@ -115,7 +116,7 @@
 </script>
 
 <script>
-    // classes.js
+  // classes.js
     // difficult to split files
 
     
@@ -379,6 +380,7 @@
 
         startMove(_x, _y) {
             if (!this.state['idle']) return
+            log('move!')
             if (
                 this.position.x + _x < 1 ||
                 this.position.x + _x > 3 ||
@@ -428,9 +430,9 @@
                                 GM._addCounterGen({
                                     _endtime: 30,
                                     _msg: "qte counting...",
-                                    _endCall: () => player.HP -= 25,
+                                    _endCall: () => this.HP -= 25,
                                     _qteCall: () => {
-                                        player.state["buffed"] = true
+                                        this.state["buffed"] = true
                                         GM.addSPCounter()
                                         enemy.HP -= 20
                                         log("PERFECT!")
@@ -457,11 +459,12 @@
                 this.resetCounter0()
                 let c = GM._addCounterGen({
                     _endtime: 40,
-                    _msg: 'attaking',
+                    _msg: this.ID+' attaking',
                     _processCall: () => { },
                     _endCall: () => { log('end atk'); this.endAttack(); enemy.HP -= 2; }
                 })
                 c.processCall = () => {
+                    if(this.ID != CharID.Player) return
                     if (keys.atk.pressed && c.time > c.end_time / 2)
                         c.time = 0
                 }
@@ -470,7 +473,7 @@
         }
 
         _handleInput() {
-            if (this.ID == CharID.Enemy) return
+            if (this.ID != CharID.Player) return
             if (!this.state['idle']) return
             if (keys.atk.pressed) { this.startAtk(); }
             if (keys.use_chip.pressed) this.startUseChip()
@@ -504,7 +507,7 @@
                 if (this.state[s])
                     if (!['buffed', 'idle'].includes(s)) {
                         _state_true++;
-                        console.log('current state: ' + s);
+                        //console.log('current state: ' + s);
                     }
             }
             if (_state_true == 0) {
@@ -837,14 +840,18 @@
                     })
                     c.processCall = () => {
                         // プレイヤーキャラを使って制御のテストする
-						// 懐かしいな。ムービーゲーの可能性を見つけたあの午後の雰囲気を思い出す
-
-                        if (c.time == 30) {
-                            player.startMove(0, 1)
+						            // 懐かしいな。ムービーゲーの可能性を見つけたあの午後の雰囲気を思い出す
+                        if(c.time == 1){
+                          characters.push(player2)
+                        }else if (c.time == 30) {
+                            player2.startMove(0, 1)
                         } else if (c.time == 80) {
-                            player.startAtk()
+                            player2.startAtk()
                         } else if (c.time == 100){
-                            enemy.HP -=50
+                            enemy.HP -=30
+                        }else if (c.time == 200){
+                            characters.pop()
+
                         }
                     }
                 }
@@ -905,6 +912,7 @@
         }
 
         #draw() {
+            
             if (this.state["title"]) {
                 c.fillStyle = "rgba(0,0,0,1)"
                 c.fillRect(0, 0, canvas.width, canvas.height)
@@ -967,8 +975,10 @@
             }
             PP.draw()
 
-            player.draw()
-            enemy.draw()
+            for(let _p of characters){
+              _p.draw()
+              //log('draw characters')
+            }
         }
         #update_counters() {
             if (this.dominantCounter) {
@@ -990,12 +1000,13 @@
                 //     console.log('paused')
             } else {
                 this.#update_counters()
-                player.update()
-                enemy.update()
+                for(let p of characters){
+                  p.update()
+                }
                 if (this.state['battle']) {
                     if (enemy.HP <= 0) { this.state['battle_win'] = true; this.state['battle'] = false }
                 }
-                if (this.state['battle_win']) { console.log('win!') }
+                if (this.state['battle_win']) { }
 
             }
 
@@ -1154,7 +1165,12 @@
     let counter = 0
     let player = new Player()
     let enemy = new Player()
+    let player2 = new Player()
     enemy.ID = CharID.Enemy
+    player2.ID = CharID.Actor
+    let characters = []
+    characters.push(player)
+    characters.push(enemy)
     enemy.position = { x: 5, y: 2 }
     const PP = new PostProcessor()
     const GM = new GameManager()
@@ -1191,6 +1207,9 @@
     image.onload = () => {
         imageLoaded = true
     }
+
+    
+  
     let R_angle = 0;
 
     const Renderer = new PolygonRenderer()
