@@ -842,6 +842,8 @@
                         // プレイヤーキャラを使って制御のテストする
 						            // 懐かしいな。ムービーゲーの可能性を見つけたあの午後の雰囲気を思い出す
                         if(c.time == 1){
+                          player2.position.x = player.position.x
+                          player2.position.y = player.position.y
                           characters.push(player2)
                         }else if (c.time == 30) {
                             player2.startMove(0, 1)
