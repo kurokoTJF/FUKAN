@@ -1,0 +1,125 @@
+<button onmousedown="keyPress('test')">test</button>
+<button onmousedown="clearLog()">test</button>
+<div id="log"></div>
+
+<script>
+      function clearLog() {
+        document.getElementById('log').innerText = "[my console]:\n"
+    }
+  keyPress = function (key) {
+    keys[key].pressed = true
+    log(key)
+  }
+
+  var keys = {
+    up: { press: false, pressed: false },
+    down: { press: false, pressed: false },
+    left: { press: false, pressed: false },
+    right: { press: false, pressed: false },
+    select: { press: false, pressed: false },
+    use_chip: { press: false, pressed: false },
+    atk: { press: false, pressed: false },
+    add_sword: { press: false, pressed: false },
+    test: { press: false, pressed: false },
+  }
+</script>
+<script>
+
+class HyperState {
+  constructor() {
+    log("with hyper state")
+  }
+
+  handleInput() {
+    if (keys['test'].pressed) {
+      log("hyper get pressed")
+      return Player.jump
+    }
+  }
+
+  handleInput2(target){
+    if (keys['test'].pressed) {
+      log("hyper get pressed")
+      return target.constructor.jump
+    }
+  }
+}
+
+class IdleState extends HyperState {
+  constructor() {
+    super()
+    log("Idle State generated")
+  }
+
+  handleInput() {
+     return super.handleInput()
+  }
+
+  handleInput2(target) {
+     return super.handleInput(target)
+  }
+}
+
+class JumpState{
+  constructor(){
+    log('jump state generated')
+  }
+
+  handleInput(){
+    if(keys['test'].pressed){
+      log('jump get test')
+      return Player.idle
+    } 
+  }
+  handleInput2(target){
+    if(keys['test'].pressed){
+      log('jump get test')
+      return target.constructor.idle
+    }
+  }
+}
+
+class Player {
+  //
+  static idle = new IdleState()
+ static jump = new JumpState()
+
+  constructor() {
+    this.name = "Test"
+    this.state = Player.idle
+    log("Player online")
+  }
+
+
+  update() {
+    const c=this.state.handleInput2(this)
+    if(c)
+      this.state = c
+  }
+}
+
+
+function log(msg) {
+  document.getElementById("log").innerText += msg + "\n_"
+}
+
+log("start")
+
+let p = new Player()
+
+function update() {
+  p.update()
+
+  for (let _key in keys) keys[_key].pressed = false
+
+  requestAnimationFrame(update)
+}
+update()
+
+
+
+
+
+
+
+</script>
