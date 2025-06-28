@@ -21,17 +21,19 @@
     <button class="b1" onmousedown="keyPress('right')">→</button>
     <button class="b1"> </button>
     <button onmousedown="keyPress('atk')">attack</button>
-    <button onmousedown="keyPress('test')">add control counter</button>
 </p>
 
 <div>
     <p>
         <button onmousedown="keyPress('add_sword')">add sword</button>
-        <button onmousedown="keyPress('select')">pause and select</button>
+        <button onmousedown="keyPress('select')">select</button>
+        <button onmousedown="keyPress('pause')">pause</button>
         <button onmousedown="keyPress('use_chip')">use the chip</button>
     </p>
 </div>
-<button onmousedown="keyPress('test')">Timing </button>
+<button onmousedown="keyPress('test_injured')">test_injured </button>
+
+<button onmousedown="keyPress('test')">add control counter</button>
 <button onmousedown="clearLog()">clear log </button>
 
 <p>
@@ -79,6 +81,8 @@
         atk: { press: false, pressed: false },
         add_sword: { press: false, pressed: false },
         test: { press: false, pressed: false },
+        test_injured: { press: false, pressed: false },
+        pause: { press: false, pressed: false },
     }
     const rawUrl = "https://raw.githubusercontent.com/kurokoTJF/FUKAN/refs/heads/main/workspace/Counter/Ideas.txt";
 
@@ -113,11 +117,107 @@
     }
     clearLog()
     showChips("no chips")
+
+    let chip_nico_loaded = false
+    let chip_nico = new Image()
+    chip_nico.src = 'https://raw.githubusercontent.com/kurokoTJF/FUKAN/refs/heads/main/Sprites/Char/IMG_4874.png'
+    chip_nico.onload = () => {
+        chip_nico_loaded = true
+    }
+
+
+    class ImageLoader {
+        constructor(url) {
+            this.loaded = false
+            this.img = new Image()
+            this.img.src = url
+            this.img.onload = () => {
+                this.loaded = true
+            }
+        }
+        load(url) {
+            this.loaded = false
+            this.img.src = url
+            this.img.onload = () => {
+                this.loaded = true
+            }
+        }
+    }
+
+    const chip_nico2 = new ImageLoader('https://raw.githubusercontent.com/kurokoTJF/FUKAN/refs/heads/main/Sprites/Char/IMG_4874.png')
+
 </script>
 
 <script>
     // classes.js
     // difficult to split files
+
+    class Counter {
+        constructor({
+            endtime = 100,
+            name = "",
+            end = false,
+            target = undefined,
+            msg = "__",
+            processCall = null,
+            endCall = () => { },
+            gen_list = false,
+            qte = false,
+            qteCall = false,
+        } = {}) {
+            this.time = 0
+            this.end_time = endtime
+            this.end = end
+            this.target = target
+            this.processCall = processCall
+            this.msg = msg
+            this.endCall = endCall
+            this.gen_list = gen_list
+            this.qteCall = qteCall
+        }
+        start() { }
+
+        setEnd() {
+            this.end = true
+        }
+        _isEnd() {
+            return this.end
+        }
+
+        #endMethod() {
+            console.log(this.msg + " " + this.end_time + " counter end")
+            this.end = true
+            this.endCall()
+        }
+
+        progress() {
+            return this.time / this.end_time
+        }
+
+        update() {
+            if (this.time < this.end_time) {
+                this.time++
+                if (this.processCall) { this.processCall() }
+                if (this.gen_list) {
+                    let _length = Object.keys(this.gen_list).length
+                    for (let i = 0; i < _length; i++) {
+                        const _time = this.gen_list[i].time
+                        const _call = this.gen_list[i].call
+                        if (this.time == _time) {
+                            log("time: " + _time)
+                            _call()
+                        }
+                    }
+                }
+                if (this.qteCall) {
+                    if (keys.use_chip.pressed) {
+                        this.end = true
+                        this.qteCall()
+                    }
+                }
+            } else this.#endMethod()
+        }
+    }
 
 
     class PolygonRenderer {
@@ -317,308 +417,7 @@
     }
 
 
-    class Player {
-        constructor() {
-            console.log("player online")
-            this.position = { x: 1, y: 1 }
-            this.HP = 100
-            this.ID = CharID.Player
-            this.stance = 100
-            this.isFree = true
-            this.state = {
-                moving: false,
-                usingChip: false,
-                buffed: false,
-                idle: false,
-                attack: false,
-            }
 
-            this.moveGridStop = 20
-            this.chipName = ""
-            //this.position.y=10
-            this.counter = null
-            this.renderer = new MovieRenderer(this)
-
-            this.local_vertices = [
-                { x: -3, y: 1.5, z: 2.5 },
-                { x: -3, y: 0, z: 2.5 },
-                { x: -2, y: 0, z: 2.5 },
-                { x: -2, y: 1.5, z: 2.5 }
-            ]
-            this.vertices = [{ x: -3, y: 1.5, z: 2.5 },
-            { x: -3, y: 0, z: 2.5 },
-            { x: -2, y: 0, z: 2.5 },
-            { x: -2, y: 1.5, z: 2.5 }]
-            this.uv = [
-                { u: 0, v: 0 },
-                { u: 0, v: 1 },
-                { u: 1, v: 1 },
-                { u: 1, v: 0 }
-            ]
-            this.faces = [[0, 1, 2], [0, 2, 3]]
-            this.color = ['white', 'white']
-        }
-
-        update_vertices() {
-            this.vertices = this.local_vertices.map(v => ({
-                x: v.x + this.position.x - 1,
-                y: v.y,
-                z: v.z - this.position.y + 1
-            }))
-        }
-
-        cst(_state) {
-            if (!this.state[_state]) { this.state[_state] = true; return true; }
-
-            return false
-        }
-
-        est(state) {
-            if (this.state[state]) { this.state[state] = false; return true; }
-            return false
-        }
-
-        startMove(_x, _y) {
-            if (!this.state['idle']) return
-            log('move!')
-            if (
-                this.position.x + _x < 1 ||
-                this.position.x + _x > 3 ||
-                this.position.y + _y < 1 ||
-                this.position.y + _y > 3
-            )
-                return
-            if (this.cst('moving')) {
-                let c = GM._addCounterGen({
-                    _endtime: this.moveGridStop,
-                    _msg: "[GM]player moving",
-                    _endCall: () => { },
-                })
-                c.processCall = () => {
-                    if (c.time == this.moveGridStop / 2) { this._moveGrid(_x, _y); }
-                    else if (c.time == this.moveGridStop) { this.est('moving'); c.end = true; this.counter = null; }
-                }
-                this.counter = c
-            }
-        }
-        _moveGrid(_x, _y) {
-            this.position.x += _x
-            this.position.y += _y
-        }
-
-        resetCounter0() {
-            //log('reset counter')
-            if (this.counter) { this.counter.end = true; this.counter = null; }
-        }
-
-        startUseChip() {
-            if (chip_selected.length < 1) { console.log("no chip selected"); return; }
-            if (this.cst('usingChip')) {
-
-                // use the first chip
-                this.chipName = chip_selected[0].name
-                chip_selected.splice(0, 1)
-                //this.counter = GM._addCounter(40, "[GM]player using chip", () => this._endUseChip())
-                this.counter = GM._addCounterGen({
-                    _endtime: 100,
-                    _msg: "[GM]player using chip",
-                    _endCall: () => this._endUseChip(),
-                    _gen_list: [
-                        {
-                            time: 40,
-                            call: () =>
-                                GM._addCounterGen({
-                                    _endtime: 30,
-                                    _msg: "qte counting...",
-                                    _endCall: () => this.HP -= 25,
-                                    _qteCall: () => {
-                                        this.state["buffed"] = true
-                                        GM.addSPCounter()
-                                        enemy.HP -= 20
-                                        log("PERFECT!")
-                                    },
-                                }),
-                        },
-                    ],
-                })
-            }
-        }
-        _endUseChip() {
-            this.est('usingChip')
-            this.resetCounter0()
-        }
-
-        endAttack() {
-            this.est('attack')
-            this.resetCounter0()
-
-        }
-        startAtk() {
-            if (!this.state['idle']) return
-            if (this.cst('attack')) {
-                this.resetCounter0()
-                let c = GM._addCounterGen({
-                    _endtime: 40,
-                    _msg: this.ID + ' attaking',
-                    _processCall: () => { },
-                    _endCall: () => { log('end atk'); this.endAttack(); enemy.HP -= 2; }
-                })
-                c.processCall = () => {
-                    if (this.ID != CharID.Player) return
-                    if (keys.atk.pressed && c.time > c.end_time / 2)
-                        c.time = 0
-                }
-                this.counter = c
-            }
-        }
-
-        _handleInput() {
-            if (this.ID != CharID.Player) return
-            if (!this.state['idle']) return
-            if (keys.atk.pressed) { this.startAtk(); }
-            if (keys.use_chip.pressed) this.startUseChip()
-
-            if (keys.down.pressed) this.startMove(0, 1)
-            if (keys.up.pressed) this.startMove(0, -1)
-            if (keys.left.pressed) this.startMove(-1, 0)
-            if (keys.right.pressed) this.startMove(1, 0)
-
-
-        }
-
-
-        update() {
-            this.update_vertices()
-            if (this.ID == CharID.Enemy) return
-
-
-            //key event
-            //Counterの更新はこの時点で済んでる
-            this._handleInput()
-            //change the postion
-            if (this.position.y > 3) this.position.y = 3
-            else if (this.position.y < 1) this.position.y = 1
-            if (this.position.x > 3) this.position.x = 3
-            else if (this.position.x < 1) this.position.x = 1
-
-            // back to idle
-            let _state_true = 0
-            for (let s in this.state) {
-                if (this.state[s])
-                    if (!['buffed', 'idle'].includes(s)) {
-                        _state_true++;
-                        //console.log('current state: ' + s);
-                    }
-            }
-            if (_state_true == 0) {
-                if (this.cst('idle')) {
-                    this.resetCounter0()
-                    let c = GM._addCounterGen({
-                        _endtime: 40,
-                        _endCall: () => log('idle loop'),
-                    })
-                    c.processCall = () => {
-                        if (!this.state['idle']) { c.setEnd(); return }
-                        if (c.time == c.end_time) {
-                            c.time = 0
-                        }
-                    }
-                    this.counter = c
-                    console.log(_state_true + ' back to idle')
-                }
-            } else {
-                if (this.est('idle')) {
-                    console.log(_state_true + ' end idle')
-                }
-            }
-
-        }
-
-        draw() {
-            const temp_draw = () =>
-                c.fillRect(
-                    ((this.position.x - 1) * canvas.width) / 6 + 10,
-                    (this.position.y * canvas.height) / 6 + 40,
-                    20,
-                    tileSize,
-                )
-            const temp_print = (msg) =>
-                c.fillText(
-                    msg,
-                    10 + ((this.position.x - 1) * canvas.width) / 6,
-                    (this.position.y * canvas.height) / 6 + 40 + 10,
-                )
-            const temp_draw_gauge = (_counter) => {
-                c.fillStyle = "rgba(0,0,0,1)"
-                c.fillRect(
-                    ((this.position.x - 1) * canvas.width) / 6 + 10,
-                    (this.position.y * canvas.height) / 6 + 40 + tileSize,
-                    tileSize,
-                    5,
-                )
-                c.fillStyle = "rgb(255, 255, 255)"
-                c.fillRect(
-                    ((this.position.x - 1) * canvas.width) / 6 + 10,
-                    (this.position.y * canvas.height) / 6 + 40 + tileSize,
-                    (_counter.time / _counter.end_time) * tileSize,
-                    5,
-                )
-            }
-            const temp_draw_gauge2 = (_current, _max) => {
-                c.fillStyle = "rgba(0,0,0,1)"
-                c.fillRect(
-                    ((this.position.x - 1) * canvas.width) / 6 + 10,
-                    (this.position.y * canvas.height) / 6 + 10,
-                    tileSize,
-                    5,
-                )
-                c.fillStyle = "rgba(255,0,0,1)"
-                c.fillRect(
-                    ((this.position.x - 1) * canvas.width) / 6 + 10,
-                    (this.position.y * canvas.height) / 6 + 10,
-                    (_current / _max) * tileSize,
-                    5,
-                )
-            }
-
-            temp_draw_gauge2(this.HP, 100)
-            if (this.state["buffed"]) {
-                c.fillStyle = "rgb(251, 255, 0)"
-                c.fillRect(
-                    ((this.position.x - 1) * canvas.width) / 6 + 10,
-                    (this.position.y * canvas.height) / 6 + 20,
-                    tileSize,
-                    5,
-                )
-            }
-
-
-            if (this.ID == CharID.Enemy) {
-                c.fillStyle = "rgba(255,0,255,1)"
-                temp_draw()
-
-            }
-
-            if (this.state["usingChip"]) {
-                c.fillStyle = "rgb(255, 255, 255)"
-                temp_print("using chips")
-            } else if (this.state["moving"]) {
-                c.fillStyle = "rgba(255,255,255,1)"
-                temp_print("moving")
-            } else if (this.state['attack']) {
-                c.fillStyle = "rgba(255,255,255,1)"
-                temp_print("attack")
-            } else {
-                c.fillStyle = "rgba(255,255,255,1)"
-                temp_print("idle")
-            }
-
-            if (this.counter) {
-                temp_draw_gauge(this.counter)
-                this.renderer.draw()
-            }
-        }
-    }
 
     class GroudState {
         constructor() {
@@ -630,19 +429,45 @@
         }
     }
 
+    class injuredState {
+        constructor() {
+
+        }
+
+        handleInput(target) {
+
+        }
+
+        enter(target) {
+            GM.Mugshot.load('https://raw.githubusercontent.com/kurokoTJF/FUKAN/refs/heads/main/Sprites/Char/IMG_4876.png')
+            let c = GM._addCounterGen({
+                _endtime: 100,
+                _msg: 'player2 idle loop counter',
+                _endCall: () => {
+                    GM.Mugshot.load('https://raw.githubusercontent.com/kurokoTJF/FUKAN/refs/heads/main/Sprites/Char/IMG_4877.png')
+                    target.cst(target.constructor.idle)
+                }
+            })
+
+            target.switchCounter(c)
+        }
+    }
+
     class IdleState extends GroudState {
         constructor() {
             super()
         }
 
         handleInput(target) {
+            if (keys.test_injured.pressed) {
+                target.HP -= 10
+                return target.cst(target.constructor.injured)
+            }
             if (keys.atk.pressed) {
-                log('[Player2] idle => attack')
                 return target.cst(target.constructor.attack)
             }
             if (keys.use_chip.pressed) {
                 if (target.startUseChip2()) {
-                    log('[Player2] idle => skill')
                     return target.cst(target.constructor.skill)
                 }
             }
@@ -675,7 +500,6 @@
         }
 
         enter(target) {
-            log('[Player2] enter idle')
 
             let c = GM._addCounterGen({
                 _endtime: 300,
@@ -751,7 +575,6 @@
 
         }
         enter(target) {
-            log('[player2] start attack')
             target.resetCounter0()
             let c = GM._addCounterGen({
                 _endtime: 40,
@@ -769,367 +592,6 @@
         }
     }
 
-
-
-
-
-    class GameManager {
-        constructor() {
-            console.log("game manager online")
-            this.isPaused = false
-            this.chips = []
-            this.counters = []
-            this.dominantCounter = null
-            this.state = {
-                pause: false,
-                title: false,
-                world: false,
-                dialog: false,
-                battle: true,
-                battle_win: false,
-            }
-        }
-
-        useChip() { }
-
-        _showCounters() {
-            let _table = ""
-            for (let _c of this.counters) {
-                _table += _c.msg + ":" + _c.time + "/" + _c.end_time + "\n"
-            }
-            showCounters(_table)
-        }
-
-        #showChips() {
-            let _table = ""
-            for (let chip of chip_selected) {
-                _table += chip.name + ", "
-            }
-            showChips(_table)
-        }
-
-        _draw_Darken() {
-            c.fillStyle = "rgba(0,0,0,0.5)"
-            c.fillRect(0, 0, canvas.width, canvas.height)
-        }
-
-        _handleInput() {
-            if (this.state["title"]) {
-                if (keys.select.pressed) {
-                    this.state["title"] = false
-                }
-                return
-            } else if (this.state["dialog"]) {
-                if (keys.select.pressed) {
-                    this.state["dialog"] = false
-                }
-            } else {
-                if (keys.select.pressed) {
-                    if (this.state["pause"]) this.state["pause"] = false
-                    else this.state["pause"] = true
-                }
-
-                if (keys.add_sword.pressed) {
-                    if (this.state["pause"]) chip_selected.push(chip_list.sword)
-                }
-
-                if (keys.test.pressed) {
-                    const c = this._addCounterGen({
-                        _endtime: 300,
-                        _processCall: () => {
-                        }
-                    })
-                    c.processCall = () => {
-                        // プレイヤーキャラを使って制御のテストする
-                        // 懐かしいな。ムービーゲーの可能性を見つけたあの午後の雰囲気を思い出す
-                        if (c.time == 1) {
-                            player2.position.x = player.position.x
-                            player2.position.y = player.position.y
-                            characters.push(player2)
-                        } else if (c.time == 30) {
-                            player2.startMove(0, 1)
-                        } else if (c.time == 80) {
-                            player2.startAtk()
-                        } else if (c.time == 100) {
-                            enemy.HP -= 30
-                        } else if (c.time == 200) {
-                            characters.pop()
-
-                        }
-                    }
-                }
-            }
-        }
-
-        addSPCounter() {
-            let _c = new Counter({
-                _endtime: 100,
-            })
-
-            _c.processCall = () => {
-                let _t = _c.time
-                if (_c.time == 1) PP.state["darken"] = true
-                if (_c.time == 10) if (_c.time == 40) log("player animation")
-                if (_c.time == 100) {
-                    log("over")
-                    PP.state["darken"] = false
-                }
-
-                if (_t < 10) {
-                    PP.fillStyle = `rgba(255,255,255,${Math.min(_t * 0.1, 1) * 0.5})`
-                } else if (_t < 90) {
-                    PP.fillStyle = "rgba(255,255,255,0.5)"
-                } else {
-                    PP.fillStyle = `rgba(255,255,255,${0.5 - (_t - 90) * 0.1 * 0.5})`
-                }
-            }
-            GM.dominantCounter = _c
-        }
-
-        _addCounterGen({
-            _endtime = 10,
-            _msg = "_untitled_counter",
-            _processCall = null,
-            _endCall = () => {
-                this.end = true
-            },
-            _gen_list = null,
-            _qteCall = null,
-        } = {}) {
-            console.log("add counter for: " + _msg)
-            let _temp = new Counter({
-                endtime: _endtime,
-                msg: _msg,
-                processCall: _processCall,
-                endCall: _endCall,
-                gen_list: _gen_list,
-                qteCall: _qteCall,
-            })
-            this.counters.push(_temp)
-            return _temp
-        }
-
-        #print_state() {
-            c.fillStyle = "rgba(255,255,255,1)"
-            c.fillText("pause and select", 10, 10)
-        }
-
-        #draw() {
-
-            if (this.state["title"]) {
-                c.fillStyle = "rgba(0,0,0,1)"
-                c.fillRect(0, 0, canvas.width, canvas.height)
-                c.fillStyle = "rgba(255,255,255,1)"
-                c.fillText("press select key to start", 10, canvas.height / 2)
-                return
-            }
-
-            if (this.state['battle_win']) {
-                c.fillStyle = "rgba(255,255,255,1)"
-                c.fillRect(0, 0, canvas.width, canvas.height)
-                c.fillStyle = "rgba(0,20,0,1)"
-                c.fillText("you win!", 10, canvas.height / 2)
-                return
-            }
-            c.fillStyle = "rgba(200,230,250,1)"
-            c.fillRect(0, 0, canvas.width, canvas.height)
-
-            c.fillStyle = "rgba(200,200,200,1)"
-            c.fillRect(0, canvas.height / 2, canvas.width, canvas.height)
-
-            c.strokeStyle = "blue"
-            c.lineWidth = 5
-            c.beginPath() // パスの開始
-            c.moveTo(0, canvas.height / 2) // 開始点（x:50, y:50）
-            c.lineTo(0, canvas.height)
-            c.lineTo(canvas.width, canvas.height) // 終点（x:250, y:100）
-            c.lineTo(canvas.width, canvas.height / 2)
-            c.lineTo(0, canvas.height / 2)
-            for (let i = 1; i < 3; i++) {
-                c.moveTo(0, (canvas.height / 6) * i + canvas.height / 2)
-                c.lineTo(canvas.width, (canvas.height / 6) * i + canvas.height / 2)
-            }
-            for (let i = 1; i < 6; i++) {
-                c.moveTo((canvas.width / 6) * i, canvas.height / 2)
-                c.lineTo((canvas.width / 6) * i, canvas.height)
-            }
-            c.stroke()
-
-            if (this.state["pause"]) {
-                this._draw_Darken()
-                this.#print_state()
-            } else {
-            }
-            this._showCounters()
-            this.#showChips()
-            this.#print_state()
-
-            if (this.state["dialog"]) {
-                if (imgLoaded) {
-                    c.drawImage(img, 0, 0, 30, 30)
-                }
-                c.fillStyle = "rgba(100,100,100,1)"
-                c.fillRect(
-                    10,
-                    (canvas.height / 4) * 3,
-                    canvas.width - 20,
-                    canvas.height / 5,
-                )
-            }
-            PP.draw()
-
-            for (let _p of characters) {
-                _p.draw()
-                //log('draw characters')
-            }
-        }
-        #update_counters() {
-            if (this.dominantCounter) {
-                this.dominantCounter.update()
-                if (this.dominantCounter.end) this.dominantCounter = null
-                return
-            }
-            for (let _c of this.counters) {
-                _c.update()
-            }
-            this.counters = this.counters.filter((_c) => _c.end == false)
-        }
-
-        update() {
-            this._handleInput()
-
-            if (this.state["title"]) {
-            } else if (this.state["pause"]) {
-                //     console.log('paused')
-            } else {
-                this.#update_counters()
-                for (let p of characters) {
-                    p.update()
-                }
-                if (this.state['battle']) {
-                    if (enemy.HP <= 0) { this.state['battle_win'] = true; this.state['battle'] = false }
-                }
-                if (this.state['battle_win']) { }
-
-            }
-
-            for (let _key in keys) keys[_key].pressed = false
-
-            //console.log(message+counter)
-            this.#draw()
-        }
-    }
-
-    class PostProcessor {
-        constructor() {
-            this.state = {
-                darken: false,
-            }
-            this.fillStyle = "rgba(0, 0, 0,1)"
-        }
-        draw() {
-            if (this.state["darken"]) {
-                //log(this.fillStyle)
-                c.fillStyle = this.fillStyle
-                c.fillRect(0, 0, canvas.width, canvas.height)
-
-                this.down_saturation()
-                c.fillStyle = "rgb(255, 255, 255)"
-                c.fillText("auto proccessing...", canvas.width / 2, canvas.height / 2)
-                c.save()
-                let fontSize = 64
-                c.font = `${fontSize}px Arial`
-                c.fillStyle = "rgb(255, 211, 17)"
-                c.fillText("WIPEOUT!", 0, canvas.height / 2)
-                c.restore()
-            }
-        }
-
-        down_saturation() {
-            // 彩度を0%にして再描画
-            const offCanvas = document.createElement("canvas")
-            offCanvas.width = canvas.width
-            offCanvas.height = canvas.height
-            const offCtx = offCanvas.getContext("2d")
-
-            // 一旦現在の canvas をオフスクリーンにコピー
-            offCtx.drawImage(canvas, 0, 0)
-
-            // 彩度を下げて再描画
-            c.clearRect(0, 0, canvas.width, canvas.height)
-            c.filter = "saturate(20%)"
-            c.drawImage(offCanvas, 0, 0)
-            c.filter = "none" // 忘れずに戻す
-        }
-    }
-
-    class Counter {
-        constructor({
-            endtime = 100,
-            name = "",
-            end = false,
-            target = undefined,
-            msg = "__",
-            processCall = null,
-            endCall = () => { },
-            gen_list = false,
-            qte = false,
-            qteCall = false,
-        } = {}) {
-            this.time = 0
-            this.end_time = endtime
-            this.end = end
-            this.target = target
-            this.processCall = processCall
-            this.msg = msg
-            this.endCall = endCall
-            this.gen_list = gen_list
-            this.qteCall = qteCall
-        }
-        start() { }
-
-        setEnd() {
-            this.end = true
-        }
-        _isEnd() {
-            return this.end
-        }
-
-        #endMethod() {
-            console.log(this.msg + " " + this.end_time + " counter end")
-            this.end = true
-            this.endCall()
-        }
-
-        progress() {
-            return this.time / this.end_time
-        }
-
-        update() {
-            if (this.time < this.end_time) {
-                this.time++
-                if (this.processCall) { this.processCall() }
-                if (this.gen_list) {
-                    let _length = Object.keys(this.gen_list).length
-                    for (let i = 0; i < _length; i++) {
-                        const _time = this.gen_list[i].time
-                        const _call = this.gen_list[i].call
-                        if (this.time == _time) {
-                            log("time: " + _time)
-                            _call()
-                        }
-                    }
-                }
-                if (this.qteCall) {
-                    if (keys.use_chip.pressed) {
-                        this.end = true
-                        this.qteCall()
-                    }
-                }
-            } else this.#endMethod()
-        }
-    }
-
     class Player2 {
         static idle = new IdleState()
         static idleCounter = new Counter({
@@ -1144,6 +606,7 @@
         static moving = new MovingState()
         static skill = new SkillState()
         static attack = new AttackState()
+        static injured = new injuredState()
 
         constructor() {
             console.log("player2 online")
@@ -1198,6 +661,15 @@
             }))
         }
 
+        resetCounter0() {
+            //log('reset counter')
+            if (this.counter) { this.counter.end = true }
+        }
+
+        switchCounter(c) {
+            if (this.counter) this.counter.setEnd()
+            if (c) this.counter = c
+        }
         cst(_state) {
             this.st = _state
             this.st.enter(this)
@@ -1225,15 +697,8 @@
             this.position.y += this.deltaPosition.y
         }
 
-        resetCounter0() {
-            //log('reset counter')
-            if (this.counter) { this.counter.end = true }
-        }
 
-        switchCounter(c) {
-            if (this.counter) this.counter.setEnd()
-            if (c) this.counter = c
-        }
+
 
         startUseChip() {
             if (chip_selected.length < 1) { console.log("no chip selected"); return; }
@@ -1329,8 +794,6 @@
         update() {
             //this.update_vertices()
             if (this.ID == CharID.Enemy) return
-
-
             //key event
             //Counterの更新はこの時点で済んでる
             this._handleInput()
@@ -1430,6 +893,446 @@
         }
     }
 
+
+    class GMBattle {
+        constructor() {
+            this.name = 'battle'
+        }
+        handleInput(t) {
+            //log('gm battle')
+            if (t.state["dialog"]) {
+                if (keys.atk.pressed) {
+                    t.state["dialog"] = false
+                }
+            }
+
+            if (!t.state['pause']) {
+                if (keys.select.pressed) {
+                    return t.cst(t.constructor.select)
+                }
+            }
+
+            if (keys.pause.pressed) {
+                if (t.state["pause"]) t.state["pause"] = false
+                else t.state["pause"] = true
+            }
+
+
+
+
+
+            if (keys.test.pressed) {
+                const c = t._addCounterGen({
+                    _endtime: 300,
+                })
+                c.processCall = () => {
+                    // プレイヤーキャラを使って制御のテストする
+                    // 懐かしいな。ムービーゲーの可能性を見つけたあの午後の雰囲気を思い出す
+                    if (c.time == 1) {
+                        player2_2.position.x = player_2.position.x
+                        player2_2.position.y = player_2.position.y
+                        characters.push(player2_2)
+                    } else if (c.time == 30) {
+                        if (player2_2.startMove(0, 1))
+                            player2_2.cst(Player2.moving)
+                    } else if (c.time == 80) {
+                        player2_2.cst(Player2.attack)
+                    } else if (c.time == 100) {
+                        enemy.HP -= 30
+                    } else if (c.time == 200) {
+                        characters.pop()
+
+                    }
+                }
+            }
+        }
+
+        enter(t) {
+            log('now fight!')
+        }
+
+    }
+
+    class GMBattleWin {
+        constructor() {
+            this.name = 'win!'
+        }
+    }
+
+    class GMTitle {
+        constructor() {
+            this.name = 'title'
+        }
+        handleInput(t) {
+            if (keys.select.pressed) {
+                t.cst(t.constructor.battle)
+            }
+        }
+    }
+    class GMPause {
+
+    }
+    class GMDialog {
+
+    }
+    class GMSelect {
+        constructor() {
+            this.name = 'select'
+            this.counter = null
+        }
+        handleInput(t) {
+            if (keys.select.pressed) {
+                return t.cst(t.constructor.battle)
+            }
+
+            if (keys.add_sword.pressed) {
+                chip_selected.push(chip_list.sword)
+            }
+
+        }
+        enter(t) {
+            log('select chips!')
+            const c = t.addCounter_select({
+                _endtime: 10,
+                _endCall: () => { log('select transition end') },
+            })
+            this.counter = c
+        }
+
+        update(t) { }
+        draw(t) {
+            let h = this.counter.time/this.counter.end_time
+            c.fillStyle = "rgba(200,230,250,1)"
+            c.fillRect(20*h, 20*h, canvas.width / 3*h, canvas.height / 2)
+            if (t.PET_chip.loaded) {
+                c.drawImage(t.PET_chip.img, 30*h, 30*h, chip_nico.width*h, chip_nico.height)
+            }
+        }
+    }
+
+    class GameManager2 {
+        static battle = new GMBattle()
+        static title = new GMTitle()
+        static dialog = new GMDialog()
+        static pause = new GMPause()
+        static select = new GMSelect()
+        static battle_win = new GMBattleWin()
+        constructor() {
+            this.st = GameManager2.battle
+            console.log("game manager online")
+            this.isPaused = false
+            this.chips = []
+            this.counters = []
+            this.counters_select = []
+            this.dominantCounter = null
+            this.state = {
+                pause: false,
+                title: false,
+                world: false,
+                dialog: false,
+                battle: true,
+                battle_win: false,
+            }
+
+            this.PET_chip = new ImageLoader('https://raw.githubusercontent.com/kurokoTJF/FUKAN/refs/heads/main/Sprites/Char/IMG_4874.png')
+            this.Mugshot = new ImageLoader('https://raw.githubusercontent.com/kurokoTJF/FUKAN/refs/heads/main/Sprites/Char/IMG_4877.png')
+
+        }
+
+
+        _showCounters() {
+            let _table = ""
+            for (let _c of this.counters) {
+                _table += _c.msg + ":" + _c.time + "/" + _c.end_time + "\n"
+            } for (let _c of this.counters_select) {
+                _table += _c.msg + ":" + _c.time + "/" + _c.end_time + "\n"
+            }
+            showCounters(_table)
+        }
+
+        #showChips() {
+            let _table = ""
+            for (let chip of chip_selected) {
+                _table += chip.name + ", "
+            }
+            showChips(_table)
+        }
+
+        _draw_Darken() {
+            c.fillStyle = "rgba(0,0,0,0.5)"
+            c.fillRect(0, 0, canvas.width, canvas.height)
+        }
+        cst(_state) {
+            this.st = _state
+            this.st.enter(this)
+            return _state
+        }
+
+
+        addSPCounter() {
+            let _c = new Counter({
+                _endtime: 100,
+            })
+
+            _c.processCall = () => {
+                let _t = _c.time
+                if (_c.time == 1) PP.state["darken"] = true
+                if (_c.time == 10) if (_c.time == 40) log("player animation")
+                if (_c.time == 100) {
+                    log("over")
+                    PP.state["darken"] = false
+                }
+
+                if (_t < 10) {
+                    PP.fillStyle = `rgba(255,255,255,${Math.min(_t * 0.1, 1) * 0.5})`
+                } else if (_t < 90) {
+                    PP.fillStyle = "rgba(255,255,255,0.5)"
+                } else {
+                    PP.fillStyle = `rgba(255,255,255,${0.5 - (_t - 90) * 0.1 * 0.5})`
+                }
+            }
+            GM.dominantCounter = _c
+        }
+
+        _addCounterGen({
+            _endtime = 10,
+            _msg = "_untitled_counter",
+            _processCall = null,
+            _endCall = () => {
+                this.end = true
+            },
+            _gen_list = null,
+            _qteCall = null,
+        } = {}) {
+            console.log("add counter for: " + _msg)
+            let _temp = new Counter({
+                endtime: _endtime,
+                msg: _msg,
+                processCall: _processCall,
+                endCall: _endCall,
+                gen_list: _gen_list,
+                qteCall: _qteCall,
+            })
+            this.counters.push(_temp)
+            return _temp
+        }
+
+        addCounter_select({
+            _endtime = 10,
+            _msg = "_untitled_counter",
+            _processCall = null,
+            _endCall = () => {
+                this.end = true
+            },
+            _gen_list = null,
+            _qteCall = null,
+        } = {}) {
+            console.log("add counter for: " + _msg)
+            let _temp = new Counter({
+                endtime: _endtime,
+                msg: _msg,
+                processCall: _processCall,
+                endCall: _endCall,
+                gen_list: _gen_list,
+                qteCall: _qteCall,
+            })
+            this.counters_select.push(_temp)
+            return _temp
+        }
+
+        #print_state() {
+            c.fillStyle = "rgba(255,255,255,255)"
+            c.fillText(this.st.name, 10, 10)
+            //log(this.st.name)
+        }
+
+        #draw() {
+
+            if (this.st == this.constructor.title) {
+                c.fillStyle = "rgba(0,0,0,1)"
+                c.fillRect(0, 0, canvas.width, canvas.height)
+                c.fillStyle = "rgba(255,255,255,1)"
+                c.fillText("press select key to start", 10, canvas.height / 2)
+                return
+            }
+            if (this.st == this.constructor.battle || this.st==this.constructor.select) {
+                c.fillStyle = "rgba(0,0,0,1)"
+                c.fillRect(0, 0, canvas.width, canvas.height)
+                c.fillStyle = "rgba(255,255,255,1)"
+                if (this.Mugshot.loaded)
+                    c.drawImage(this.Mugshot.img, 0, 24, 48, 24)
+                else { c.fillStyle = 'red'; c.fillRect(0, 24, 48, 24); }
+            }
+
+            if (this.state['battle_win']) {
+                c.fillStyle = "rgba(200,230,250,1)"
+                c.fillRect(0, 0, canvas.width, canvas.height)
+                c.fillStyle = "rgba(0,20,0,1)"
+                c.fillText("you win!", 10, canvas.height / 2)
+                return
+            }
+
+
+
+            // draw floor
+            const _draw_floor = () => {
+                c.fillStyle = "rgba(220,220,220,1)"
+                c.fillRect(0, canvas.height / 2, canvas.width, canvas.height)
+
+                c.strokeStyle = "purple"
+                c.lineWidth = 5
+                c.beginPath() // パスの開始
+                c.moveTo(0, canvas.height / 2) // 開始点（x:50, y:50）
+                c.lineTo(0, canvas.height)
+                c.lineTo(canvas.width, canvas.height) // 終点（x:250, y:100）
+                c.lineTo(canvas.width, canvas.height / 2)
+                c.lineTo(0, canvas.height / 2)
+                for (let i = 1; i < 3; i++) {
+                    c.moveTo(0, (canvas.height / 6) * i + canvas.height / 2)
+                    c.lineTo(canvas.width, (canvas.height / 6) * i + canvas.height / 2)
+                }
+                for (let i = 1; i < 6; i++) {
+                    c.moveTo((canvas.width / 6) * i, canvas.height / 2)
+                    c.lineTo((canvas.width / 6) * i, canvas.height)
+                }
+                c.stroke()
+            }
+            _draw_floor()
+
+            if (this.state["pause"]) {
+                this._draw_Darken()
+            }
+
+            this._showCounters()
+            this.#showChips()
+
+
+            if (this.state["dialog"]) {
+                if (imgLoaded) {
+                    c.drawImage(img, 0, 0, 30, 30)
+                }
+                c.fillStyle = "rgba(100,100,100,1)"
+                c.fillRect(
+                    10,
+                    (canvas.height / 4) * 3,
+                    canvas.width - 20,
+                    canvas.height / 5,
+                )
+            }
+
+            PP.draw()
+            for (let _p of characters) {
+                _p.draw()
+                //log('draw characters')
+            }
+
+            if (this.st == this.constructor.select) {
+                this.st.draw(this)
+            }
+
+            this.#print_state()
+        }
+
+        #update_counters() {
+            if (this.st == this.constructor.select) {
+                for (let _c of this.counters_select) {
+                    _c.update()
+                }
+                this.counters_select = this.counters_select.filter((_c) => _c.end == false)
+
+                return
+            }
+
+            if (this.dominantCounter) {
+                this.dominantCounter.update()
+                if (this.dominantCounter.end) this.dominantCounter = null
+                return
+            }
+            for (let _c of this.counters) {
+                _c.update()
+            }
+            this.counters = this.counters.filter((_c) => _c.end == false)
+        }
+
+        update() {
+            const s = this.st.handleInput(this)
+            if (s) this.st = s
+
+            if (this.state["title"]) {
+            } else if (this.state["pause"]) {
+                //     console.log('paused')
+            } else {
+                if (this.st == this.constructor.battle) {
+                    this.#update_counters()
+                    for (let p of characters) {
+                        p.update()
+                    }
+                    if (this.state['battle']) {
+                        if (enemy.HP <= 0) { this.state['battle_win'] = true; this.state['battle'] = false }
+                    }
+                    if (this.state['battle_win']) { }
+                }
+                if (this.st == this.constructor.select) {
+                    this.#update_counters()
+
+                }
+
+
+
+            }
+
+            for (let _key in keys) keys[_key].pressed = false
+
+            //console.log(message+counter)
+            this.#draw()
+        }
+    }
+
+    class PostProcessor {
+        constructor() {
+            this.state = {
+                darken: false,
+            }
+            this.fillStyle = "rgba(0, 0, 0,1)"
+        }
+        draw() {
+            if (this.state["darken"]) {
+                //log(this.fillStyle)
+                c.fillStyle = this.fillStyle
+                c.fillRect(0, 0, canvas.width, canvas.height)
+
+                this.down_saturation()
+                c.fillStyle = "rgb(255, 255, 255)"
+                c.fillText("auto proccessing...", canvas.width / 2, canvas.height / 2)
+                c.save()
+                let fontSize = 64
+                c.font = `${fontSize}px Arial`
+                c.fillStyle = "rgb(255, 211, 17)"
+                c.fillText("WIPEOUT!", 0, canvas.height / 2)
+                c.restore()
+            }
+        }
+
+        down_saturation() {
+            // 彩度を0%にして再描画
+            const offCanvas = document.createElement("canvas")
+            offCanvas.width = canvas.width
+            offCanvas.height = canvas.height
+            const offCtx = offCanvas.getContext("2d")
+
+            // 一旦現在の canvas をオフスクリーンにコピー
+            offCtx.drawImage(canvas, 0, 0)
+
+            // 彩度を下げて再描画
+            c.clearRect(0, 0, canvas.width, canvas.height)
+            c.filter = "saturate(20%)"
+            c.drawImage(offCanvas, 0, 0)
+            c.filter = "none" // 忘れずに戻す
+        }
+    }
+
+
+
     // only render
     class MovieRenderer {
         constructor(master) {
@@ -1473,6 +1376,13 @@
                     rect: { w: 100, h: 64 },
                     length: 12,
                     flip: true,
+                },
+                injured: {
+                    path: 'https://raw.githubusercontent.com/kurokoTJF/FUKAN/refs/heads/main/Sprites/Char/IMG_4873.png'
+                    ,
+                    rect: { w: 45, h: 50 },
+                    length: 5,
+                    flip: true,
                 }
             }
             this.length = 1 // numbers of frames
@@ -1506,7 +1416,7 @@
         #update() {
 
 
-            if (this.master == player_2)
+            if (this.master.constructor == Player2)
                 if (this.master.st == this.master.constructor.idle) {
 
                     this.#updateSpriteInfo('idle')
@@ -1519,6 +1429,9 @@
                     //log('render attack')
                 } else if (this.master.st == this.master.constructor.skill) {
                     this.#updateSpriteInfo('attack1')
+                    //log('render attack')
+                } else if (this.master.st == this.master.constructor.injured) {
+                    this.#updateSpriteInfo('injured')
                     //log('render attack')
                 } else {
                     this.spriteName = ''
@@ -1641,16 +1554,14 @@
     canvas.height = 200
     const tileSize = 50
 
-    const GM = new GameManager()
+    const GM = new GameManager2()
     let counter = 0
-    let player = new Player()
     let player_2 = new Player2()
-    let enemy = new Player()
-    let player2 = new Player()
+    let enemy = new Player2()
+    let player2_2 = new Player2()
     enemy.ID = CharID.Enemy
-    player2.ID = CharID.Actor
+    player2_2.ID = CharID.Actor
     let characters = []
-    characters.push(player)
     characters.push(player_2)
     characters.push(enemy)
     enemy.position = { x: 5, y: 2 }
