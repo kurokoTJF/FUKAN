@@ -37,6 +37,8 @@
 <button onmousedown="clearLog()">clear log </button>
 
 <p>
+<div id="state"></div>
+
 <div id="chips"></div>
 <div id="counters"></div>
 <div id="log"></div>
@@ -66,7 +68,101 @@
     }
 </style>
 
-<script>
+
+<script id="data">
+    const ModelHData =
+    {
+        name: "ModelH",
+        element: "thunder",
+        hp: 80,
+        initialState: 'idle',
+
+        state: {
+            idle: {
+                duration: 202,
+                transition: {
+                    atk: 'attack1',
+                    onEnd: 'idle'
+                },
+                sprite_info: {}
+            },
+            attack1: {
+                duration: 200,
+                steps:
+                    [
+                        { time: 30, action: (target) => target.showMSG('count 100') },
+                        { time: 70, action: (target) => target.showMSG('count 300') },
+                    ],
+                transition: {
+                    atk: 'attack2',
+                    onEnd: 'idle'
+                }
+            },
+            attack2: {
+                duration: 120,
+                transition: {
+                    onEnd: 'idle',
+                    atk: 'injured'
+                }
+            },
+            
+            injured: {
+                duration: 30,
+                transition: {
+                    onEnd: 'idle',
+                    atk: 'attack1'
+                }
+            },
+
+
+        },
+        spriteCollection: {
+            test: {
+                path: "https://raw.githubusercontent.com/kurokoTJF/FUKAN/refs/heads/main/Sprites/red/enchant.png",
+                rect: { w: 56, h: 56 },
+                length: 8,
+            },
+            move: {
+                path:
+                    'https://raw.githubusercontent.com/kurokoTJF/FUKAN/refs/heads/main/Sprites/Char/IMG_4867.png',
+                rect: { w: 40, h: 64 },
+                length: 8,
+                flip: true,
+            },
+            idle: {
+                path:
+                    'https://raw.githubusercontent.com/kurokoTJF/FUKAN/refs/heads/main/Sprites/Char/IMG_4865.png'
+                , rect: { w: 44, h: 50 },
+                length: 4,
+                flip: true,
+            },
+            attack1: {
+                path: 'https://raw.githubusercontent.com/kurokoTJF/FUKAN/refs/heads/main/Sprites/Char/IMG_4863.png'
+                ,
+                rect: { w: 44, h: 56 },
+                length: 4,
+            },
+            attack2: {
+                path: 'https://raw.githubusercontent.com/kurokoTJF/FUKAN/refs/heads/main/Sprites/Char/IMG_4866.png'
+                ,
+                rect: { w: 100, h: 64 },
+                length: 12,
+                flip: true,
+            },
+            injured: {
+                path: 'https://raw.githubusercontent.com/kurokoTJF/FUKAN/refs/heads/main/Sprites/Char/IMG_4873.png'
+                ,
+                rect: { w: 45, h: 50 },
+                length: 5,
+                flip: true,
+            }
+        }
+
+    }
+
+</script>
+
+<script id="functions Engine">
     keyPress = function (key) {
         keys[key].pressed = true
     }
@@ -86,23 +182,11 @@
     }
     const rawUrl = "https://raw.githubusercontent.com/kurokoTJF/FUKAN/refs/heads/main/workspace/Counter/Ideas.txt";
 
-
-    const CharID = {
-        Player: 0,
-        Enemy: 1,
-        Actor: 2,
+    function showHTML(MSG, ID) {
+        document.getElementById(ID).innerText = MSG
     }
 
-    /*
-    fetch(rawUrl)
-        .then(response => response.text())
-        .then(data => {
-            document.getElementById("content2").textContent = data;
-        })
-        .catch(error => {
-            document.getElementById("content2").textContent = "読み込み失敗: " + error;
-        });
-    */
+
     function log(msg) {
         document.getElementById("log").innerText += msg + "\n_"
     }
@@ -117,13 +201,6 @@
     }
     clearLog()
     showChips("no chips")
-
-    let chip_nico_loaded = false
-    let chip_nico = new Image()
-    chip_nico.src = 'https://raw.githubusercontent.com/kurokoTJF/FUKAN/refs/heads/main/Sprites/Char/IMG_4874.png'
-    chip_nico.onload = () => {
-        chip_nico_loaded = true
-    }
 
 
     class ImageLoader {
@@ -144,17 +221,10 @@
         }
     }
 
-    const chip_nico2 = new ImageLoader('https://raw.githubusercontent.com/kurokoTJF/FUKAN/refs/heads/main/Sprites/Char/IMG_4874.png')
-
-</script>
-
-<script>
-    // classes.js
-    // difficult to split files
 
     class Counter {
         constructor({
-            endtime = 100,
+            endTime = 100,
             name = "",
             end = false,
             target = undefined,
@@ -166,7 +236,7 @@
             qteCall = false,
         } = {}) {
             this.time = 0
-            this.end_time = endtime
+            this.endTime = endTime
             this.end = end
             this.target = target
             this.processCall = processCall
@@ -185,40 +255,35 @@
         }
 
         #endMethod() {
-            console.log(this.msg + " " + this.end_time + " counter end")
+            console.log(this.msg + " " + this.endTime + " counter end")
             this.end = true
             this.endCall()
         }
 
         progress() {
-            return this.time / this.end_time
+            return this.time / this.endTime
         }
 
         update() {
-            if (this.time < this.end_time) {
+            if (this.time < this.endTime) {
                 this.time++
-                if (this.processCall) { this.processCall() }
-                if (this.gen_list) {
-                    let _length = Object.keys(this.gen_list).length
-                    for (let i = 0; i < _length; i++) {
-                        const _time = this.gen_list[i].time
-                        const _call = this.gen_list[i].call
-                        if (this.time == _time) {
-                            log("time: " + _time)
-                            _call()
-                        }
-                    }
-                }
-                if (this.qteCall) {
-                    if (keys.use_chip.pressed) {
-                        this.end = true
-                        this.qteCall()
-                    }
-                }
+                if (this.processCall) this.processCall()
+
             } else this.#endMethod()
         }
     }
 
+
+</script>
+
+<script id="class">
+    // classes.js
+    // difficult to split files
+    const CharID = {
+        Player: 0,
+        Enemy: 1,
+        Actor: 2,
+    }
 
     class PolygonRenderer {
         constructor() {
@@ -440,10 +505,9 @@
 
         enter(target) {
             GM.Mugshot.load('https://raw.githubusercontent.com/kurokoTJF/FUKAN/refs/heads/main/Sprites/Char/IMG_4876.png')
-            let c = GM._addCounterGen({
-                _endtime: 100,
-                _msg: 'player2 idle loop counter',
-                _endCall: () => {
+            let c = GM.addCounter({
+                endTime: 100,
+                endCall: () => {
                     GM.Mugshot.load('https://raw.githubusercontent.com/kurokoTJF/FUKAN/refs/heads/main/Sprites/Char/IMG_4877.png')
                     target.cst(target.constructor.idle)
                 }
@@ -501,12 +565,12 @@
 
         enter(target) {
 
-            let c = GM._addCounterGen({
-                _endtime: 300,
-                _msg: 'player2 idle loop counter',
+            let c = GM.addCounter({
+                endTime: 300,
+                msg: 'player2 idle loop counter',
             })
             c.processCall = () => {
-                if (c.time == c.end_time)
+                if (c.time == c.endTime)
                     c.time = 0
             }
 
@@ -524,9 +588,9 @@
         enter(target) {
             log('[player2] state class move!')
 
-            let c = GM._addCounterGen({
-                _endtime: target.moveGridStop,
-                _msg: "[GM]player moving",
+            let c = GM.addCounter({
+                endTime: target.moveGridStop,
+                msg: "[GM]player moving",
             })
             c.processCall = () => {
                 if (c.time == target.moveGridStop / 2) {
@@ -547,10 +611,10 @@
         enter(target) {
             log('[Player2] enter skill')
 
-            let c = GM._addCounterGen({
-                _endtime: 100,
-                _msg: 'player2 skill counter',
-                _endCall: () => {
+            let c = GM.addCounter({
+                endTime: 100,
+                msg: 'player2 skill counter',
+                endCall: () => {
                     target.cst(target.constructor.idle)
                 }
             })
@@ -576,15 +640,15 @@
         }
         enter(target) {
             target.resetCounter0()
-            let c = GM._addCounterGen({
-                _endtime: 40,
-                _msg: target.ID + ' attaking',
-                _processCall: () => { },
-                _endCall: () => { log('end atk'); target.endAttack(); enemy.HP -= 2; }
+            let c = GM.addCounter({
+                endTime: 40,
+                msg: target.ID + ' attacking',
+                processCall: () => { },
+                endCall: () => { log('end atk'); target.cst(Player2.idle); enemy.HP -= 2; }
             })
             c.processCall = () => {
                 if (target.ID != CharID.Player) return
-                if (keys.atk.pressed && c.time > c.end_time / 2)
+                if (keys.atk.pressed && c.time > c.endTime / 2)
                     c.time = 0
             }
             target.counter = c
@@ -595,10 +659,10 @@
     class Player2 {
         static idle = new IdleState()
         static idleCounter = new Counter({
-            endtime: 40,
+            endTime: 40,
             msg: 'player2 static idle counter',
             processCall: () => {
-                if (this.time == this.end_time) {
+                if (this.time == this.endTime) {
                     this.time = 0
                 }
             }
@@ -709,19 +773,18 @@
                 // use the first chip
                 this.chipName = chip_selected[0].name
                 chip_selected.splice(0, 1)
-                //this.counter = GM._addCounter(40, "[GM]player using chip", () => this._endUseChip())
-                this.counter = GM._addCounterGen({
-                    _endtime: 100,
-                    _msg: "[GM]player using chip",
-                    _endCall: () => this._endUseChip(),
+                this.counter = GM.addCounter({
+                    endTime: 100,
+                    msg: "[GM]player using chip",
+                    endCall: () => this._endUseChip(),
                     _gen_list: [
                         {
                             time: 40,
                             call: () =>
-                                GM._addCounterGen({
-                                    _endtime: 30,
-                                    _msg: "qte counting...",
-                                    _endCall: () => this.HP -= 25,
+                                GM.addCounter({
+                                    endTime: 30,
+                                    msg: "qte counting...",
+                                    endCall: () => this.HP -= 25,
                                     _qteCall: () => {
                                         this.state["buffed"] = true
                                         GM.addSPCounter()
@@ -748,19 +811,18 @@
                 // use the first chip
                 this.chipName = chip_selected[0].name
                 chip_selected.splice(0, 1)
-                //this.counter = GM._addCounter(40, "[GM]player using chip", () => this._endUseChip())
-                this.counter = GM._addCounterGen({
-                    _endtime: 100,
-                    _msg: "[GM]player using chip",
-                    _endCall: () => this._endUseChip(),
+                this.counter = GM.addCounter({
+                    endTime: 100,
+                    msg: "[GM]player using chip",
+                    endCall: () => this._endUseChip(),
                     _gen_list: [
                         {
                             time: 40,
                             call: () =>
-                                GM._addCounterGen({
-                                    _endtime: 30,
-                                    _msg: "qte counting...",
-                                    _endCall: () => this.HP -= 25,
+                                GM.addCounter({
+                                    endTime: 30,
+                                    msg: "qte counting...",
+                                    endCall: () => this.HP -= 25,
                                     _qteCall: () => {
                                         this.state["buffed"] = true
                                         GM.addSPCounter()
@@ -775,8 +837,7 @@
         }
         endAttack() {
             log('[player2]end attack')
-            this.st = Player2.idle
-            Player2.idle.enter(this)
+
 
         }
 
@@ -785,9 +846,7 @@
         }
 
         _handleInput() {
-            if (this.ID != CharID.Player) return
-            const st = this.st.handleInput(this)
-            if (st) this.st = st
+
         }
 
 
@@ -797,6 +856,10 @@
             //key event
             //Counterの更新はこの時点で済んでる
             this._handleInput()
+            if (this.ID == CharID.Player) {
+                const st = this.st.handleInput(this)
+                if (st) this.st = st
+            }
             //change the postion
             if (this.position.y > 3) this.position.y = 3
             else if (this.position.y < 1) this.position.y = 1
@@ -808,6 +871,10 @@
         }
 
         draw() {
+            if (this.counter) {
+                this.renderer.draw()
+            }
+
             const temp_draw = () =>
                 c.fillRect(
                     ((this.position.x - 1) * canvas.width) / 6 + 10,
@@ -833,7 +900,7 @@
                 c.fillRect(
                     ((this.position.x - 1) * canvas.width) / 6 + 10,
                     (this.position.y * canvas.height) / 6 + 40 + tileSize,
-                    (_counter.time / _counter.end_time) * tileSize,
+                    (_counter.time / _counter.endTime) * tileSize,
                     5,
                 )
             }
@@ -886,12 +953,205 @@
                 temp_print("idle")
             }
 
+
             if (this.counter) {
                 temp_draw_gauge(this.counter)
-                this.renderer.draw()
             }
         }
     }
+
+
+
+    function createStateFromData(stateName, data) {
+        return {
+            name: stateName,
+            enter(target) {
+                console.log('entering ' + stateName)
+                const _counter = GM.addCounter({
+                    msg: '[' + stateName + ']',
+                    endTime: data.duration,
+                    processCall: () => {
+                        for (const step of data.steps || [])
+                            if (_counter.time === step.time)
+                                step.action(target)
+                    },
+                    endCall: () => {
+                        const nextStateName = data.transition?.onEnd;
+                        if (nextStateName) {
+                            target.cst(nextStateName)
+                        }
+                    }
+                })
+
+                // counter must be end
+                if (target.counter) target.counter = null
+                target.counter = _counter
+            },
+            update(target) {
+                //console.log('updating ' + stateName)
+                if (data.transition) {
+                    for (const key in data.transition) {
+                        if (key === 'onEnd') continue
+                        if (keys[key]?.pressed) {
+                            target.showMSG('pressed!')
+                            const next = data.transition[key]
+                            target.cst(next)
+                            return
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    function loadCharacterData(data) {
+        const states = {}
+        for (const stateName in data.state) {
+            states[stateName] = createStateFromData(stateName, data.state[stateName])
+        }
+
+        return {
+            states,
+            initialState: states[data.initialState],
+            hp: data.hp,
+            spriteCollection:data.spriteCollection
+        }
+    }
+
+
+
+    class Player {
+        constructor(data) {
+            console.log('state machine data version online')
+            const loaded = loadCharacterData(data)
+            this.states = loaded.states
+            this.state = loaded.initialState
+            this.state.enter(this)
+
+            this.position = { x: 2, y: 1 }
+            this.renderer = new MovieRenderer2(this,loaded.spriteCollection)
+            this.HP = loaded.hp
+
+        }
+
+
+
+        cst(stateName) {
+            this.counter.setEnd()
+            this.state = this.states[stateName]
+            this.state.enter(this)
+
+        }
+
+        showMSG(msg) {
+            log("[MSG] " + msg)
+        }
+
+
+        
+
+        update() {
+            //if (this.ID == CharID.Player)
+                if (this.state && this.state.update)
+                    this.state.update(this)
+
+            if (this.position.y > 3) this.position.y = 3
+            else if (this.position.y < 1) this.position.y = 1
+            if (this.position.x > 3) this.position.x = 3
+            else if (this.position.x < 1) this.position.x = 1
+        }
+
+        draw() {
+            if (this.counter) {
+                this.renderer.draw()
+            }
+
+            const temp_draw = () =>
+                c.fillRect(
+                    ((this.position.x - 1) * canvas.width) / 6 + 10,
+                    (this.position.y * canvas.height) / 6 + 40,
+                    20,
+                    tileSize,
+                )
+            const temp_print = (msg) =>
+                c.fillText(
+                    msg,
+                    10 + ((this.position.x - 1) * canvas.width) / 6,
+                    (this.position.y * canvas.height) / 6 + 40 + 10,
+                )
+            const temp_draw_gauge = (_counter) => {
+                c.fillStyle = "rgba(0,0,0,1)"
+                c.fillRect(
+                    ((this.position.x - 1) * canvas.width) / 6 + 10,
+                    (this.position.y * canvas.height) / 6 + 40 + tileSize,
+                    tileSize,
+                    5,
+                )
+                c.fillStyle = "rgb(255, 255, 255)"
+                c.fillRect(
+                    ((this.position.x - 1) * canvas.width) / 6 + 10,
+                    (this.position.y * canvas.height) / 6 + 40 + tileSize,
+                    (_counter.time / _counter.endTime) * tileSize,
+                    5,
+                )
+            }
+            const temp_draw_gauge2 = (_current, _max) => {
+                c.fillStyle = "rgba(0,0,0,1)"
+                c.fillRect(
+                    ((this.position.x - 1) * canvas.width) / 6 + 10,
+                    (this.position.y * canvas.height) / 6 + 10,
+                    tileSize,
+                    5,
+                )
+                c.fillStyle = "rgba(255,0,0,1)"
+                c.fillRect(
+                    ((this.position.x - 1) * canvas.width) / 6 + 10,
+                    (this.position.y * canvas.height) / 6 + 10,
+                    (_current / _max) * tileSize,
+                    5,
+                )
+            }
+
+            temp_draw_gauge2(this.HP, 100)
+            if (this.state["buffed"]) {
+                c.fillStyle = "rgb(251, 255, 0)"
+                c.fillRect(
+                    ((this.position.x - 1) * canvas.width) / 6 + 10,
+                    (this.position.y * canvas.height) / 6 + 20,
+                    tileSize,
+                    5,
+                )
+            }
+
+
+            if (this.ID == CharID.Enemy) {
+                c.fillStyle = "rgba(255,0,255,1)"
+                temp_draw()
+
+            }
+
+            if (this.state["usingChip"]) {
+                c.fillStyle = "rgb(255, 255, 255)"
+                temp_print("using chips")
+            } else if (this.state["moving"]) {
+                c.fillStyle = "rgba(255,255,255,1)"
+                temp_print("moving")
+            } else if (this.state['attack']) {
+                c.fillStyle = "rgba(255,255,255,1)"
+                temp_print("attack")
+            } else {
+                c.fillStyle = "rgba(255,255,255,1)"
+                temp_print("idle")
+            }
+
+
+            if (this.counter) {
+                temp_draw_gauge(this.counter)
+            }
+        }
+    }
+
+
 
 
     class GMBattle {
@@ -922,8 +1182,8 @@
 
 
             if (keys.test.pressed) {
-                const c = t._addCounterGen({
-                    _endtime: 300,
+                const c = t.addCounter({
+                    endTime: 300,
                 })
                 c.processCall = () => {
                     // プレイヤーキャラを使って制御のテストする
@@ -993,19 +1253,19 @@
         enter(t) {
             log('select chips!')
             const c = t.addCounter_select({
-                _endtime: 10,
-                _endCall: () => { log('select transition end') },
+                endTime: 10,
+                endCall: () => { log('select transition end') },
             })
             this.counter = c
         }
 
         update(t) { }
         draw(t) {
-            let h = this.counter.time/this.counter.end_time
+            let h = this.counter.time / this.counter.endTime
             c.fillStyle = "rgba(200,230,250,1)"
-            c.fillRect(20*h, 20*h, canvas.width / 3*h, canvas.height / 2)
+            c.fillRect(20 * h, 20 * h, canvas.width / 3 * h, canvas.height / 2)
             if (t.PET_chip.loaded) {
-                c.drawImage(t.PET_chip.img, 30*h, 30*h, chip_nico.width*h, chip_nico.height)
+                c.drawImage(t.PET_chip.img, 30 * h, 30 * h, t.PET_chip.img.width * h, t.PET_chip.img.height)
             }
         }
     }
@@ -1043,9 +1303,9 @@
         _showCounters() {
             let _table = ""
             for (let _c of this.counters) {
-                _table += _c.msg + ":" + _c.time + "/" + _c.end_time + "\n"
+                _table += _c.msg + ":" + _c.time + "/" + _c.endTime + "\n"
             } for (let _c of this.counters_select) {
-                _table += _c.msg + ":" + _c.time + "/" + _c.end_time + "\n"
+                _table += _c.msg + ":" + _c.time + "/" + _c.endTime + "\n"
             }
             showCounters(_table)
         }
@@ -1071,7 +1331,7 @@
 
         addSPCounter() {
             let _c = new Counter({
-                _endtime: 100,
+                endTime: 100,
             })
 
             _c.processCall = () => {
@@ -1094,45 +1354,41 @@
             GM.dominantCounter = _c
         }
 
-        _addCounterGen({
-            _endtime = 10,
-            _msg = "_untitled_counter",
-            _processCall = null,
-            _endCall = () => {
+        addCounter({
+            msg = "[untitled]",
+            endTime = 10,
+            processCall = null,
+            endCall = () => {
                 this.end = true
             },
-            _gen_list = null,
-            _qteCall = null,
+
         } = {}) {
-            console.log("add counter for: " + _msg)
             let _temp = new Counter({
-                endtime: _endtime,
-                msg: _msg,
-                processCall: _processCall,
-                endCall: _endCall,
-                gen_list: _gen_list,
-                qteCall: _qteCall,
+                endTime: endTime,
+                msg: msg,
+                processCall: processCall,
+                endCall: endCall,
             })
             this.counters.push(_temp)
             return _temp
         }
 
         addCounter_select({
-            _endtime = 10,
-            _msg = "_untitled_counter",
-            _processCall = null,
-            _endCall = () => {
+            endTime = 10,
+            msg = "_untitled_counter",
+            processCall = null,
+            endCall = () => {
                 this.end = true
             },
             _gen_list = null,
             _qteCall = null,
         } = {}) {
-            console.log("add counter for: " + _msg)
+            console.log("add counter for: " + msg)
             let _temp = new Counter({
-                endtime: _endtime,
-                msg: _msg,
-                processCall: _processCall,
-                endCall: _endCall,
+                endTime: endTime,
+                msg: msg,
+                processCall: processCall,
+                endCall: endCall,
                 gen_list: _gen_list,
                 qteCall: _qteCall,
             })
@@ -1147,7 +1403,6 @@
         }
 
         #draw() {
-
             if (this.st == this.constructor.title) {
                 c.fillStyle = "rgba(0,0,0,1)"
                 c.fillRect(0, 0, canvas.width, canvas.height)
@@ -1155,7 +1410,7 @@
                 c.fillText("press select key to start", 10, canvas.height / 2)
                 return
             }
-            if (this.st == this.constructor.battle || this.st==this.constructor.select) {
+            if (this.st == this.constructor.battle || this.st == this.constructor.select) {
                 c.fillStyle = "rgba(0,0,0,1)"
                 c.fillRect(0, 0, canvas.width, canvas.height)
                 c.fillStyle = "rgba(255,255,255,1)"
@@ -1344,47 +1599,7 @@
             this.spriteImage = new Image()
             this.spriteLoad = false
             this.spriteFlip = false
-            this.spriteCollection = {
-                test: {
-                    path: "https://raw.githubusercontent.com/kurokoTJF/FUKAN/refs/heads/main/Sprites/red/enchant.png",
-                    rect: { w: 56, h: 56 },
-                    length: 8,
-                },
-                move: {
-                    path:
-                        'https://raw.githubusercontent.com/kurokoTJF/FUKAN/refs/heads/main/Sprites/Char/IMG_4867.png',
-                    rect: { w: 40, h: 64 },
-                    length: 8,
-                    flip: true,
-                },
-                idle: {
-                    path:
-                        'https://raw.githubusercontent.com/kurokoTJF/FUKAN/refs/heads/main/Sprites/Char/IMG_4865.png'
-                    , rect: { w: 44, h: 50 },
-                    length: 4,
-                    flip: true,
-                },
-                attack1: {
-                    path: 'https://raw.githubusercontent.com/kurokoTJF/FUKAN/refs/heads/main/Sprites/Char/IMG_4863.png'
-                    ,
-                    rect: { w: 44, h: 56 },
-                    length: 4,
-                },
-                attack2: {
-                    path: 'https://raw.githubusercontent.com/kurokoTJF/FUKAN/refs/heads/main/Sprites/Char/IMG_4866.png'
-                    ,
-                    rect: { w: 100, h: 64 },
-                    length: 12,
-                    flip: true,
-                },
-                injured: {
-                    path: 'https://raw.githubusercontent.com/kurokoTJF/FUKAN/refs/heads/main/Sprites/Char/IMG_4873.png'
-                    ,
-                    rect: { w: 45, h: 50 },
-                    length: 5,
-                    flip: true,
-                }
-            }
+            this.spriteCollection = ModelHData.spriteCollection
             this.length = 1 // numbers of frames
             this.currentFrame = 0
             this.cropbox = {}
@@ -1412,56 +1627,39 @@
             }
         }
 
-        // master state
+        // master state, main counter
         #update() {
 
+            if (this.master.st == this.master.constructor.idle) {
+                this.#updateSpriteInfo('idle')
+                //log('player_2 render idle')
+            } else if (this.master.st == this.master.constructor.attack) {
+                this.#updateSpriteInfo('attack2')
+                //log('render attack')
+            } else if (this.master.st == this.master.constructor.moving) {
+                this.#updateSpriteInfo('move')
+                //log('render attack')
+            } else if (this.master.st == this.master.constructor.skill) {
+                this.#updateSpriteInfo('attack1')
+                //log('render attack')
+            } else if (this.master.st == this.master.constructor.injured) {
+                this.#updateSpriteInfo('injured')
+                //log('render attack')
+            } else {
+                this.spriteName = ''
+                this.spriteImage = null
+                log('no shit to render')
+                return
+            }
 
-            if (this.master.constructor == Player2)
-                if (this.master.st == this.master.constructor.idle) {
 
-                    this.#updateSpriteInfo('idle')
-                    //log('player_2 render idle')
-                } else if (this.master.st == this.master.constructor.attack) {
-                    this.#updateSpriteInfo('attack2')
-                    //log('render attack')
-                } else if (this.master.st == this.master.constructor.moving) {
-                    this.#updateSpriteInfo('move')
-                    //log('render attack')
-                } else if (this.master.st == this.master.constructor.skill) {
-                    this.#updateSpriteInfo('attack1')
-                    //log('render attack')
-                } else if (this.master.st == this.master.constructor.injured) {
-                    this.#updateSpriteInfo('injured')
-                    //log('render attack')
-                } else {
-                    this.spriteName = ''
-                    this.spriteImage = null
-                    log('no shit to render')
-                    return
-                }
-
-            else
-                if (this.master.state['usingChip']) {
-                    this.#updateSpriteInfo('test')
-                } else if (this.master.state['moving']) {
-                    this.#updateSpriteInfo('move')
-
-                } else if (this.master.state['attack']) {
-                    this.#updateSpriteInfo('attack2')
-                } else if (this.master.state['idle']) {
-                    this.#updateSpriteInfo('idle')
-                } else {
-
-                    this.spriteImage = null
-                    return
-                }
             let mc = this.master.counter
             let mp = this.master.position
             this.drawposition.x = ((mp.x - 1) * canvas.width) / 6 + 10
             this.drawposition.y = (mp.y * canvas.height) / 6 + 40
 
 
-            let FrameBuffer = mc.end_time / this.length
+            let FrameBuffer = mc.endTime / this.length
             this.currentFrame = Math.floor(mc.time / FrameBuffer)
             this.currentFrame %= this.length // loop
         }
@@ -1519,6 +1717,125 @@
             c.fillText(this.currentFrame, this.drawposition.x, this.drawposition.y + 20, 24)
         }
     }
+
+    class MovieRenderer2 {
+        constructor(master,spriteCollection) {
+            console.log("movie renderer2 online")
+            this.master = master
+            this.drawposition = { x: 0, y: 0 }
+            
+            this.spriteCollection = spriteCollection
+            this.spriteName = ''
+            this.damiSprite = new Image()
+            this.spriteImage = this.damiSprite
+            this.spriteLoad = false
+            this.spriteFlip = false
+            this.length = 1 // numbers of frames
+            this.currentFrame = 0
+            this.cropbox = {}
+            this.sprite = {
+                width: 0,
+                height: 0
+            }
+        }
+
+        #updateSpriteInfo(_name) {
+            if(!this.spriteCollection[_name]) return false
+            if (this.spriteName == _name) return true
+            this.spriteFlip = false
+            this.spriteLoad = false
+            this.spriteName = _name
+            let s = this.spriteCollection[_name]
+            if (s.flip) this.spriteFlip = true
+            if(!this.spriteImage) this.spriteImage = this.damiSprite
+            this.spriteImage.src = s.path
+            this.spriteImage.onload = () => {
+                this.spriteLoad = true
+            }
+            this.length = this.spriteCollection[_name].length
+            this.sprite = {
+                width: this.spriteCollection[_name].rect.w,
+                height: this.spriteCollection[_name].rect.h
+            }
+            return true
+        }
+
+        // master state, main counter
+        #update() {
+            if(this.#updateSpriteInfo(this.master.state.name)){}
+            else{ 
+                this.spriteName = ''
+                this.spriteImage = null
+                log('no shit to render')
+                return
+            }
+
+
+            let mc = this.master.counter
+            let mp = this.master.position
+            this.drawposition.x = ((mp.x - 1) * canvas.width) / 6 + 10
+            this.drawposition.y = (mp.y * canvas.height) / 6 + 40
+
+
+            let FrameBuffer = mc.endTime / this.length
+            this.currentFrame = Math.floor(mc.time / FrameBuffer)
+            this.currentFrame %= this.length // loop
+        }
+
+        // draw position + Current Frame
+        draw() {
+            this.#update()
+
+            const cropbox = {
+                position: {
+                    x: this.sprite.width * this.currentFrame,
+                    y: 0,
+                },
+                width: this.sprite.width,
+                height: this.sprite.height,
+            }
+
+            if (this.spriteImage) {
+                if (!this.spriteLoad) return
+                if (!this.spriteFlip) {
+                    c.drawImage(
+                        this.spriteImage,
+                        cropbox.position.x,
+                        cropbox.position.y,
+                        cropbox.width,
+                        cropbox.height,
+
+                        this.drawposition.x,
+                        this.drawposition.y,
+                        this.sprite.width,
+                        this.sprite.height,
+                    )
+                } else {
+                    c.save()
+                    c.scale(-1, 1);
+                    let _temp = -this.sprite.width
+                    c.drawImage(
+                        this.spriteImage,
+                        cropbox.position.x,
+                        cropbox.position.y,
+                        cropbox.width,
+                        cropbox.height,
+
+                        -this.drawposition.x + _temp,
+                        this.drawposition.y,
+                        this.sprite.width,
+                        this.sprite.height,
+                    )
+                    c.restore()
+                }
+
+            }
+
+            c.fillStyle = 'rgba(0,0,0,1)'
+            c.fillText(this.currentFrame, this.drawposition.x, this.drawposition.y + 20, 24)
+        }
+    }
+
     ////////////////////////////////////////////////////////////
     ////////////////////////////////////////////////////////////
     //
@@ -1561,35 +1878,16 @@
     let player2_2 = new Player2()
     enemy.ID = CharID.Enemy
     player2_2.ID = CharID.Actor
+
+    let player3 = new Player(ModelHData)
+
     let characters = []
     characters.push(player_2)
+    characters.push(player3)
     characters.push(enemy)
     enemy.position = { x: 5, y: 2 }
     const PP = new PostProcessor()
 
-
-    // for html
-
-    const vertices2 = [
-        { x: -3, y: 0, z: 3 },
-        { x: -3, y: 0, z: 0 },
-        { x: 3, y: 0, z: 0 },
-        { x: 3, y: 0, z: 3 },
-    ]
-
-    // uv, v inversed
-    const uv2 = [
-        { u: 0, v: 0 },
-        { u: 0, v: 1 },
-        { u: 1, v: 1 },
-        { u: 1, v: 0 },
-    ]
-    const faces2 = [
-        [0, 1, 2], [0, 2, 3], // floor
-    ]
-    const colors2 = [
-        "#999", "#999",
-    ]
 
 
     let imageLoaded = false
@@ -1608,14 +1906,18 @@
     const Renderer = new PolygonRenderer()
 
     function update() {
-        //console.log(keys.down.pressed);
 
         //polygon renderer,描画順などがめんどくさいので、あとにする
         // R_angle += 0.001
         //Renderer.render()
 
+        showHTML(player3.state.name, 'state')
+
         GM.update()
+
         requestAnimationFrame(update)
+
+
     }
 
     update()
