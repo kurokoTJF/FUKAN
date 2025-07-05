@@ -1,0 +1,269 @@
+<canvas id="c" width="500" height="300"></canvas>
+<button onmousedown="buttonDown()"> test </button>
+<button onmousedown="keyPress('atk')"> atk </button>
+<p>
+<div id="state"></div>
+<div id="counters"></div>
+<div id="log"></div>
+</p>
+
+<script id="data">
+    const AmberData =
+    {
+        name: "Amber",
+        element: "Pyro",
+        hp: 1000,
+        initialState: 'idle',
+
+        state: {
+            idle: {
+                duration: 200,
+                transition: {
+                    atk: 'attack',
+                    onEnd: 'idle'
+                },
+                sprite_info:{}
+            },
+            attack: {
+                duration: 200,
+                steps:
+                    [
+                        { time: 30, action: (target) => target.showMSG('count 100') },
+                        { time: 70, action: (target) => target.showMSG('count 300') },
+                    ],
+                transition: {
+                    atk:'new_state',
+                    onEnd: 'idle'
+                }
+            },
+            new_state:{
+                duration:120,
+                transition:{
+                    onEnd:'idle',
+                    atk:'attack'
+                }
+            }
+
+        }
+
+    }
+
+</script>
+
+<script id="function and classes">
+    function log(msg) {
+        document.getElementById("log").innerText += msg + "\n_"
+    }
+    function buttonDown() {
+        log('signal')
+    }
+
+    function showState(MSG) {
+        document.getElementById("state").innerText = MSG
+
+    }
+
+    function showHTML(MSG, ID) {
+        document.getElementById(ID).innerText = MSG
+    }
+
+    keyPress = function (key) {
+        keys[key].pressed = true
+    }
+
+    var keys = {
+        up: { press: false, pressed: false },
+        down: { press: false, pressed: false },
+        left: { press: false, pressed: false },
+        right: { press: false, pressed: false },
+        select: { press: false, pressed: false },
+        use_chip: { press: false, pressed: false },
+        atk: { press: false, pressed: false },
+        add_sword: { press: false, pressed: false },
+        test: { press: false, pressed: false },
+        test_injured: { press: false, pressed: false },
+        pause: { press: false, pressed: false },
+    }
+
+    class Counter {
+        constructor({
+            endTime = 100,
+            end = false,
+            owner = undefined,
+            msg = "[nothing]",
+            processCall = null,
+            endCall = () => { },
+        } = {}) {
+            this.time = 0
+            this.end = end
+            this.owner = owner
+            this.msg = msg
+            this.endTime = endTime
+            this.processCall = processCall
+            this.endCall = endCall
+        }
+
+        setEnd() {
+            this.end = true
+        }
+        isEnd() {
+            return this.end
+        }
+
+        #endMethod() {
+
+        }
+
+        progress() {return this.time / this.endTime}
+
+        update() {
+            if (this.isEnd()) { console.log('not good'); return false; }
+            if (this.time < this.endTime) {
+                this.time++
+                if (this.processCall) { this.processCall() }
+            } else {
+                log('end a counter!')
+                console.log(this.msg + " " + this.endTime + " counter end")
+                this.setEnd()
+                this.endCall()
+            }
+        }
+    }
+
+
+
+    function ensureShowMSG(target) {
+        if (!target.showMSG) {
+            target.showMSG = (msg) => log("[MSG] " + msg);
+        }
+    }
+
+    function createStateFromData(stateName, data) {
+        return {
+            name: stateName,
+            enter(target) {
+                console.log('entering ' + stateName)
+                const _counter = addCounter({
+                    endTime: data.duration,
+                    processCall: () => {
+                        for (const step of data.steps || [])
+                            if (_counter.time === step.time)
+                                step.action(target)
+                    },
+                    endCall: () => {
+                        const nextStateName = data.transition?.onEnd;
+                        if (nextStateName) {
+                            target.cst(nextStateName)
+                        }
+                    }
+                })
+                
+                // counter must be end
+                target.counter = _counter 
+            },
+            update(target) {
+                //console.log('updating ' + stateName)
+                if (data.transition) {
+                    for (const key in data.transition) {
+                        if (key === 'onEnd') continue
+                        if (keys[key]?.pressed) {
+                            target.showMSG('pressed!')
+                            const next = data.transition[key]
+                            target.cst(next)
+                            return
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    function loadStateMachine(data) {
+        const states = {}
+        for (const stateName in data.state) {
+            states[stateName] = createStateFromData(stateName, data.state[stateName])
+        }
+
+        return {
+            states,
+            initialState: states[data.initialState]
+        }
+    }
+
+    class StateMachine2 {
+        constructor(data) {
+            console.log('state machine data version online')
+            const loaded = loadStateMachine(data)
+            this.states = loaded.states
+            this.state = loaded.initialState
+            this.state.enter(this)
+        }
+
+        update() {
+            if (this.state && this.state.update)
+                this.state.update(this)
+        }
+
+        cst(stateName) {
+            this.counter.setEnd()
+            this.state = this.states[stateName]
+            this.state.enter(this)
+
+        }
+
+        showMSG(msg) {
+            log("[MSG] " + msg)
+        }
+    }
+
+    function addCounter({
+        endTime = 0,
+        endCall = () => { },
+        processCall = () => { }
+    }) {
+        const counter = new Counter({
+            endTime: endTime,
+            endCall: endCall,
+            processCall: processCall
+        })
+        counters.push(counter)
+        return counter
+    }
+
+</script>
+
+<script id="play ground">
+
+    const canvas = document.getElementById("c");
+    const c = canvas.getContext("2d");
+    const w = canvas.width, h = canvas.height;
+    c.fillRect(0, 0, w / 4, h / 4)
+    log('test')
+
+
+    let counters = []
+    addCounter({
+        endtime: 30
+    })
+    const sm = new StateMachine2(AmberData)
+
+    function update() {
+        let counterList = ''
+        for (const c of counters) {
+            c.update()
+            counterList += '\n' + c.msg + ' ' + c.time + '/' + c.endTime
+        }
+        showHTML(counterList, 'counters')
+        counters = counters.filter(c => !c.isEnd())
+
+        sm.update()
+
+        showHTML(sm.state.name, 'state')
+
+        for (let _key in keys) if (keys[_key].pressed) keys[_key].pressed = false
+
+        requestAnimationFrame(update)
+    }
+
+    update()
+</script>
