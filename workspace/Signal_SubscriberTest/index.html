@@ -1,0 +1,106 @@
+<canvas id="c" width="500" height="300"></canvas>
+<button onmousedown="buttonDown()"> signal </button>
+
+<p>
+<div id="log">log</div>
+</p>
+<script id='functions'>
+    SignalType = {
+        buttonClick: 0,
+        randomSignal: 1,
+    }
+    function log(msg) {
+        document.getElementById("log").innerText += "\n>>>>" + msg
+    }
+    const canvas = document.getElementById("c");
+    const c = canvas.getContext("2d");
+    const w = canvas.width, h = canvas.height;
+    c.fillRect(0, 0, w / 4, h / 4)
+    log('shit')
+
+    function buttonDown() {
+        log('button pressed!')
+        signal.emit(SignalType.buttonClick, 'from signal')
+        subject.notify('from subject')
+    }
+
+</script>
+
+<script id='classes'>
+    class Signal_Owner {
+        constructor() {
+            this.signals = new Map()
+        }
+
+        emit(_sName, ...args) {
+            if (!this.signals.has(_sName)) return
+            for (const _m of this.signals.get(_sName)) {
+                if (!_m.owner.alive) {
+                    log('this owner dead man')
+                    return
+                }
+                _m.method(...args)
+                // disconnect this callback
+            }
+        }
+
+        connect(_sName, _method, _owner) {
+            if (!this.signals.has(_sName)) this.signals.set(_sName, [])
+            this.signals.get(_sName).push({ owner: _owner, method: _method })
+        }
+
+        disconnect(_sName, _method) {
+            if (!this.signals.has(_sName)) return
+            const list = this.signals.get(_sName).filter(_m => _m !== _method)
+            this.signals.set(_sName, list)
+        }
+    }
+
+    class Subject {
+        constructor() {
+            this.observers = new Set()
+        }
+
+        addObserver(ob) {
+            this.observers.add(ob)
+        }
+
+        removeObserver(ob) {
+            this.observers.delete(ob)
+        }
+        notify(...args) {
+            for (const obs of this.observers)
+                obs.observe(...args)
+        }
+    }
+
+    class Player {
+        constructor(name) {
+            this.name = name;
+            this.alive = true
+        }
+
+        onButtonClicked(msg) {
+            log(`${this.name} get the signal: ${msg}`);
+        }
+
+        observe(msg) {
+            log(this.name + ' observe the subject: ' + msg)
+        }
+    }
+
+    const signal = new Signal_Owner()
+    const subject = new Subject()
+    let player = new Player("Taro");
+
+    subject.addObserver(player)
+    signal.connect(SignalType.buttonClick, player.onButtonClicked.bind(player), player)
+
+    //player = null
+    player = null
+
+</script>
+
+<script id="workspace">
+
+</script>
