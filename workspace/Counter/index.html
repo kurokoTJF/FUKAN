@@ -21,6 +21,8 @@
     <button class="b1" onmousedown="keyPress('right')">→</button>
     <button class="b1"> </button>
     <button onmousedown="keyPress('atk')">attack</button>
+    <button onmousedown="keyPress('switch')">swtich</button>
+
 </p>
 
 <div>
@@ -87,7 +89,173 @@
                 sprite_info: {}
             },
             attack1: {
-                duration: 200,
+                duration: 20,
+                steps:
+                    [
+                        { time: 30, action: (target) => target.showMSG('count 100') },
+                        { time: 70, action: (target) => target.showMSG('count 300') },
+                    ],
+                transition: {
+                    atk: 'attack2',
+                    onEnd: 'idle'
+                }
+            },
+            attack2: {
+                duration: 80,
+                transition: {
+                    onEnd: 'idle',
+                    atk: 'injured'
+                }
+            },
+
+            injured: {
+                duration: 30,
+                transition: {
+                    onEnd: 'idle',
+                    atk: 'attack1'
+                }
+            },
+
+
+        },
+        spriteCollection: {
+            test: {
+                path: "https://raw.githubusercontent.com/kurokoTJF/FUKAN/refs/heads/main/Sprites/red/enchant.png",
+                length: 8,
+            },
+            move: {
+                path:
+                    'https://raw.githubusercontent.com/kurokoTJF/FUKAN/refs/heads/main/Sprites/Char/IMG_4867.png',
+                length: 8,
+                flip: true,
+            },
+            idle: {
+                path:
+                    'https://raw.githubusercontent.com/kurokoTJF/FUKAN/refs/heads/main/Sprites/Char/IMG_4865.png',
+                length: 4,
+                flip: true,
+            },
+            attack1: {
+                path: 'https://raw.githubusercontent.com/kurokoTJF/FUKAN/refs/heads/main/Sprites/Char/IMG_4863.png',
+                length: 4,
+            },
+            attack2: {
+                path: 'https://raw.githubusercontent.com/kurokoTJF/FUKAN/refs/heads/main/Sprites/Char/IMG_4866.png',
+                length: 12,
+                flip: true,
+            },
+            injured: {
+                path: 'https://raw.githubusercontent.com/kurokoTJF/FUKAN/refs/heads/main/Sprites/Char/IMG_4873.png'
+                ,
+                length: 5,
+                flip: true,
+            }
+        }
+
+    }
+
+    const ModelHData2 =
+    {
+        name: "ModelH",
+        element: "thunder",
+        hp: 80,
+        initialState: 'idle',
+
+        state: {
+            idle: {
+                duration: 202,
+                transition: {
+                    atk: 'attack1',
+                    onEnd: 'idle'
+                },
+                sprite_info: {}
+            },
+            attack1: {
+                duration: 20,
+                steps:
+                    [
+                        { time: 30, action: (target) => target.showMSG('count 100') },
+                        { time: 70, action: (target) => target.showMSG('count 300') },
+                    ],
+                transition: {
+                    atk: 'attack2',
+                    onEnd: 'idle'
+                }
+            },
+            attack2: {
+                duration: 80,
+                transition: {
+                    onEnd: 'idle',
+                    atk: 'injured'
+                }
+            },
+
+            injured: {
+                duration: 30,
+                transition: {
+                    onEnd: 'idle',
+                    atk: 'attack1'
+                }
+            },
+
+
+        },
+        spriteFolder: 'https://raw.githubusercontent.com/kurokoTJF/FUKAN/refs/heads/main/Sprites/Char/',
+
+        spriteCollection: {
+            test: {
+                path: "https://raw.githubusercontent.com/kurokoTJF/FUKAN/refs/heads/main/Sprites/red/enchant.png",
+                length: 8,
+            },
+            move: {
+                path:
+                    'IMG_4867.png',
+                length: 8,
+                flip: true,
+            },
+            idle: {
+                path:
+                    'IMG_4865.png',
+                length: 4,
+                flip: true,
+            },
+            attack1: {
+                path: 'IMG_4863.png',
+                length: 4,
+            },
+            attack2: {
+                path: 'IMG_4866.png',
+                length: 12,
+                flip: true,
+            },
+            injured: {
+                path: 'IMG_4873.png'
+                ,
+                length: 5,
+                flip: true,
+            }
+        }
+
+    }
+
+    const ModelPData =
+    {
+        name: "ModelP",
+        element: "ICE?",
+        hp: 120,
+        initialState: 'idle',
+
+        state: {
+            idle: {
+                duration: 202,
+                transition: {
+                    atk: 'attack1',
+                    onEnd: 'idle'
+                },
+                sprite_info: {}
+            },
+            attack1: {
+                duration: 100,
                 steps:
                     [
                         { time: 30, action: (target) => target.showMSG('count 100') },
@@ -105,7 +273,7 @@
                     atk: 'injured'
                 }
             },
-            
+
             injured: {
                 duration: 30,
                 transition: {
@@ -116,41 +284,37 @@
 
 
         },
+        spriteFolder: 'https://raw.githubusercontent.com/kurokoTJF/FUKAN/refs/heads/main/Sprites/Char/',
         spriteCollection: {
-            test: {
-                path: "https://raw.githubusercontent.com/kurokoTJF/FUKAN/refs/heads/main/Sprites/red/enchant.png",
-                rect: { w: 56, h: 56 },
-                length: 8,
-            },
+
             move: {
-                path:
-                    'https://raw.githubusercontent.com/kurokoTJF/FUKAN/refs/heads/main/Sprites/Char/IMG_4867.png',
+                path: 'IMG_4898.png',
                 rect: { w: 40, h: 64 },
                 length: 8,
                 flip: true,
             },
             idle: {
-                path:
-                    'https://raw.githubusercontent.com/kurokoTJF/FUKAN/refs/heads/main/Sprites/Char/IMG_4865.png'
+                path: 'IMG_4899.png'
                 , rect: { w: 44, h: 50 },
                 length: 4,
                 flip: true,
             },
             attack1: {
-                path: 'https://raw.githubusercontent.com/kurokoTJF/FUKAN/refs/heads/main/Sprites/Char/IMG_4863.png'
+                path: 'IMG_4897.png'
                 ,
                 rect: { w: 44, h: 56 },
-                length: 4,
-            },
-            attack2: {
-                path: 'https://raw.githubusercontent.com/kurokoTJF/FUKAN/refs/heads/main/Sprites/Char/IMG_4866.png'
-                ,
-                rect: { w: 100, h: 64 },
                 length: 12,
                 flip: true,
             },
+            attack2: {
+                path: 'IMG_4894.png'
+                ,
+                rect: { w: 100, h: 64 },
+                length: 5,
+                flip: true,
+            },
             injured: {
-                path: 'https://raw.githubusercontent.com/kurokoTJF/FUKAN/refs/heads/main/Sprites/Char/IMG_4873.png'
+                path: 'IMG_4873.png'
                 ,
                 rect: { w: 45, h: 50 },
                 length: 5,
@@ -167,19 +331,14 @@
         keys[key].pressed = true
     }
 
-    var keys = {
-        up: { press: false, pressed: false },
-        down: { press: false, pressed: false },
-        left: { press: false, pressed: false },
-        right: { press: false, pressed: false },
-        select: { press: false, pressed: false },
-        use_chip: { press: false, pressed: false },
-        atk: { press: false, pressed: false },
-        add_sword: { press: false, pressed: false },
-        test: { press: false, pressed: false },
-        test_injured: { press: false, pressed: false },
-        pause: { press: false, pressed: false },
-    }
+    const keys = new Proxy({}, {
+        get(target, prop) {
+            if (!(prop in target)) {
+                target[prop] = { press: false, pressed: false };
+            }
+            return target[prop];
+        }
+    });
     const rawUrl = "https://raw.githubusercontent.com/kurokoTJF/FUKAN/refs/heads/main/workspace/Counter/Ideas.txt";
 
     function showHTML(MSG, ID) {
@@ -586,7 +745,6 @@
         handleInput(target) {
         }
         enter(target) {
-            log('[player2] state class move!')
 
             let c = GM.addCounter({
                 endTime: target.moveGridStop,
@@ -993,7 +1151,6 @@
                     for (const key in data.transition) {
                         if (key === 'onEnd') continue
                         if (keys[key]?.pressed) {
-                            target.showMSG('pressed!')
                             const next = data.transition[key]
                             target.cst(next)
                             return
@@ -1014,7 +1171,7 @@
             states,
             initialState: states[data.initialState],
             hp: data.hp,
-            spriteCollection:data.spriteCollection
+            spriteCollection: { f: data.spriteFolder, p: data.spriteCollection }
         }
     }
 
@@ -1029,7 +1186,7 @@
             this.state.enter(this)
 
             this.position = { x: 2, y: 1 }
-            this.renderer = new MovieRenderer2(this,loaded.spriteCollection)
+            this.renderer = new MovieRenderer2(this, loaded.spriteCollection)
             this.HP = loaded.hp
 
         }
@@ -1047,13 +1204,22 @@
             log("[MSG] " + msg)
         }
 
+        observeUpdate(subject) {
+            for (const n of subject.notification) {
+                if (n.content == 'test') log('got it!!')
+            }
+        }
 
-        
+        observeUpdate(subject, content, owner) {
+            if (content == 'test') log('got it!!!!')
+        }
+
+
 
         update() {
             //if (this.ID == CharID.Player)
-                if (this.state && this.state.update)
-                    this.state.update(this)
+            if (this.state && this.state.update)
+                this.state.update(this)
 
             if (this.position.y > 3) this.position.y = 3
             else if (this.position.y < 1) this.position.y = 1
@@ -1080,7 +1246,7 @@
                     (this.position.y * canvas.height) / 6 + 40 + 10,
                 )
             const temp_draw_gauge = (_counter) => {
-                c.fillStyle = "rgba(0,0,0,1)"
+                c.fillStyle = "rgba(127,127,127,1)"
                 c.fillRect(
                     ((this.position.x - 1) * canvas.width) / 6 + 10,
                     (this.position.y * canvas.height) / 6 + 40 + tileSize,
@@ -1096,7 +1262,7 @@
                 )
             }
             const temp_draw_gauge2 = (_current, _max) => {
-                c.fillStyle = "rgba(0,0,0,1)"
+                c.fillStyle = "rgba(128,128,128,1)"
                 c.fillRect(
                     ((this.position.x - 1) * canvas.width) / 6 + 10,
                     (this.position.y * canvas.height) / 6 + 10,
@@ -1130,19 +1296,9 @@
 
             }
 
-            if (this.state["usingChip"]) {
-                c.fillStyle = "rgb(255, 255, 255)"
-                temp_print("using chips")
-            } else if (this.state["moving"]) {
-                c.fillStyle = "rgba(255,255,255,1)"
-                temp_print("moving")
-            } else if (this.state['attack']) {
-                c.fillStyle = "rgba(255,255,255,1)"
-                temp_print("attack")
-            } else {
-                c.fillStyle = "rgba(255,255,255,1)"
-                temp_print("idle")
-            }
+
+            c.fillStyle = "rgb(255, 255, 255)"
+            temp_print(this.state.name)
 
 
             if (this.counter) {
@@ -1175,6 +1331,13 @@
             if (keys.pause.pressed) {
                 if (t.state["pause"]) t.state["pause"] = false
                 else t.state["pause"] = true
+            }
+
+            if (keys.switch.pressed){
+                t.notify('test',t)
+                characters.pop()
+                player3 = charL
+                characters.push(player3)
             }
 
 
@@ -1284,6 +1447,8 @@
             this.chips = []
             this.counters = []
             this.counters_select = []
+            this.notification = []
+            this.observers = []
             this.dominantCounter = null
             this.state = {
                 pause: false,
@@ -1322,6 +1487,20 @@
             c.fillStyle = "rgba(0,0,0,0.5)"
             c.fillRect(0, 0, canvas.width, canvas.height)
         }
+
+        notify() {
+            for (const ob of this.observers) {
+                ob.observeUpdate(this)
+            }
+        }
+
+        notify(content, sender) {
+            for (const ob of this.observers) {
+                ob.observeUpdate(this, content, sender)
+            }
+        }
+
+
         cst(_state) {
             this.st = _state
             this.st.enter(this)
@@ -1591,7 +1770,6 @@
     // only render
     class MovieRenderer {
         constructor(master) {
-            console.log("movie renderer online")
             this.master = master
             this.drawposition = { x: 0, y: 0 }
 
@@ -1617,13 +1795,18 @@
             let s = this.spriteCollection[_name]
             if (s.flip) this.spriteFlip = true
             this.spriteImage.src = s.path
+            this.length = 1
+            this.sprite = {
+                width: 0,
+                height: 0
+            }
             this.spriteImage.onload = () => {
                 this.spriteLoad = true
-            }
-            this.length = this.spriteCollection[_name].length
-            this.sprite = {
-                width: this.spriteCollection[_name].rect.w,
-                height: this.spriteCollection[_name].rect.h
+                this.length = this.spriteCollection[_name].length
+                this.sprite = {
+                    width: this.spriteImage.width / this.length,
+                    height: this.spriteImage.height
+                }
             }
         }
 
@@ -1719,11 +1902,9 @@
     }
 
     class MovieRenderer2 {
-        constructor(master,spriteCollection) {
-            console.log("movie renderer2 online")
+        constructor(master, spriteCollection) {
             this.master = master
             this.drawposition = { x: 0, y: 0 }
-            
             this.spriteCollection = spriteCollection
             this.spriteName = ''
             this.damiSprite = new Image()
@@ -1740,30 +1921,39 @@
         }
 
         #updateSpriteInfo(_name) {
-            if(!this.spriteCollection[_name]) return false
+            if (!this.spriteCollection.p[_name]) return false
             if (this.spriteName == _name) return true
             this.spriteFlip = false
             this.spriteLoad = false
             this.spriteName = _name
-            let s = this.spriteCollection[_name]
+            let s = this.spriteCollection.p[_name]
             if (s.flip) this.spriteFlip = true
-            if(!this.spriteImage) this.spriteImage = this.damiSprite
-            this.spriteImage.src = s.path
+            if (!this.spriteImage) this.spriteImage = this.damiSprite
+            this.spriteImage.src = this.spriteCollection.f + s.path
+            console.log('path: ' + ModelPData.spriteFolder)
+            console.log('path: ' + this.spriteCollection.f)
+
+            this.length = 1
+            this.sprite = {
+                width: 0,
+                height: 0
+            }
             this.spriteImage.onload = () => {
                 this.spriteLoad = true
+                this.length = this.spriteCollection.p[_name].length
+                this.sprite = {
+                    width: this.spriteImage.width / this.length,
+                    height: this.spriteImage.height
+                }
             }
-            this.length = this.spriteCollection[_name].length
-            this.sprite = {
-                width: this.spriteCollection[_name].rect.w,
-                height: this.spriteCollection[_name].rect.h
-            }
+
             return true
         }
 
         // master state, main counter
         #update() {
-            if(this.#updateSpriteInfo(this.master.state.name)){}
-            else{ 
+            if (this.#updateSpriteInfo(this.master.state.name)) { }
+            else {
                 this.spriteName = ''
                 this.spriteImage = null
                 log('no shit to render')
@@ -1831,7 +2021,7 @@
 
             }
 
-            c.fillStyle = 'rgba(0,0,0,1)'
+            c.fillStyle = 'rgba(127,127,127,1)'
             c.fillText(this.currentFrame, this.drawposition.x, this.drawposition.y + 20, 24)
         }
     }
@@ -1879,12 +2069,15 @@
     enemy.ID = CharID.Enemy
     player2_2.ID = CharID.Actor
 
-    let player3 = new Player(ModelHData)
+    const charH = new Player(ModelHData2)
+    const charL = new Player(ModelPData)
+    let player3 = charH
 
     let characters = []
     characters.push(player_2)
-    characters.push(player3)
     characters.push(enemy)
+    characters.push(player3)
+
     enemy.position = { x: 5, y: 2 }
     const PP = new PostProcessor()
 
@@ -1904,6 +2097,7 @@
     let R_angle = 0;
 
     const Renderer = new PolygonRenderer()
+    GM.observers.push(player3)
 
     function update() {
 
@@ -1911,9 +2105,9 @@
         // R_angle += 0.001
         //Renderer.render()
 
-        showHTML(player3.state.name, 'state')
 
         GM.update()
+        //GM.notify('tests', GM)
 
         requestAnimationFrame(update)
 
