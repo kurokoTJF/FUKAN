@@ -21,7 +21,8 @@
     <button class="b1" onmousedown="keyPress('right')">→</button>
     <button class="b1"> </button>
     <button onmousedown="keyPress('atk')">attack</button>
-    <button onmousedown="keyPress('switch')">swtich</button>
+    <button onmousedown="keyPress('toModelL')">toModelL</button>
+    <button onmousedown="keyPress('toModelH')">toModelH</button>
 
 </p>
 
@@ -39,7 +40,7 @@
 <button onmousedown="clearLog()">clear log </button>
 
 <p>
-<div id="state"></div>
+<div id="position"></div>
 
 <div id="chips"></div>
 <div id="counters"></div>
@@ -165,10 +166,20 @@
             idle: {
                 duration: 202,
                 transition: {
+                    onMove: 'move',
                     atk: 'attack1',
                     onEnd: 'idle'
                 },
                 sprite_info: {}
+            },
+            move: {
+                duration: 30,
+                steps: [
+                    { time: 15, action: (target) => GM.notify('movable', GM) }
+                ],
+                transition: {
+                    onEnd: 'idle'
+                },
             },
             attack1: {
                 duration: 20,
@@ -238,9 +249,9 @@
 
     }
 
-    const ModelPData =
+    const ModelLData =
     {
-        name: "ModelP",
+        name: "ModelL",
         element: "ICE?",
         hp: 120,
         initialState: 'idle',
@@ -250,9 +261,18 @@
                 duration: 202,
                 transition: {
                     atk: 'attack1',
+                    onEnd: 'idle',
+                    onMove: 'move',
+                },
+            },
+            move: {
+                duration: 30,
+                steps: [
+                    { time: 15, action: (target) => GM.notify('movable', GM) }
+                ],
+                transition: {
                     onEnd: 'idle'
                 },
-                sprite_info: {}
             },
             attack1: {
                 duration: 100,
@@ -290,7 +310,7 @@
             move: {
                 path: 'IMG_4898.png',
                 rect: { w: 40, h: 64 },
-                length: 8,
+                length: 7,
                 flip: true,
             },
             idle: {
@@ -414,7 +434,7 @@
         }
 
         #endMethod() {
-            console.log(this.msg + " " + this.endTime + " counter end")
+            //console.log(this.msg + " " + this.endTime + " counter end")
             this.end = true
             this.endCall()
         }
@@ -1124,7 +1144,6 @@
         return {
             name: stateName,
             enter(target) {
-                console.log('entering ' + stateName)
                 const _counter = GM.addCounter({
                     msg: '[' + stateName + ']',
                     endTime: data.duration,
@@ -1150,6 +1169,27 @@
                 if (data.transition) {
                     for (const key in data.transition) {
                         if (key === 'onEnd') continue
+                        if (key === 'onMove') {
+                            if (keys.down.pressed) {
+                                // check direction
+                                if (target.setDeltaPosition(0, 1))
+                                    target.cst(data.transition['onMove'])
+                            }
+                            if (keys.up.pressed) {
+                                if (target.setDeltaPosition(0, -1))
+                                    target.cst(data.transition['onMove'])
+                            }
+                            if (keys.left.pressed) {
+                                if (target.setDeltaPosition(-1, 0))
+                                    target.cst(data.transition['onMove'])
+                            }
+                            if (keys.right.pressed) {
+                                if (target.setDeltaPosition(1, 0))
+                                    target.cst(data.transition['onMove'])
+                            }
+
+                            continue
+                        }
                         if (keys[key]?.pressed) {
                             const next = data.transition[key]
                             target.cst(next)
@@ -1186,6 +1226,8 @@
             this.state.enter(this)
 
             this.position = { x: 2, y: 1 }
+            this.movable = false
+            this.deltaPositon = { x: 0, y: 0 }
             this.renderer = new MovieRenderer2(this, loaded.spriteCollection)
             this.HP = loaded.hp
 
@@ -1204,23 +1246,52 @@
             log("[MSG] " + msg)
         }
 
-        observeUpdate(subject) {
+        // shift+alt+A
+        /* observeUpdate(subject) {
             for (const n of subject.notification) {
                 if (n.content == 'test') log('got it!!')
             }
-        }
+        } */
 
         observeUpdate(subject, content, owner) {
             if (content == 'test') log('got it!!!!')
+            if (content === 'movable') {
+                this.movable = true
+            }
         }
 
 
+        setDeltaPosition(_x, _y) {
+            if (
+                this.position.x + _x < 1 ||
+                this.position.x + _x > 3 ||
+                this.position.y + _y < 1 ||
+                this.position.y + _y > 3
+            )
+                return false
+            this.deltaPosition = { x: _x, y: _y }
+            return true
+        }
+
 
         update() {
+            // apply checked delta
+            if (this.movable) {
+                this.movable = false
+                this.position.x += this.deltaPosition.x
+                this.position.y += this.deltaPosition.y
+                this.deltaPosition = { x: 0, y: 0 }
+
+
+            }
+
+
+            // get new delta
             //if (this.ID == CharID.Player)
             if (this.state && this.state.update)
                 this.state.update(this)
 
+            //
             if (this.position.y > 3) this.position.y = 3
             else if (this.position.y < 1) this.position.y = 1
             if (this.position.x > 3) this.position.x = 3
@@ -1333,11 +1404,17 @@
                 else t.state["pause"] = true
             }
 
-            if (keys.switch.pressed){
-                t.notify('test',t)
-                characters.pop()
-                player3 = charL
-                characters.push(player3)
+            // swtich character
+            if (keys.toModelL.pressed) {
+                console.log('from:' + player3.position.x + ' ' + player3.position.x)
+
+                player3 = GM.switchCharacter(player3, charL)
+
+            }
+            if (keys.toModelH.pressed) {
+
+
+                player3 = GM.switchCharacter(player3, charH)
             }
 
 
@@ -1488,16 +1565,33 @@
             c.fillRect(0, 0, canvas.width, canvas.height)
         }
 
+        /*
         notify() {
             for (const ob of this.observers) {
                 ob.observeUpdate(this)
             }
         }
+            */
 
         notify(content, sender) {
             for (const ob of this.observers) {
                 ob.observeUpdate(this, content, sender)
             }
+        }
+
+        switchCharacter(current, next) {
+
+            next.position.x = current.position.x
+            next.position.y = current.position.y
+
+            characters.pop()
+            this.observers.pop()
+
+
+
+            characters.push(next)
+            this.observers.push(next)
+            return next
         }
 
 
@@ -1930,8 +2024,6 @@
             if (s.flip) this.spriteFlip = true
             if (!this.spriteImage) this.spriteImage = this.damiSprite
             this.spriteImage.src = this.spriteCollection.f + s.path
-            console.log('path: ' + ModelPData.spriteFolder)
-            console.log('path: ' + this.spriteCollection.f)
 
             this.length = 1
             this.sprite = {
@@ -2070,7 +2162,7 @@
     player2_2.ID = CharID.Actor
 
     const charH = new Player(ModelHData2)
-    const charL = new Player(ModelPData)
+    const charL = new Player(ModelLData)
     let player3 = charH
 
     let characters = []
@@ -2108,6 +2200,8 @@
 
         GM.update()
         //GM.notify('tests', GM)
+
+        showHTML('player3: ' + player3.position.x + '' + player3.position.y + ',charH: ' + charH.position.x + '' + charH.position.y + ',charL: ' + charL.position.x + '' + charL.position.y, 'position')
 
         requestAnimationFrame(update)
 
