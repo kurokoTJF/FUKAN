@@ -21,6 +21,7 @@
     <button class="b1" onmousedown="keyPress('right')">→</button>
     <button class="b1"> </button>
     <button onmousedown="keyPress('atk')">attack</button>
+    <button onmousedown="keyPress('ssss')">ssss</button>
     <button onmousedown="keyPress('toModelL')">toModelL</button>
     <button onmousedown="keyPress('toModelH')">toModelH</button>
 
@@ -181,6 +182,19 @@
                     onEnd: 'idle'
                 },
             },
+            
+            inStage: {
+                duration: 30,
+                transition: {
+                    onEnd: 'idle'
+                },
+            },
+            outStage: {
+                duration: 100,
+                transition: {
+                    onEnd: 'idle'
+                },
+            },
             attack1: {
                 duration: 20,
                 steps:
@@ -230,6 +244,16 @@
                 length: 4,
                 flip: true,
             },
+            inStage: {
+                path: 'IMG_4866.png',
+                length: 12,
+                flip: true,
+            },
+            outStage: {
+                path: 'IMG_4901.png',
+                length: 8,
+                flip: true,
+            },
             attack1: {
                 path: 'IMG_4863.png',
                 length: 4,
@@ -274,6 +298,13 @@
                     onEnd: 'idle'
                 },
             },
+            inStage: {
+                duration: 60,
+                transition: {
+                    onEnd: 'idle'
+                },
+            },
+
             attack1: {
                 duration: 100,
                 steps:
@@ -317,6 +348,13 @@
                 path: 'IMG_4899.png'
                 , rect: { w: 44, h: 50 },
                 length: 4,
+                flip: true,
+            },
+            inStage: {
+                path: 'IMG_4894.png'
+                ,
+                rect: { w: 100, h: 64 },
+                length: 5,
                 flip: true,
             },
             attack1: {
@@ -1169,6 +1207,9 @@
                 if (data.transition) {
                     for (const key in data.transition) {
                         if (key === 'onEnd') continue
+                        //ここからはUser Inputによる状態遷移
+                        // なので
+                        if (target.Tag['isActor']) return
                         if (key === 'onMove') {
                             if (keys.down.pressed) {
                                 // check direction
@@ -1231,6 +1272,23 @@
             this.renderer = new MovieRenderer2(this, loaded.spriteCollection)
             this.HP = loaded.hp
 
+            // 使い捨て外部リクエスト、自由に追加できる。
+            // 確認するたびにfalseにリセットされる
+            this.request = new Proxy({}, {
+                get: (target, prop) => {
+                    const value = target[prop];
+                    target[prop] = false; // 読んだら自動で false にする
+                    return value ?? false;
+                }
+            });
+
+            // 未定義状態。自由に書き込める。デフォルト状態はfalse
+            this.Tag = new Proxy({}, {
+                get(target, prop) {
+                    return prop in target ? target[prop] : false;
+                }
+            })
+
         }
 
 
@@ -1256,7 +1314,7 @@
         observeUpdate(subject, content, owner) {
             if (content == 'test') log('got it!!!!')
             if (content === 'movable') {
-                this.movable = true
+                this.request['movable'] = true
             }
         }
 
@@ -1276,13 +1334,10 @@
 
         update() {
             // apply checked delta
-            if (this.movable) {
-                this.movable = false
+            if (this.request['movable']) {
                 this.position.x += this.deltaPosition.x
                 this.position.y += this.deltaPosition.y
                 this.deltaPosition = { x: 0, y: 0 }
-
-
             }
 
 
@@ -1406,15 +1461,19 @@
 
             // swtich character
             if (keys.toModelL.pressed) {
-                console.log('from:' + player3.position.x + ' ' + player3.position.x)
+                if (active_player === charL) return
+                if (GM.Tag.switch === false) {
+                    GM.Tag.switch = true
+                    //console.log('from:' + active_player.position.x + ' ' + active_player.position.x)
+                    GM.switchCharacterMovie(charL)
+                }
 
-                player3 = GM.switchCharacter(player3, charL)
 
             }
             if (keys.toModelH.pressed) {
 
+                active_player = GM.switchCharacter(active_player, charH)
 
-                player3 = GM.switchCharacter(player3, charH)
             }
 
 
@@ -1536,6 +1595,18 @@
                 battle_win: false,
             }
 
+            this.request = new Proxy({}, {
+                get: (target, prop) => {
+                    const value = target[prop];
+                    target[prop] = false; // 読んだら自動で false にする
+                    return value ?? false;
+                }
+            });
+            this.Tag = new Proxy({}, {
+                get(target, prop) {
+                    return prop in target ? target[prop] : false;
+                }
+            })
             this.PET_chip = new ImageLoader('https://raw.githubusercontent.com/kurokoTJF/FUKAN/refs/heads/main/Sprites/Char/IMG_4874.png')
             this.Mugshot = new ImageLoader('https://raw.githubusercontent.com/kurokoTJF/FUKAN/refs/heads/main/Sprites/Char/IMG_4877.png')
 
@@ -1579,18 +1650,42 @@
             }
         }
 
+        switchCharacterMovie(next) {
+            const c = GM.addCounter({
+                endTime: 100,
+                processCall: () => {
+                    if (c.time == 1) {
+                        active_player.Tag.isActor = true
+                        active_player.cst('outStage')
+                    } else if (c.time == 50) {
+                        characters.push(next)
+                        next.Tag.isActor = true
+                        next.cst('inStage')
+
+                    }
+
+                },
+                endCall: () => {
+                    active_player = GM.switchCharacter(active_player, next)
+                    GM.Tag.switch = false
+                }
+            })
+        }
         switchCharacter(current, next) {
 
             next.position.x = current.position.x
             next.position.y = current.position.y
 
-            characters.pop()
-            this.observers.pop()
+            characters = characters.filter(item => item !== current);
+            this.observers = this.observers.filter(item => item !== current);
 
 
+            if (!characters.find(item => item === next))
+                characters.push(next)
+            if (!this.observers.find(item => item === next))
+                this.observers.push(next)
 
-            characters.push(next)
-            this.observers.push(next)
+            next.Tag.isActor = false
             return next
         }
 
@@ -1785,6 +1880,12 @@
         update() {
             const s = this.st.handleInput(this)
             if (s) this.st = s
+
+            if (this.request.switch_to_L === true) {
+                active_player = GM.switchCharacter(active_player, charL)
+                active_player.Tag['isActor'] = false
+                log('switch!')
+            }
 
             if (this.state["title"]) {
             } else if (this.state["pause"]) {
@@ -2163,12 +2264,12 @@
 
     const charH = new Player(ModelHData2)
     const charL = new Player(ModelLData)
-    let player3 = charH
+    let active_player = charH
 
     let characters = []
     characters.push(player_2)
     characters.push(enemy)
-    characters.push(player3)
+    characters.push(active_player)
 
     enemy.position = { x: 5, y: 2 }
     const PP = new PostProcessor()
@@ -2189,7 +2290,7 @@
     let R_angle = 0;
 
     const Renderer = new PolygonRenderer()
-    GM.observers.push(player3)
+    GM.observers.push(active_player)
 
     function update() {
 
@@ -2198,10 +2299,12 @@
         //Renderer.render()
 
 
+
+
         GM.update()
         //GM.notify('tests', GM)
 
-        showHTML('player3: ' + player3.position.x + '' + player3.position.y + ',charH: ' + charH.position.x + '' + charH.position.y + ',charL: ' + charL.position.x + '' + charL.position.y, 'position')
+        showHTML('active_player: ' + active_player.position.x + '' + active_player.position.y + ',charH: ' + charH.position.x + '' + charH.position.y + ',charL: ' + charL.position.x + '' + charL.position.y, 'position')
 
         requestAnimationFrame(update)
 
