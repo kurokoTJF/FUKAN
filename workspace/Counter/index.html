@@ -111,7 +111,7 @@
                 transition: {
                     onEnd: 'idle',
                     atk: 'attack1'
-                }
+                },
             },
 
 
@@ -216,7 +216,9 @@
                 transition: {
                     onEnd: 'idle',
                     atk: 'attack1'
-                }
+                },
+                invisible:true
+
             },
 
 
@@ -326,7 +328,9 @@
                 transition: {
                     onEnd: 'idle',
                     atk: 'attack1'
-                }
+                },
+                invisible:true
+
             },
 
 
@@ -885,7 +889,6 @@
         static injured = new injuredState()
 
         constructor() {
-            console.log("player2 online")
             this.counter = null
             this.position = { x: 1, y: 2 }
             this.deltaPosition = { x: 0, y: 0 }
@@ -1203,6 +1206,11 @@
                 if (data.transition) {
                     for (const key in data.transition) {
                         if (key === 'onEnd') continue
+                        if (key === 'invisible') continue
+                        if (target.Tag.hitByThisShit === true && !data.invisible && target.Tag.invisible===false){
+                            target.cst('injured')
+                            target.Tag.invisible = true
+                        }
                         //ここからはUser Inputによる状態遷移
                         // なので
                         if (target.Tag['isActor']) return
@@ -1256,10 +1264,10 @@
 
     class Player {
         constructor(data) {
-            console.log('state machine data version online')
             const loaded = loadCharacterData(data)
             this.states = loaded.states
             this.state = loaded.initialState
+            console.log('Player state machine initialized')
             this.state.enter(this)
 
             this.position = { x: 2, y: 1 }
@@ -1429,6 +1437,36 @@
         }
     }
 
+    class Tile {
+        constructor() {
+            console.log('tile online')
+            this.position = { x: 2, y: 2 }
+        }
+
+        update() {
+            //hit test
+            if (active_player.position.x === this.position.x)
+                if (active_player.position.y === this.position.y) {
+                    if (active_player.Tag.hitByThisShit === false && active_player.Tag.invisible===false) {
+                        log('hit!')
+                        active_player.Tag.hitByThisShit = true
+
+                    }
+                    return
+                }
+
+        }
+
+        draw() {
+            const h = canvas.height
+            const w = canvas.width
+            c.fillStyle = 'rgba(255,255,0,1)'
+            c.fillRect(0 + w / 6 * (this.position.x - 1), h / 2 + h / 6 * (this.position.y - 1), w / 6, h / 6)
+
+        }
+
+
+    }
 
 
 
@@ -1438,21 +1476,21 @@
         }
         handleInput(t) {
             //log('gm battle')
-            if (t.state["dialog"]) {
+            if (t.Tag.dialog) {
                 if (keys.atk.pressed) {
-                    t.state["dialog"] = false
+                    t.Tag.dialog = false
                 }
             }
 
-            if (!t.state['pause']) {
+            if (!t.Tag.pause) {
                 if (keys.select.pressed) {
                     return t.cst(t.constructor.select)
                 }
             }
 
             if (keys.pause.pressed) {
-                if (t.state["pause"]) t.state["pause"] = false
-                else t.state["pause"] = true
+                if (t.Tag.pause) t.Tag.pause = false
+                else t.Tag.pause = true
             }
 
             // swtich character
@@ -1467,7 +1505,7 @@
 
             }
             if (keys.toModelH.pressed) {
-
+                if (active_player === charH) return
                 active_player = GM.switchCharacter(active_player, charH)
 
             }
@@ -1524,9 +1562,6 @@
             }
         }
     }
-    class GMPause {
-
-    }
     class GMDialog {
 
     }
@@ -1569,9 +1604,9 @@
         static battle = new GMBattle()
         static title = new GMTitle()
         static dialog = new GMDialog()
-        static pause = new GMPause()
         static select = new GMSelect()
         static battle_win = new GMBattleWin()
+
         constructor() {
             this.st = GameManager2.battle
             console.log("game manager online")
@@ -1582,14 +1617,8 @@
             this.notification = []
             this.observers = []
             this.dominantCounter = null
-            this.state = {
-                pause: false,
-                title: false,
-                world: false,
-                dialog: false,
-                battle: true,
-                battle_win: false,
-            }
+
+            
 
             this.request = new Proxy({}, {
                 get: (target, prop) => {
@@ -1598,7 +1627,7 @@
                     return value ?? false;
                 }
             });
-            this.Tag = new Proxy({}, {
+            this.Tag = new Proxy({ battle: true }, {
                 get(target, prop) {
                     return prop in target ? target[prop] : false;
                 }
@@ -1661,7 +1690,7 @@
                         next.position.y = active_player.position.y
                         characters.push(next)
                         next.Tag.isActor = true
-                        next.cst('inStage')
+                        next.cst('attack1')
 
                     }
 
@@ -1790,7 +1819,7 @@
                 else { c.fillStyle = 'red'; c.fillRect(0, 24, 48, 24); }
             }
 
-            if (this.state['battle_win']) {
+            if (this.Tag.battle_win) {
                 c.fillStyle = "rgba(200,230,250,1)"
                 c.fillRect(0, 0, canvas.width, canvas.height)
                 c.fillStyle = "rgba(0,20,0,1)"
@@ -1825,7 +1854,7 @@
             }
             _draw_floor()
 
-            if (this.state["pause"]) {
+            if (this.Tag.pause) {
                 this._draw_Darken()
             }
 
@@ -1833,7 +1862,7 @@
             this.#showChips()
 
 
-            if (this.state["dialog"]) {
+            if (this.Tag.dialog) {
                 if (imgLoaded) {
                     c.drawImage(img, 0, 0, 30, 30)
                 }
@@ -1851,6 +1880,7 @@
                 _p.draw()
                 //log('draw characters')
             }
+
 
             if (this.st == this.constructor.select) {
                 this.st.draw(this)
@@ -1885,8 +1915,8 @@
             if (s) this.st = s
 
 
-            if (this.state["title"]) {
-            } else if (this.state["pause"]) {
+            if (this.Tag.title) {
+            } else if (this.Tag.pause) {
                 //     console.log('paused')
             } else {
                 if (this.st == this.constructor.battle) {
@@ -1894,10 +1924,10 @@
                     for (let p of characters) {
                         p.update()
                     }
-                    if (this.state['battle']) {
-                        if (enemy.HP <= 0) { this.state['battle_win'] = true; this.state['battle'] = false }
+                    if (this.Tag.battle) {
+                        if (enemy.HP <= 0) { this.Tag.battle_win = true; this.Tag.battle = false }
                     }
-                    if (this.state['battle_win']) { }
+                    if (this.Tag.battle_win) { }
                 }
                 if (this.st == this.constructor.select) {
                     this.#update_counters()
@@ -2197,7 +2227,9 @@
                     let _temp = -this.sprite.width
                     if (this.master.Tag.greyout)
                         c.filter = "saturate(0%)";  // 彩度を0%にしてグレースケールっぽく
-                    c.drawImage(
+                    else if(this.master.Tag.invisible)
+                        c.filter = 'brightness(200%)'
+                        c.drawImage(
                         this.spriteImage,
                         cropbox.position.x,
                         cropbox.position.y,
@@ -2257,11 +2289,15 @@
     const tileSize = 50
 
     const GM = new GameManager2()
-    let counter = 0
+    const PP = new PostProcessor()
+    //let counter = 0
     let player_2 = new Player2()
+
     let enemy = new Player2()
-    let player2_2 = new Player2()
     enemy.ID = CharID.Enemy
+    enemy.position = { x: 5, y: 2 }
+
+    let player2_2 = new Player2()
     player2_2.ID = CharID.Actor
 
     const charH = new Player(ModelHData2)
@@ -2273,25 +2309,12 @@
     characters.push(enemy)
     characters.push(active_player)
 
-    enemy.position = { x: 5, y: 2 }
-    const PP = new PostProcessor()
+    let terrain = []
+    testTile = new Tile()
+    terrain.push(testTile)
 
 
 
-    let imageLoaded = false
-    let image = new Image()
-    image.crossOrigin = "anonymous";//これ入れても行けないケースがいるらしい
-    image.src = 'https://raw.githubusercontent.com/kurokoTJF/FUKAN/refs/heads/main/Sprites/Char/battle_floor.png'
-
-    image.onload = () => {
-        imageLoaded = true
-    }
-
-
-
-    let R_angle = 0;
-
-    const Renderer = new PolygonRenderer()
     GM.observers.push(active_player)
 
     function update() {
@@ -2303,8 +2326,13 @@
 
 
 
+
         GM.update()
         //GM.notify('tests', GM)
+        for (const t of terrain) {
+            t.update()
+            t.draw()
+        }
 
         showHTML('active_player: ' + active_player.position.x + '' + active_player.position.y + ',charH: ' + charH.position.x + '' + charH.position.y + ',charL: ' + charL.position.x + '' + charL.position.y, 'position')
 
