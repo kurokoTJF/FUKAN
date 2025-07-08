@@ -1,5 +1,5 @@
 <div class=container>
-   
+
     <div class=right-column>
         <canvas></canvas>
     </div>
@@ -178,7 +178,7 @@
                     onEnd: 'idle'
                 },
             },
-            
+
             inStage: {
                 duration: 30,
                 transition: {
@@ -1650,10 +1650,15 @@
             const c = GM.addCounter({
                 endTime: 100,
                 processCall: () => {
+                    //active outTro
+
                     if (c.time == 1) {
                         active_player.Tag.isActor = true
                         active_player.cst('outStage')
+                        active_player.Tag.greyout = true
                     } else if (c.time == 50) {
+                        next.position.x = active_player.position.x
+                        next.position.y = active_player.position.y
                         characters.push(next)
                         next.Tag.isActor = true
                         next.cst('inStage')
@@ -1664,6 +1669,7 @@
                 endCall: () => {
                     active_player = GM.switchCharacter(active_player, next)
                     GM.Tag.switch = false
+
                 }
             })
         }
@@ -1682,6 +1688,7 @@
                 this.observers.push(next)
 
             next.Tag.isActor = false
+            next.Tag.greyout = false
             return next
         }
 
@@ -1877,11 +1884,6 @@
             const s = this.st.handleInput(this)
             if (s) this.st = s
 
-            if (this.request.switch_to_L === true) {
-                active_player = GM.switchCharacter(active_player, charL)
-                active_player.Tag['isActor'] = false
-                log('switch!')
-            }
 
             if (this.state["title"]) {
             } else if (this.state["pause"]) {
@@ -2193,6 +2195,8 @@
                     c.save()
                     c.scale(-1, 1);
                     let _temp = -this.sprite.width
+                    if (this.master.Tag.greyout)
+                        c.filter = "saturate(0%)";  // 彩度を0%にしてグレースケールっぽく
                     c.drawImage(
                         this.spriteImage,
                         cropbox.position.x,
@@ -2205,7 +2209,9 @@
                         this.sprite.width,
                         this.sprite.height,
                     )
+
                     c.restore()
+                    c.filter = 'none'
                 }
 
             }
