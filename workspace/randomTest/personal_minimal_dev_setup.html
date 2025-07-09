@@ -1,0 +1,65 @@
+<canvas id="c" width="500" height="300"></canvas>
+
+<p>
+    <button onmousedown="keyPress('atk')"> atk </button>
+</p>
+
+<p>
+<div id="log">log</div>
+</p>
+<script>
+    keyPress = function (key) {
+        keys[key].pressed = true
+    }
+
+    const keys = new Proxy({}, {
+        get(target, prop) {
+            if (!(prop in target)) {
+                target[prop] = { press: false, pressed: false };
+            }
+            return target[prop];
+        }
+    });
+
+    // 使い捨て外部リクエスト、自由に追加できる。
+    // 確認するたびにfalseにリセットされる
+    const sample_request = new Proxy({}, {
+        get: (target, prop) => {
+            const value = target[prop];
+            target[prop] = false; // 読んだら自動で false にする
+            return value ?? false;
+        }
+    });
+
+    // 未定義状態。自由に書き込める。デフォルト状態はfalse
+    const sample_Tag = new Proxy({}, {
+        get(target, prop) {
+            return prop in target ? target[prop] : false;
+        }
+    })
+
+    function showHTML(MSG, ID) {
+        document.getElementById(ID).innerText = MSG
+    }
+    function log(msg) {
+        document.getElementById("log").innerText += "\n_" + msg
+    }
+</script>
+
+<script>
+    const canvas = document.querySelector("canvas")
+    const c = canvas.getContext("2d", { willReadFrequently: true })
+    function update() {
+
+        if (keys.atk.pressed)
+            log('shir')
+        requestAnimationFrame(update)
+
+        for (let _key in keys) keys[_key].pressed = false
+
+
+    }
+
+    update()
+
+</script>

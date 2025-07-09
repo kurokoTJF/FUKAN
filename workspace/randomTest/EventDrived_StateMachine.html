@@ -1,0 +1,159 @@
+<canvas id="c" width="500" height="300"></canvas>
+<p>
+    <button onmousedown="keyPress('atk')"> atk </button>
+    <button onmousedown="keyPress('atk10')"> atk10 </button>
+    <button onmousedown="keyPress('jump')"> jump </button>
+</p>
+
+<p>
+<div id="log">log</div>
+</p>
+<script>
+    keyPress = function (key) {
+        keys[key].pressed = true
+    }
+
+    const keys = new Proxy({}, {
+        get(target, prop) {
+            if (!(prop in target)) {
+                target[prop] = { press: false, pressed: false };
+            }
+            return target[prop];
+        }
+    });
+
+    // 使い捨て外部リクエスト、自由に追加できる。
+    // 確認するたびにfalseにリセットされる
+    const sample_request = new Proxy({}, {
+        get: (target, prop) => {
+            const value = target[prop];
+            target[prop] = false; // 読んだら自動で false にする
+            return value ?? false;
+        }
+    });
+
+    // 未定義状態。自由に書き込める。デフォルト状態はfalse
+    const sample_Tag = new Proxy({}, {
+        get(target, prop) {
+            return prop in target ? target[prop] : false;
+        }
+    })
+
+    function showHTML(MSG, ID) {
+        document.getElementById(ID).innerText = MSG
+    }
+    function log(msg) {
+        document.getElementById("log").innerText += "\n_" + msg
+    }
+</script>
+
+<script>
+    class EventBus {
+
+    }
+
+    class StateOfPlayer {
+        constructor() {
+            this.handlers = {}
+        }
+        // 対応するeventとハンドラーを導入
+        on(event, handler) {
+            this.handlers[event] = handler
+        }
+
+        onRequest(eventName, target,...args) {
+            const handler = this.handlers[eventName]
+            if (handler) handler(target,...args)
+        }
+
+        update(target) {
+            // 通常経過処理。ここに集約
+            console.log('common state updated')
+        }
+    }
+
+    class IdleState extends StateOfPlayer {
+        constructor() {
+            super()
+            this.on('attack10', (target,motion_value) => {
+                log(target.name+' doing ground attack with motion value: '+motion_value)
+            })
+            this.on('attack', (target) => {
+                log(target.name+' doing ground attack ')
+            })
+            this.on('jump',(target)=>{
+                target.state = new JumpState()
+                log(target.name+' change to jump state')
+            })
+        }
+
+        update(target) {
+            super.update(target)
+            //log('idle state updated')
+        }
+    }
+    class JumpState extends StateOfPlayer {
+        constructor() {
+            super()
+            this.on('attack', (target) => {
+                log(target.name+' doing jump attack!')
+            })
+        }
+
+        update(target) {
+            super.update(target)
+            //log('idle state updated')
+        }
+    }
+
+    class Player {
+        constructor() {
+            this.name ='zero base man!'
+            this.state = new IdleState()
+            this.eventQueue = []
+        }
+
+        update() {
+            for (const [ev,...args] of this.eventQueue)
+                this.state.onRequest(ev, this,...args)
+            this.eventQueue = []
+            this.state.update(this)
+        }
+
+        pushEvent(eName,...args) {
+            this.eventQueue.push([eName,...args])
+        }
+    }
+</script>
+
+<script>
+    const player = new Player()
+</script>
+
+<script>
+    const canvas = document.querySelector("canvas")
+    const c = canvas.getContext("2d", { willReadFrequently: true })
+
+    function update() {
+
+        if (keys.atk.pressed) {
+            player.pushEvent('attack')
+        } 
+        if (keys.atk10.pressed) {
+            player.pushEvent('attack10',10)
+        } 
+        if (keys.jump.pressed) {
+            player.pushEvent('jump')
+        } 
+        requestAnimationFrame(update)
+
+        player.update()
+
+        for (let _key in keys) keys[_key].pressed = false
+
+
+    }
+
+    update()
+
+</script>
