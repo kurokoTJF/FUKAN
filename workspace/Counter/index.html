@@ -1,10 +1,4 @@
-<div class=container>
-
-    <div class=right-column>
-        <canvas></canvas>
-    </div>
-
-</div>
+<canvas></canvas>
 
 <p>
     <button class="b1"> </button>
@@ -84,6 +78,7 @@
                     atk: 'attack1',
                     onEnd: 'idle'
                 },
+
                 sprite_info: {}
             },
             attack1: {
@@ -96,7 +91,8 @@
                 transition: {
                     atk: 'attack2',
                     onEnd: 'idle'
-                }
+                },
+
             },
             attack2: {
                 duration: 80,
@@ -167,7 +163,19 @@
                     atk: 'attack1',
                     onEnd: 'idle'
                 },
-                sprite_info: {}
+                sprite_info: {},
+                on: {
+                    onMove: {
+                        nextState: 'move'
+                    },
+                    onEnd: {
+                        nextState: 'idle'
+                    },
+                    atk: {
+                        nextState: 'attack1'
+                    },
+
+                },
             },
             move: {
                 duration: 30,
@@ -176,6 +184,13 @@
                 ],
                 transition: {
                     onEnd: 'idle'
+                },
+                on: {
+
+                    onEnd: {
+                        nextState: 'attack1'
+                    },
+
                 },
             },
 
@@ -201,14 +216,33 @@
                 transition: {
                     atk: 'attack2',
                     onEnd: 'idle'
-                }
+                },
+                on: {
+                    onEnd: {
+                        nextState: 'idle'
+                    },
+                    atk: {
+                        nextState: 'attack2'
+                    },
+
+                },
             },
             attack2: {
                 duration: 80,
                 transition: {
                     onEnd: 'idle',
                     atk: 'injured'
-                }
+                },
+
+                on: {
+                    onEnd: {
+                        nextState: 'idle'
+                    },
+                    atk: {
+                        nextState: 'idle'
+                    },
+
+                },
             },
 
             injured: {
@@ -217,7 +251,7 @@
                     onEnd: 'idle',
                     atk: 'attack1'
                 },
-                invisible:true
+                invisible: true
 
             },
 
@@ -270,7 +304,166 @@
         }
 
     }
+    const ModelHData_eventDrived =
+    {
+        name: "ModelH",
+        element: "thunder",
+        hp: 80,
+        initialState: 'idle',
 
+        state: {
+            idle: {
+                duration: 202,
+                transition: {
+                    onMove: 'move',
+                    atk: 'attack1',
+                    onEnd: 'idle'
+                },
+                sprite: {
+                    path:'IMG_4865.png',
+                    length: 4,
+                    flip: true,
+                },
+                on: {
+                    onMove: {
+                        nextState: 'move'
+                    },
+                    onEnd: {
+                        nextState: 'idle'
+                    },
+                    atk: {
+                        nextState: 'attack1'
+                    },
+
+                },
+            },
+            move: {
+                duration: 30,
+                steps: [
+                    { time: 15, action: (target) => { console.log('pushed'); target.pushEvent('movable'); } }
+                ],
+                transition: {
+                    onEnd: 'idle'
+                },
+                on: {
+                    movable: true,
+                    onEnd: {
+                        nextState: 'attack1'
+                    },
+
+                },
+            },
+
+            inStage: {
+                duration: 30,
+                transition: {
+                    onEnd: 'idle'
+                },
+            },
+            outStage: {
+                duration: 100,
+                transition: {
+                    onEnd: 'idle'
+                },
+            },
+            attack1: {
+                duration: 20,
+                steps:
+                    [
+                        { time: 30, action: (target) => target.showMSG('count 100') },
+                        { time: 70, action: (target) => target.showMSG('count 300') },
+                    ],
+                transition: {
+                    atk: 'attack2',
+                    onEnd: 'idle'
+                },
+                on: {
+                    onEnd: {
+                        nextState: 'idle'
+                    },
+                    atk: {
+                        nextState: 'attack2'
+                    },
+
+                },
+            },
+            attack2: {
+                duration: 80,
+                transition: {
+                    onEnd: 'idle',
+                    atk: 'injured'
+                },
+
+                on: {
+                    onEnd: {
+                        nextState: 'idle'
+                    },
+                    atk: {
+                        nextState: 'idle'
+                    },
+
+                },
+            },
+
+            injured: {
+                duration: 30,
+                transition: {
+                    onEnd: 'idle',
+                    atk: 'attack1'
+                },
+                invisible: true
+
+            },
+
+
+        },
+        spriteFolder: 'https://raw.githubusercontent.com/kurokoTJF/FUKAN/refs/heads/main/Sprites/Char/',
+
+        spriteCollection: {
+            test: {
+                path: "https://raw.githubusercontent.com/kurokoTJF/FUKAN/refs/heads/main/Sprites/red/enchant.png",
+                length: 8,
+            },
+            move: {
+                path:
+                    'IMG_4867.png',
+                length: 8,
+                flip: true,
+            },
+            idle: {
+                path:
+                    'IMG_4865.png',
+                length: 4,
+                flip: true,
+            },
+            inStage: {
+                path: 'IMG_4866.png',
+                length: 12,
+                flip: true,
+            },
+            outStage: {
+                path: 'IMG_4901.png',
+                length: 8,
+                flip: true,
+            },
+            attack1: {
+                path: 'IMG_4863.png',
+                length: 4,
+            },
+            attack2: {
+                path: 'IMG_4866.png',
+                length: 12,
+                flip: true,
+            },
+            injured: {
+                path: 'IMG_4873.png'
+                ,
+                length: 5,
+                flip: true,
+            }
+        }
+
+    }
     const ModelLData =
     {
         name: "ModelL",
@@ -329,7 +522,7 @@
                     onEnd: 'idle',
                     atk: 'attack1'
                 },
-                invisible:true
+                invisible: true
 
             },
 
@@ -500,202 +693,6 @@
         Player: 0,
         Enemy: 1,
         Actor: 2,
-    }
-
-    class PolygonRenderer {
-        constructor() {
-            console.log('polygon renderer online')
-        }
-
-
-        // get x,y,z in screen space
-        project(v, angle = 0.5) {
-            // Y軸回転
-            const cos = Math.cos(angle), sin = Math.sin(angle);
-            const x = v.x * cos - v.z * sin;
-            const z = v.x * sin + v.z * cos + 9; // zをずらして奥へ
-            const y = v.y - 2;
-
-            // to screen space
-            return {
-                x: x / z * 400 + canvas.width / 2,
-                y: -y / z * 400 + canvas.height / 2,
-                z: z
-            };
-        }
-
-        // x,y と　３つの頂点情報で　座標のWeightを求める
-        getBarycentric(x, y, p0, p1, p2) {
-            //やめとけ
-            // console.log('doing math')
-            const det = (p1.y - p2.y) * (p0.x - p2.x) + (p2.x - p1.x) * (p0.y - p2.y);
-            const w0 = ((p1.y - p2.y) * (x - p2.x) + (p2.x - p1.x) * (y - p2.y)) / det;
-            const w1 = ((p2.y - p0.y) * (x - p2.x) + (p0.x - p2.x) * (y - p2.y)) / det;
-            const w2 = 1 - w0 - w1;
-            return [w0, w1, w2];
-        }
-
-        render2(_vertices, _faces, _colors, _uv, angle, ctx, sampleuv = false) {
-            //ctx.clearRect(0, 0, ctx.width, ctx.height);
-
-            // 投影した頂点
-            const projected = _vertices.map(v => this.project(v, angle));
-
-            // 各三角形に z（平均深度）を与えてソート
-            const triangles = _faces.map((_face, i) => {
-                // _face は[vertex_id0,vertex_id1,vertex_id2]
-                // そのvertex_idを実際の頂点情報に置き換える
-                const combined = projected.map((v, i) => ({
-                    x: v.x,
-                    y: v.y,
-                    z: v.z,
-                    u: _uv[i].u,
-                    v: _uv[i].v
-                }));
-                const [a, b, c] = _face.map(idx => combined[idx]);
-                const depth = (a.z + b.z + c.z) / 3;
-
-                // return 一つの三角形が必要なデータを組み立てして返す
-                return { a, b, c, color: _colors[i], depth };
-            }).sort((t1, t2) => t2.depth - t1.depth); // 奥から描画
-
-
-            if (!sampleuv) {
-                for (const tri of triangles) {
-                    // uv sampling!
-
-                    // 
-                    const output = ctx.createImageData(500, 500);
-                    const outData = output.data;
-
-                    // Screen Spaceでバウンディングボックスを計算する
-                    const triangle = [tri.a, tri.b, tri.c]
-                    const xs = triangle.map(p => p.x);
-                    const ys = triangle.map(p => p.y);
-                    const minX = Math.floor(Math.min(...xs));
-                    const maxX = Math.ceil(Math.max(...xs));
-                    const minY = Math.floor(Math.min(...ys));
-                    const maxY = Math.ceil(Math.max(...ys));
-
-                    for (let y = minY; y <= maxY; y++) {
-                        for (let x = minX; x <= maxX; x++) {
-                            const [w0, w1, w2] = this.getBarycentric(x, y, triangle[0], triangle[1], triangle[2]);//(u,v,p0,p1,p2)
-                            if (w0 >= 0 && w1 >= 0 && w2 >= 0) {
-                                const outIdx = (y * 500 + x) * 4;
-                                outData[outIdx + 0] = 255;
-                                outData[outIdx + 1] = 255;
-                                outData[outIdx + 2] = 255;
-                                outData[outIdx + 3] = 255;
-                            }
-                        }
-                    }
-
-                    for (let i = 0; i < projected.length; i++) {
-                        const p = projected[i]
-                        ctx.fillStyle = 'black';
-                        ctx.fillRect(p.x - 7, p.y - 7, 14, 14)
-                        ctx.font = '14px sans-serif'
-                        ctx.textBaseline = 'middle'
-                        ctx.fillStyle = 'white'
-                        ctx.textAlign = 'center'
-                        ctx.fillText(i, p.x, p.y)
-                    }
-
-                    return
-                }
-
-            } else {
-                for (const tri of triangles) {
-                    // uv sampling!
-                    if (imageLoaded) {
-                        // texture を一回描いてからじゃないとgetImageDataができない
-                        const tempCanvas = document.createElement("canvas");
-                        const tempCtx = tempCanvas.getContext("2d");
-                        tempCanvas.width = image.width;
-                        tempCanvas.height = image.height;
-                        tempCtx.drawImage(image, 0, 0);
-                        const imageData = tempCtx.getImageData(0, 0, image.width, image.height);
-                        const texData = imageData.data;
-                        const texWidth = imageData.width;
-                        const texHeight = imageData.height;
-
-                        // 
-                        const output = ctx.createImageData(500, 500);
-                        const outData = output.data;
-
-
-                        // Screen Spaceでバウンディングボックスを計算する
-                        const triangle = [tri.a, tri.b, tri.c]
-                        const xs = triangle.map(p => p.x);
-                        const ys = triangle.map(p => p.y);
-                        const minX = Math.floor(Math.min(...xs));
-                        const maxX = Math.ceil(Math.max(...xs));
-                        const minY = Math.floor(Math.min(...ys));
-                        const maxY = Math.ceil(Math.max(...ys));
-
-                        for (let y = minY; y <= maxY; y++) {
-                            for (let x = minX; x <= maxX; x++) {
-                                const [w0, w1, w2] = this.getBarycentric(x, y, triangle[0], triangle[1], triangle[2]);//(u,v,p0,p1,p2)
-                                if (w0 >= 0 && w1 >= 0 && w2 >= 0) {
-                                    const u = triangle[0].u * w0 + triangle[1].u * w1 + triangle[2].u * w2;
-                                    const v = triangle[0].v * w0 + triangle[1].v * w1 + triangle[2].v * w2;
-                                    // あらかじめ三角形の各頂点に z, u/z, v/z を持たせておく
-                                    const _u = (w0 * (triangle[0].u / triangle[0].z) + w1 * (triangle[1].u / triangle[1].z) + w2 * (triangle[2].u / triangle[2].z));
-                                    const _v = (w0 * (triangle[0].v / triangle[0].z) + w1 * (triangle[1].v / triangle[1].z) + w2 * (triangle[2].v / triangle[2].z));
-                                    const w = (w0 / triangle[0].z + w1 / triangle[1].z + w2 / triangle[2].z);
-
-                                    // 最後に割り戻す
-                                    const correctedU = _u / w;
-                                    const correctedV = _v / w;
-
-                                    const texX = Math.floor(correctedU * texWidth);
-                                    const texY = Math.floor(correctedV * texHeight);
-                                    const idx = (texY * texWidth + texX) * 4;
-
-                                    const r = texData[idx];
-                                    const g = texData[idx + 1];
-                                    const b = texData[idx + 2];
-                                    const a = texData[idx + 3];
-
-                                    ctx.fillStyle = `rgb(${r},${g},${b},${a})`;
-                                    const outIdx = (y * 500 + x) * 4;
-                                    outData[outIdx + 0] = r;
-                                    outData[outIdx + 1] = g;
-                                    outData[outIdx + 2] = b;
-                                    outData[outIdx + 3] = a;
-                                }
-                            }
-                        }
-
-                        createImageBitmap(output).then(bitmap => {
-                            ctx.drawImage(bitmap, 0, 0);
-                            //この中に入れて置かないと、JSの描画の順番が狂う
-                            for (let i = 0; i < projected.length; i++) {
-                                const p = projected[i]
-                                ctx.fillStyle = 'black';
-                                ctx.fillRect(p.x - 7, p.y - 7, 14, 14)
-                                ctx.font = '14px sans-serif'
-                                ctx.textBaseline = 'middle'
-                                ctx.fillStyle = 'white'
-                                ctx.textAlign = 'center'
-                                ctx.fillText(i, p.x, p.y)
-                            }
-                        });
-
-                    }
-
-                }
-            }
-
-            // vertex index overlay
-
-        }
-
-        render() {
-            this.render2(vertices2, faces2, colors2, uv2, R_angle, c, true);
-            this.render2(player.vertices, player.faces, player.color, player.uv, R_angle, c, true);
-
-        }
     }
 
 
@@ -912,33 +909,9 @@
 
             this.renderer = new MovieRenderer(this)
 
-            this.local_vertices = [
-                { x: -3, y: 1.5, z: 2.5 },
-                { x: -3, y: 0, z: 2.5 },
-                { x: -2, y: 0, z: 2.5 },
-                { x: -2, y: 1.5, z: 2.5 }
-            ]
-            this.vertices = [{ x: -3, y: 1.5, z: 2.5 },
-            { x: -3, y: 0, z: 2.5 },
-            { x: -2, y: 0, z: 2.5 },
-            { x: -2, y: 1.5, z: 2.5 }]
-            this.uv = [
-                { u: 0, v: 0 },
-                { u: 0, v: 1 },
-                { u: 1, v: 1 },
-                { u: 1, v: 0 }
-            ]
-            this.faces = [[0, 1, 2], [0, 2, 3]]
-            this.color = ['white', 'white']
+
         }
 
-        update_vertices() {
-            this.vertices = this.local_vertices.map(v => ({
-                x: v.x + this.position.x - 1,
-                y: v.y,
-                z: v.z - this.position.y + 1
-            }))
-        }
 
         resetCounter0() {
             //log('reset counter')
@@ -1207,7 +1180,7 @@
                     for (const key in data.transition) {
                         if (key === 'onEnd') continue
                         if (key === 'invisible') continue
-                        if (target.Tag.hitByThisShit === true && !data.invisible && target.Tag.invisible===false){
+                        if (target.Tag.hitByThisShit === true && !data.invisible && target.Tag.invisible === false) {
                             target.cst('injured')
                             target.Tag.invisible = true
                         }
@@ -1271,8 +1244,7 @@
             this.state.enter(this)
 
             this.position = { x: 2, y: 1 }
-            this.movable = false
-            this.deltaPositon = { x: 0, y: 0 }
+            this.deltaPosition = { x: 0, y: 0 }
             this.renderer = new MovieRenderer2(this, loaded.spriteCollection)
             this.HP = loaded.hp
 
@@ -1437,6 +1409,307 @@
         }
     }
 
+
+
+
+
+
+    class StateOfPlayer {
+        constructor() {
+            this.handlers = {}
+            this.Tag = new Proxy({}, {
+                get(target, prop) {
+                    return prop in target ? target[prop] : false;
+                }
+            })
+        }
+        // 対応するeventとハンドラーを導入
+        on(event, handler) {
+            this.handlers[event] = handler
+        }
+
+        onRequest(eventName, target, ...args) {
+            const handler = this.handlers[eventName]
+            if (handler) handler(target, ...args)
+        }
+
+        update(target) {
+            // 通常経過処理。ここに集約
+            console.log('common state updated')
+        }
+
+        enter(target) {
+            console.log('entered!')
+        }
+    }
+
+    class ImportedState extends StateOfPlayer {
+        constructor(sname, data) {
+            super()
+            this.stateData = data
+            this.name = sname
+            log(sname)
+            for (const [eName, def] of Object.entries(data.on || {})) {
+
+                if (eName == 'movable') {
+                    this.on('movable', (target) => {
+                        console.log('movable')
+                        target.position.x += target.deltaPosition.x
+                        target.position.y += target.deltaPosition.y
+                    })
+                    continue
+                }
+                if (eName == 'onMove') {
+                    this.Tag.onMove = true
+                }
+                this.on(eName, (target, eData) => {
+                    if (def.log) log(target.name + ' ' + def.log)
+                    if (def.nextState) {
+                        const nextStateData = target.data.state[def.nextState]
+                        target.state = new ImportedState(def.nextState, nextStateData)
+                        target.state.enter(target)
+                    }
+                })
+
+
+            }
+        }
+
+        update(target) {
+            if (this.Tag.onMove) {
+                if (keys.down.pressed) {
+                    // check direction
+                    if (target.setDeltaPosition(0, 1))
+                        target.pushEvent('onMove')
+                }
+                if (keys.up.pressed) {
+                    if (target.setDeltaPosition(0, -1))
+                        target.pushEvent('onMove')
+                }
+                if (keys.left.pressed) {
+                    if (target.setDeltaPosition(-1, 0))
+                        target.pushEvent('onMove')
+                }
+                if (keys.right.pressed) {
+                    if (target.setDeltaPosition(1, 0))
+                        console.log('pushed')
+                    target.pushEvent('onMove')
+                }
+
+            }
+        }
+
+        enter(target) {
+            const _counter = GM.addCounter({
+                msg: '[' + this.name + ']',
+                endTime: this.stateData.duration,
+                processCall: () => {
+                    for (const step of this.stateData.steps || [])
+                        if (_counter.time === step.time)
+                            step.action(target)
+                },
+                endCall: () => {
+                    target.pushEvent('onEnd')
+                }
+            })
+
+            // counter must be end
+            if (target.counter) target.counter.setEnd()
+            target.counter = _counter
+        }
+    }
+    class PlayerFromData {
+        constructor(data) {
+            this.data = data
+            this.name = data.name
+            this.HP = data.hp
+
+            this.counter = new Counter({
+                endTime: 100,
+            })
+            const initialState = data.state[data.initialState]
+            this.state = new ImportedState(data.initialState, initialState)
+            this.state.enter(this)
+            this.eventQueue = []
+            console.log('Player event drived state machine from data initialized')
+
+            this.state.enter(this)
+
+            this.position = { x: 1, y: 1 }
+            this.movable = false
+            this.deltaPosition = { x: 0, y: 0 }
+
+
+            this.renderer = new MovieRenderer2(this, { f: data.spriteFolder, p: data.spriteCollection })
+
+            // 使い捨て外部リクエスト、自由に追加できる。
+            // 確認するたびにfalseにリセットされる
+            this.request = new Proxy({}, {
+                get: (target, prop) => {
+                    const value = target[prop];
+                    target[prop] = false; // 読んだら自動で false にする
+                    return value ?? false;
+                }
+            });
+
+            // 未定義状態。自由に書き込める。デフォルト状態はfalse
+            this.Tag = new Proxy({}, {
+                get(target, prop) {
+                    return prop in target ? target[prop] : false;
+                }
+            })
+
+        }
+
+
+
+        cst(stateName) {
+            this.counter.setEnd()
+            this.state = this.states[stateName]
+            this.state.enter(this)
+
+        }
+
+        showMSG(msg) {
+            log("[MSG] " + msg)
+        }
+
+        // shift+alt+A
+        /* observeUpdate(subject) {
+            for (const n of subject.notification) {
+                if (n.content == 'test') log('got it!!')
+            }
+        } */
+
+        observeUpdate(subject, content, owner) {
+            if (content == 'test') log('got it!!!!')
+            if (content === 'movable') {
+                this.request['movable'] = true
+            }
+        }
+
+
+        setDeltaPosition(_x, _y) {
+            if (
+                this.position.x + _x < 1 ||
+                this.position.x + _x > 3 ||
+                this.position.y + _y < 1 ||
+                this.position.y + _y > 3
+            )
+                return false
+            this.deltaPosition = { x: _x, y: _y }
+            return true
+        }
+
+
+
+        pushEvent(eName, ...args) {
+            this.eventQueue.push([eName, ...args])
+        }
+
+        update() {
+            // apply checked delta
+            if (this.request['movable']) {
+                this.position.x += this.deltaPosition.x
+                this.position.y += this.deltaPosition.y
+                this.deltaPosition = { x: 0, y: 0 }
+            }
+
+
+            // get new delta
+            //if (this.ID == CharID.Player)
+            for (const [ev, ...args] of this.eventQueue)
+                this.state.onRequest(ev, this, ...args)
+            this.eventQueue = []
+            this.state.update(this)
+
+            //
+            if (this.position.y > 3) this.position.y = 3
+            else if (this.position.y < 1) this.position.y = 1
+            if (this.position.x > 3) this.position.x = 3
+            else if (this.position.x < 1) this.position.x = 1
+        }
+
+        draw() {
+            if (this.counter) {
+                this.renderer.draw()
+            }
+
+            const temp_draw = () =>
+                c.fillRect(
+                    ((this.position.x - 1) * canvas.width) / 6 + 10,
+                    (this.position.y * canvas.height) / 6 + 40,
+                    20,
+                    tileSize,
+                )
+            const temp_print = (msg) =>
+                c.fillText(
+                    msg,
+                    10 + ((this.position.x - 1) * canvas.width) / 6,
+                    (this.position.y * canvas.height) / 6 + 40 + 10,
+                )
+            const temp_draw_gauge = (_counter) => {
+                c.fillStyle = "rgba(127,127,127,1)"
+                c.fillRect(
+                    ((this.position.x - 1) * canvas.width) / 6 + 10,
+                    (this.position.y * canvas.height) / 6 + 40 + tileSize,
+                    tileSize,
+                    5,
+                )
+                c.fillStyle = "rgb(255, 255, 255)"
+                c.fillRect(
+                    ((this.position.x - 1) * canvas.width) / 6 + 10,
+                    (this.position.y * canvas.height) / 6 + 40 + tileSize,
+                    (_counter.time / _counter.endTime) * tileSize,
+                    5,
+                )
+            }
+            const temp_draw_gauge2 = (_current, _max) => {
+                c.fillStyle = "rgba(128,128,128,1)"
+                c.fillRect(
+                    ((this.position.x - 1) * canvas.width) / 6 + 10,
+                    (this.position.y * canvas.height) / 6 + 10,
+                    tileSize,
+                    5,
+                )
+                c.fillStyle = "rgba(255,0,0,1)"
+                c.fillRect(
+                    ((this.position.x - 1) * canvas.width) / 6 + 10,
+                    (this.position.y * canvas.height) / 6 + 10,
+                    (_current / _max) * tileSize,
+                    5,
+                )
+            }
+
+            temp_draw_gauge2(this.HP, 100)
+            if (this.state["buffed"]) {
+                c.fillStyle = "rgb(251, 255, 0)"
+                c.fillRect(
+                    ((this.position.x - 1) * canvas.width) / 6 + 10,
+                    (this.position.y * canvas.height) / 6 + 20,
+                    tileSize,
+                    5,
+                )
+            }
+
+
+            if (this.ID == CharID.Enemy) {
+                c.fillStyle = "rgba(255,0,255,1)"
+                temp_draw()
+
+            }
+
+
+            c.fillStyle = "rgb(255, 255, 255)"
+            temp_print(this.state.name)
+
+
+            if (this.counter) {
+                temp_draw_gauge(this.counter)
+            }
+        }
+    }
+
     class Tile {
         constructor() {
             console.log('tile online')
@@ -1447,7 +1720,7 @@
             //hit test
             if (active_player.position.x === this.position.x)
                 if (active_player.position.y === this.position.y) {
-                    if (active_player.Tag.hitByThisShit === false && active_player.Tag.invisible===false) {
+                    if (active_player.Tag.hitByThisShit === false && active_player.Tag.invisible === false) {
                         log('hit!')
                         active_player.Tag.hitByThisShit = true
 
@@ -1618,7 +1891,7 @@
             this.observers = []
             this.dominantCounter = null
 
-            
+
 
             this.request = new Proxy({}, {
                 get: (target, prop) => {
@@ -2144,12 +2417,16 @@
         }
 
         #updateSpriteInfo(_name) {
-            if (!this.spriteCollection.p[_name]) return false
+            if (!this.spriteCollection.p[_name]) {
+                log('not found sprite name')
+                return false
+            }
             if (this.spriteName == _name) return true
+            let s = this.spriteCollection.p[_name]
+
             this.spriteFlip = false
             this.spriteLoad = false
             this.spriteName = _name
-            let s = this.spriteCollection.p[_name]
             if (s.flip) this.spriteFlip = true
             if (!this.spriteImage) this.spriteImage = this.damiSprite
             this.spriteImage.src = this.spriteCollection.f + s.path
@@ -2227,9 +2504,9 @@
                     let _temp = -this.sprite.width
                     if (this.master.Tag.greyout)
                         c.filter = "saturate(0%)";  // 彩度を0%にしてグレースケールっぽく
-                    else if(this.master.Tag.invisible)
+                    else if (this.master.Tag.invisible)
                         c.filter = 'brightness(200%)'
-                        c.drawImage(
+                    c.drawImage(
                         this.spriteImage,
                         cropbox.position.x,
                         cropbox.position.y,
@@ -2304,10 +2581,13 @@
     const charL = new Player(ModelLData)
     let active_player = charH
 
+    let data_player = new PlayerFromData(ModelHData_eventDrived)
+
     let characters = []
     characters.push(player_2)
     characters.push(enemy)
     characters.push(active_player)
+    characters.push(data_player)
 
     let terrain = []
     testTile = new Tile()
@@ -2323,7 +2603,9 @@
         // R_angle += 0.001
         //Renderer.render()
 
-
+        if (keys.atk.pressed) {
+            data_player.pushEvent('atk')
+        }
 
 
 
