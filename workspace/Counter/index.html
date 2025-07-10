@@ -64,90 +64,7 @@
 
 
 <script id="data">
-    const ModelHData =
-    {
-        name: "ModelH",
-        element: "thunder",
-        hp: 80,
-        initialState: 'idle',
-
-        state: {
-            idle: {
-                duration: 202,
-                transition: {
-                    atk: 'attack1',
-                    onEnd: 'idle'
-                },
-
-                sprite_info: {}
-            },
-            attack1: {
-                duration: 20,
-                steps:
-                    [
-                        { time: 30, action: (target) => target.showMSG('count 100') },
-                        { time: 70, action: (target) => target.showMSG('count 300') },
-                    ],
-                transition: {
-                    atk: 'attack2',
-                    onEnd: 'idle'
-                },
-
-            },
-            attack2: {
-                duration: 80,
-                transition: {
-                    onEnd: 'idle',
-                    atk: 'injured'
-                }
-            },
-
-            injured: {
-                duration: 30,
-                transition: {
-                    onEnd: 'idle',
-                    atk: 'attack1'
-                },
-            },
-
-
-        },
-        spriteCollection: {
-            test: {
-                path: "https://raw.githubusercontent.com/kurokoTJF/FUKAN/refs/heads/main/Sprites/red/enchant.png",
-                length: 8,
-            },
-            move: {
-                path:
-                    'https://raw.githubusercontent.com/kurokoTJF/FUKAN/refs/heads/main/Sprites/Char/IMG_4867.png',
-                length: 8,
-                flip: true,
-            },
-            idle: {
-                path:
-                    'https://raw.githubusercontent.com/kurokoTJF/FUKAN/refs/heads/main/Sprites/Char/IMG_4865.png',
-                length: 4,
-                flip: true,
-            },
-            attack1: {
-                path: 'https://raw.githubusercontent.com/kurokoTJF/FUKAN/refs/heads/main/Sprites/Char/IMG_4863.png',
-                length: 4,
-            },
-            attack2: {
-                path: 'https://raw.githubusercontent.com/kurokoTJF/FUKAN/refs/heads/main/Sprites/Char/IMG_4866.png',
-                length: 12,
-                flip: true,
-            },
-            injured: {
-                path: 'https://raw.githubusercontent.com/kurokoTJF/FUKAN/refs/heads/main/Sprites/Char/IMG_4873.png'
-                ,
-                length: 5,
-                flip: true,
-            }
-        }
-
-    }
-
+   
     const ModelHData2 =
     {
         name: "ModelH",
@@ -201,7 +118,7 @@
                 },
             },
             outStage: {
-                duration: 100,
+                duration: 30,
                 transition: {
                     onEnd: 'idle'
                 },
@@ -314,13 +231,8 @@
         state: {
             idle: {
                 duration: 202,
-                transition: {
-                    onMove: 'move',
-                    atk: 'attack1',
-                    onEnd: 'idle'
-                },
                 sprite: {
-                    path:'IMG_4865.png',
+                    path: 'IMG_4865.png',
                     length: 4,
                     flip: true,
                 },
@@ -339,31 +251,52 @@
             },
             move: {
                 duration: 30,
+                sprite: {
+                    path:
+                        'IMG_4867.png',
+                    length: 8,
+                    flip: true,
+                },
                 steps: [
                     { time: 15, action: (target) => { console.log('pushed'); target.pushEvent('movable'); } }
                 ],
-                transition: {
-                    onEnd: 'idle'
-                },
+
                 on: {
                     movable: true,
                     onEnd: {
-                        nextState: 'attack1'
+                        nextState: 'idle'
                     },
 
                 },
+
             },
 
             inStage: {
                 duration: 30,
-                transition: {
-                    onEnd: 'idle'
+                on: {
+                    onEnd: {
+                        nextState: 'idle'
+                    },
+
+                },
+                sprite: {
+                    path: 'IMG_4866.png',
+                    length: 12,
+                    flip: true,
                 },
             },
             outStage: {
-                duration: 100,
-                transition: {
-                    onEnd: 'idle'
+                duration: 30,
+                on: {
+                    onEnd: {
+                        nextState: 'idle'
+                    },
+
+                },
+                sprite: {
+                    path: 'IMG_4901.png',
+                    length: 8,
+                    flip: true,
                 },
             },
             attack1: {
@@ -373,10 +306,7 @@
                         { time: 30, action: (target) => target.showMSG('count 100') },
                         { time: 70, action: (target) => target.showMSG('count 300') },
                     ],
-                transition: {
-                    atk: 'attack2',
-                    onEnd: 'idle'
-                },
+
                 on: {
                     onEnd: {
                         nextState: 'idle'
@@ -386,13 +316,14 @@
                     },
 
                 },
+                sprite: {
+                    path: 'IMG_4863.png',
+                    length: 4,
+                },
             },
             attack2: {
                 duration: 80,
-                transition: {
-                    onEnd: 'idle',
-                    atk: 'injured'
-                },
+
 
                 on: {
                     onEnd: {
@@ -403,6 +334,11 @@
                     },
 
                 },
+                sprite: {
+                    path: 'IMG_4866.png',
+                    length: 12,
+                    flip: true,
+                },
             },
 
             injured: {
@@ -411,6 +347,18 @@
                     onEnd: 'idle',
                     atk: 'attack1'
                 },
+                on: {
+                    onEnd: {
+                        nextState: 'idle'
+                    },
+
+                },
+                sprite: {
+                    path: 'IMG_4873.png'
+                    ,
+                    length: 5,
+                    flip: true,
+                },
                 invisible: true
 
             },
@@ -418,50 +366,6 @@
 
         },
         spriteFolder: 'https://raw.githubusercontent.com/kurokoTJF/FUKAN/refs/heads/main/Sprites/Char/',
-
-        spriteCollection: {
-            test: {
-                path: "https://raw.githubusercontent.com/kurokoTJF/FUKAN/refs/heads/main/Sprites/red/enchant.png",
-                length: 8,
-            },
-            move: {
-                path:
-                    'IMG_4867.png',
-                length: 8,
-                flip: true,
-            },
-            idle: {
-                path:
-                    'IMG_4865.png',
-                length: 4,
-                flip: true,
-            },
-            inStage: {
-                path: 'IMG_4866.png',
-                length: 12,
-                flip: true,
-            },
-            outStage: {
-                path: 'IMG_4901.png',
-                length: 8,
-                flip: true,
-            },
-            attack1: {
-                path: 'IMG_4863.png',
-                length: 4,
-            },
-            attack2: {
-                path: 'IMG_4866.png',
-                length: 12,
-                flip: true,
-            },
-            injured: {
-                path: 'IMG_4873.png'
-                ,
-                length: 5,
-                flip: true,
-            }
-        }
 
     }
     const ModelLData =
@@ -590,7 +494,6 @@
             return target[prop];
         }
     });
-    const rawUrl = "https://raw.githubusercontent.com/kurokoTJF/FUKAN/refs/heads/main/workspace/Counter/Ideas.txt";
 
     function showHTML(MSG, ID) {
         document.getElementById(ID).innerText = MSG
@@ -698,458 +601,6 @@
 
 
 
-    class GroudState {
-        constructor() {
-
-        }
-
-        handleInput(target) {
-            log('ground state')
-        }
-    }
-
-    class injuredState {
-        constructor() {
-
-        }
-
-        handleInput(target) {
-
-        }
-
-        enter(target) {
-            GM.Mugshot.load('https://raw.githubusercontent.com/kurokoTJF/FUKAN/refs/heads/main/Sprites/Char/IMG_4876.png')
-            let c = GM.addCounter({
-                endTime: 100,
-                endCall: () => {
-                    GM.Mugshot.load('https://raw.githubusercontent.com/kurokoTJF/FUKAN/refs/heads/main/Sprites/Char/IMG_4877.png')
-                    target.cst(target.constructor.idle)
-                }
-            })
-
-            target.switchCounter(c)
-        }
-    }
-
-    class IdleState extends GroudState {
-        constructor() {
-            super()
-        }
-
-        handleInput(target) {
-            if (keys.test_injured.pressed) {
-                target.HP -= 10
-                return target.cst(target.constructor.injured)
-            }
-            if (keys.atk.pressed) {
-                return target.cst(target.constructor.attack)
-            }
-            if (keys.use_chip.pressed) {
-                if (target.startUseChip2()) {
-                    return target.cst(target.constructor.skill)
-                }
-            }
-
-            if (keys.down.pressed) {
-                if (target.startMove(0, 1)) {
-                    return target.cst(target.constructor.moving)
-                }
-            }
-
-
-            if (keys.up.pressed) {
-                if (target.startMove(0, -1)) {
-                    return target.cst(target.constructor.moving)
-                }
-            }
-            if (keys.left.pressed) {
-                if (target.startMove(-1, 0)) {
-                    return target.cst(target.constructor.moving)
-                }
-            }
-            if (keys.right.pressed) {
-                if (target.startMove(1, 0)) {
-                    return target.cst(target.constructor.moving)
-                }
-            }
-
-            return target.constructor.idle
-
-        }
-
-        enter(target) {
-
-            let c = GM.addCounter({
-                endTime: 300,
-                msg: 'player2 idle loop counter',
-            })
-            c.processCall = () => {
-                if (c.time == c.endTime)
-                    c.time = 0
-            }
-
-            target.switchCounter(c)
-
-        }
-    }
-
-    class MovingState {
-        constructor() {
-
-        }
-        handleInput(target) {
-        }
-        enter(target) {
-
-            let c = GM.addCounter({
-                endTime: target.moveGridStop,
-                msg: "[GM]player moving",
-            })
-            c.processCall = () => {
-                if (c.time == target.moveGridStop / 2) {
-                    target._moveGrid();
-                }
-                else if (c.time == target.moveGridStop) {
-                    target.cst(target.constructor.idle)
-                }
-            }
-            target.switchCounter(c)
-
-        }
-    }
-
-    class SkillState {
-        constructor() { }
-        handleInput(target) { }
-        enter(target) {
-            log('[Player2] enter skill')
-
-            let c = GM.addCounter({
-                endTime: 100,
-                msg: 'player2 skill counter',
-                endCall: () => {
-                    target.cst(target.constructor.idle)
-                }
-            })
-            c.processCall = () => {
-                if (keys.use_chip.pressed)
-                    if (c.time > 50 && c.time < 90) {
-                        GM.addSPCounter()
-                        log("PERFECT!")
-                        target.cst(target.constructor.attack)
-                    }
-            }
-
-            target.switchCounter(c)
-        }
-    }
-
-    class AttackState {
-        constructor() {
-            //log('attack online')
-        }
-        handleInput(target) {
-
-        }
-        enter(target) {
-            target.resetCounter0()
-            let c = GM.addCounter({
-                endTime: 40,
-                msg: target.ID + ' attacking',
-                processCall: () => { },
-                endCall: () => { log('end atk'); target.cst(Player2.idle); enemy.HP -= 2; }
-            })
-            c.processCall = () => {
-                if (target.ID != CharID.Player) return
-                if (keys.atk.pressed && c.time > c.endTime / 2)
-                    c.time = 0
-            }
-            target.counter = c
-
-        }
-    }
-
-    class Player2 {
-        static idle = new IdleState()
-        static idleCounter = new Counter({
-            endTime: 40,
-            msg: 'player2 static idle counter',
-            processCall: () => {
-                if (this.time == this.endTime) {
-                    this.time = 0
-                }
-            }
-        })
-        static moving = new MovingState()
-        static skill = new SkillState()
-        static attack = new AttackState()
-        static injured = new injuredState()
-
-        constructor() {
-            this.counter = null
-            this.position = { x: 1, y: 2 }
-            this.deltaPosition = { x: 0, y: 0 }
-            this.HP = 100
-            this.ID = CharID.Player
-            this.stance = 100
-            this.state = {
-                moving: false,
-                usingChip: false,
-                buffed: false,
-                idle: false,
-                attack: false,
-            }
-
-            this.moveGridStop = 20
-            this.chipName = ""
-            //this.position.y=10
-
-            this.st = Player2.idle
-            this.st.enter(this)
-
-            this.renderer = new MovieRenderer(this)
-
-
-        }
-
-
-        resetCounter0() {
-            //log('reset counter')
-            if (this.counter) { this.counter.end = true }
-        }
-
-        switchCounter(c) {
-            if (this.counter) this.counter.setEnd()
-            if (c) this.counter = c
-        }
-        cst(_state) {
-            this.st = _state
-            this.st.enter(this)
-            return _state
-        }
-
-
-        startMove(_x, _y) {
-            if (
-                this.position.x + _x < 1 ||
-                this.position.x + _x > 3 ||
-                this.position.y + _y < 1 ||
-                this.position.y + _y > 3
-            )
-                return false
-            this.deltaPosition = { x: _x, y: _y }
-            return true
-        }
-        _moveGrid(_x, _y) {
-            this.position.x += _x
-            this.position.y += _y
-        }
-        _moveGrid() {
-            this.position.x += this.deltaPosition.x
-            this.position.y += this.deltaPosition.y
-        }
-
-
-
-
-        startUseChip() {
-            if (chip_selected.length < 1) { console.log("no chip selected"); return; }
-
-            // enter
-            if (this.cst('usingChip')) {
-
-                // use the first chip
-                this.chipName = chip_selected[0].name
-                chip_selected.splice(0, 1)
-                this.counter = GM.addCounter({
-                    endTime: 100,
-                    msg: "[GM]player using chip",
-                    endCall: () => this._endUseChip(),
-                    _gen_list: [
-                        {
-                            time: 40,
-                            call: () =>
-                                GM.addCounter({
-                                    endTime: 30,
-                                    msg: "qte counting...",
-                                    endCall: () => this.HP -= 25,
-                                    _qteCall: () => {
-                                        this.state["buffed"] = true
-                                        GM.addSPCounter()
-                                        enemy.HP -= 20
-                                        log("PERFECT!")
-                                    },
-                                }),
-                        },
-                    ],
-                })
-            }
-        }
-        _endUseChip() {
-            this.est('usingChip')
-            this.resetCounter0()
-        }
-
-        startUseChip2() {
-            if (chip_selected.length < 1) { console.log("no chip selected"); return false; }
-            return true
-            // enter
-            if (this.cst('usingChip')) {
-
-                // use the first chip
-                this.chipName = chip_selected[0].name
-                chip_selected.splice(0, 1)
-                this.counter = GM.addCounter({
-                    endTime: 100,
-                    msg: "[GM]player using chip",
-                    endCall: () => this._endUseChip(),
-                    _gen_list: [
-                        {
-                            time: 40,
-                            call: () =>
-                                GM.addCounter({
-                                    endTime: 30,
-                                    msg: "qte counting...",
-                                    endCall: () => this.HP -= 25,
-                                    _qteCall: () => {
-                                        this.state["buffed"] = true
-                                        GM.addSPCounter()
-                                        enemy.HP -= 20
-                                        log("PERFECT!")
-                                    },
-                                }),
-                        },
-                    ],
-                })
-            }
-        }
-        endAttack() {
-            log('[player2]end attack')
-
-
-        }
-
-
-        startAtk() {
-        }
-
-        _handleInput() {
-
-        }
-
-
-        update() {
-            //this.update_vertices()
-            if (this.ID == CharID.Enemy) return
-            //key event
-            //Counterの更新はこの時点で済んでる
-            this._handleInput()
-            if (this.ID == CharID.Player) {
-                const st = this.st.handleInput(this)
-                if (st) this.st = st
-            }
-            //change the postion
-            if (this.position.y > 3) this.position.y = 3
-            else if (this.position.y < 1) this.position.y = 1
-            if (this.position.x > 3) this.position.x = 3
-            else if (this.position.x < 1) this.position.x = 1
-
-            // back to idle
-
-        }
-
-        draw() {
-            if (this.counter) {
-                this.renderer.draw()
-            }
-
-            const temp_draw = () =>
-                c.fillRect(
-                    ((this.position.x - 1) * canvas.width) / 6 + 10,
-                    (this.position.y * canvas.height) / 6 + 40,
-                    20,
-                    tileSize,
-                )
-            const temp_print = (msg) =>
-                c.fillText(
-                    msg,
-                    10 + ((this.position.x - 1) * canvas.width) / 6,
-                    (this.position.y * canvas.height) / 6 + 40 + 10,
-                )
-            const temp_draw_gauge = (_counter) => {
-                c.fillStyle = "rgba(0,0,0,1)"
-                c.fillRect(
-                    ((this.position.x - 1) * canvas.width) / 6 + 10,
-                    (this.position.y * canvas.height) / 6 + 40 + tileSize,
-                    tileSize,
-                    5,
-                )
-                c.fillStyle = "rgb(255, 255, 255)"
-                c.fillRect(
-                    ((this.position.x - 1) * canvas.width) / 6 + 10,
-                    (this.position.y * canvas.height) / 6 + 40 + tileSize,
-                    (_counter.time / _counter.endTime) * tileSize,
-                    5,
-                )
-            }
-            const temp_draw_gauge2 = (_current, _max) => {
-                c.fillStyle = "rgba(0,0,0,1)"
-                c.fillRect(
-                    ((this.position.x - 1) * canvas.width) / 6 + 10,
-                    (this.position.y * canvas.height) / 6 + 10,
-                    tileSize,
-                    5,
-                )
-                c.fillStyle = "rgba(255,0,0,1)"
-                c.fillRect(
-                    ((this.position.x - 1) * canvas.width) / 6 + 10,
-                    (this.position.y * canvas.height) / 6 + 10,
-                    (_current / _max) * tileSize,
-                    5,
-                )
-            }
-
-            temp_draw_gauge2(this.HP, 100)
-            if (this.state["buffed"]) {
-                c.fillStyle = "rgb(251, 255, 0)"
-                c.fillRect(
-                    ((this.position.x - 1) * canvas.width) / 6 + 10,
-                    (this.position.y * canvas.height) / 6 + 20,
-                    tileSize,
-                    5,
-                )
-            }
-
-
-            if (this.ID == CharID.Enemy) {
-                c.fillStyle = "rgba(255,0,255,1)"
-                temp_draw()
-
-            }
-
-            if (this.state["usingChip"]) {
-                c.fillStyle = "rgb(255, 255, 255)"
-                temp_print("using chips")
-            } else if (this.state["moving"]) {
-                c.fillStyle = "rgba(255,255,255,1)"
-                temp_print("moving")
-            } else if (this.state['attack']) {
-                c.fillStyle = "rgba(255,255,255,1)"
-                temp_print("attack")
-            } else {
-                c.fillStyle = "rgba(255,255,255,1)"
-                temp_print("idle")
-            }
-
-
-            if (this.counter) {
-                temp_draw_gauge(this.counter)
-            }
-        }
-    }
-
-
-
     function createStateFromData(stateName, data) {
         return {
             name: stateName,
@@ -1243,6 +694,7 @@
             console.log('Player state machine initialized')
             this.state.enter(this)
 
+            this.ID = CharID.Player
             this.position = { x: 2, y: 1 }
             this.deltaPosition = { x: 0, y: 0 }
             this.renderer = new MovieRenderer2(this, loaded.spriteCollection)
@@ -1318,15 +770,16 @@
 
 
             // get new delta
-            //if (this.ID == CharID.Player)
-            if (this.state && this.state.update)
-                this.state.update(this)
+            if (this.ID == CharID.Player) {
+                if (this.state && this.state.update)
+                    this.state.update(this)
 
-            //
-            if (this.position.y > 3) this.position.y = 3
-            else if (this.position.y < 1) this.position.y = 1
-            if (this.position.x > 3) this.position.x = 3
-            else if (this.position.x < 1) this.position.x = 1
+                //
+                if (this.position.y > 3) this.position.y = 3
+                else if (this.position.y < 1) this.position.y = 1
+                if (this.position.x > 3) this.position.x = 3
+                else if (this.position.x < 1) this.position.x = 1
+            }
         }
 
         draw() {
@@ -1422,6 +875,10 @@
                     return prop in target ? target[prop] : false;
                 }
             })
+            this.on('getHurt', (target) => {
+                target.state = new ImportedState('injured', target.data.state['injured'])
+                target.state.enter(target)
+            })
         }
         // 対応するeventとハンドラーを導入
         on(event, handler) {
@@ -1435,7 +892,11 @@
 
         update(target) {
             // 通常経過処理。ここに集約
-            console.log('common state updated')
+            if (target.Tag.hitByThisShit === true && target.Tag.invisible === false) {
+                target.Tag.invisible = true
+                target.pushEvent('getHurt')
+                log('noooo')
+            }
         }
 
         enter(target) {
@@ -1465,9 +926,7 @@
                 this.on(eName, (target, eData) => {
                     if (def.log) log(target.name + ' ' + def.log)
                     if (def.nextState) {
-                        const nextStateData = target.data.state[def.nextState]
-                        target.state = new ImportedState(def.nextState, nextStateData)
-                        target.state.enter(target)
+                        target.cst(def.nextState)
                     }
                 })
 
@@ -1476,6 +935,7 @@
         }
 
         update(target) {
+            super.update(target)
             if (this.Tag.onMove) {
                 if (keys.down.pressed) {
                     // check direction
@@ -1540,7 +1000,7 @@
             this.deltaPosition = { x: 0, y: 0 }
 
 
-            this.renderer = new MovieRenderer2(this, { f: data.spriteFolder, p: data.spriteCollection })
+            this.renderer = new MovieRenderer(this)
 
             // 使い捨て外部リクエスト、自由に追加できる。
             // 確認するたびにfalseにリセットされる
@@ -1564,8 +1024,9 @@
 
 
         cst(stateName) {
+            this.state = new ImportedState(stateName, this.data.state[stateName])
+
             this.counter.setEnd()
-            this.state = this.states[stateName]
             this.state.enter(this)
 
         }
@@ -1609,13 +1070,6 @@
 
         update() {
             // apply checked delta
-            if (this.request['movable']) {
-                this.position.x += this.deltaPosition.x
-                this.position.y += this.deltaPosition.y
-                this.deltaPosition = { x: 0, y: 0 }
-            }
-
-
             // get new delta
             //if (this.ID == CharID.Player)
             for (const [ev, ...args] of this.eventQueue)
@@ -1624,10 +1078,7 @@
             this.state.update(this)
 
             //
-            if (this.position.y > 3) this.position.y = 3
-            else if (this.position.y < 1) this.position.y = 1
-            if (this.position.x > 3) this.position.x = 3
-            else if (this.position.x < 1) this.position.x = 1
+
         }
 
         draw() {
@@ -1718,15 +1169,18 @@
 
         update() {
             //hit test
-            if (active_player.position.x === this.position.x)
-                if (active_player.position.y === this.position.y) {
-                    if (active_player.Tag.hitByThisShit === false && active_player.Tag.invisible === false) {
-                        log('hit!')
-                        active_player.Tag.hitByThisShit = true
+            for (const p of characters) {
+                if (p.position.x === this.position.x)
+                    if (p.position.y === this.position.y) {
+                        if (p.Tag.hitByThisShit === false && p.Tag.invisible === false) {
+                            console.log('hit!')
+                            p.Tag.hitByThisShit = true
 
+                        }
+                        return
                     }
-                    return
-                }
+
+            }
 
         }
 
@@ -1956,14 +1410,18 @@
 
                     if (c.time == 1) {
                         active_player.Tag.isActor = true
-                        active_player.cst('outStage')
                         active_player.Tag.greyout = true
-                    } else if (c.time == 50) {
+                        active_player.cst('outStage')
+
                         next.position.x = active_player.position.x
                         next.position.y = active_player.position.y
                         characters.push(next)
-                        next.Tag.isActor = true
                         next.cst('attack1')
+                    } else if (c.time == 30) {
+                        characters = characters.filter(item => item !== active_player);
+                        this.observers = this.observers.filter(item => item !== active_player);
+                    } else if (c.time == 50) {
+
 
                     }
 
@@ -2265,15 +1723,16 @@
 
     // only render
     class MovieRenderer {
+
+
         constructor(master) {
             this.master = master
             this.drawposition = { x: 0, y: 0 }
-
             this.spriteName = ''
-            this.spriteImage = new Image()
+            this.damiSprite = new Image()
+            this.spriteImage = this.damiSprite
             this.spriteLoad = false
             this.spriteFlip = false
-            this.spriteCollection = ModelHData.spriteCollection
             this.length = 1 // numbers of frames
             this.currentFrame = 0
             this.cropbox = {}
@@ -2284,13 +1743,20 @@
         }
 
         #updateSpriteInfo(_name) {
-            if (this.spriteName == _name) return
+            if (!this.master.data.state[_name].sprite) {
+                log('not found sprite name')
+                return false
+            }
+            if (this.spriteName == _name) return true
+            let s = this.master.data.state[_name].sprite
+
             this.spriteFlip = false
             this.spriteLoad = false
             this.spriteName = _name
-            let s = this.spriteCollection[_name]
             if (s.flip) this.spriteFlip = true
-            this.spriteImage.src = s.path
+            if (!this.spriteImage) this.spriteImage = this.damiSprite
+            this.spriteImage.src = this.master.data.spriteFolder+s.path
+
             this.length = 1
             this.sprite = {
                 width: 0,
@@ -2298,33 +1764,20 @@
             }
             this.spriteImage.onload = () => {
                 this.spriteLoad = true
-                this.length = this.spriteCollection[_name].length
+                this.length = s.length
                 this.sprite = {
                     width: this.spriteImage.width / this.length,
                     height: this.spriteImage.height
                 }
             }
+
+            return true
         }
 
         // master state, main counter
         #update() {
-
-            if (this.master.st == this.master.constructor.idle) {
-                this.#updateSpriteInfo('idle')
-                //log('player_2 render idle')
-            } else if (this.master.st == this.master.constructor.attack) {
-                this.#updateSpriteInfo('attack2')
-                //log('render attack')
-            } else if (this.master.st == this.master.constructor.moving) {
-                this.#updateSpriteInfo('move')
-                //log('render attack')
-            } else if (this.master.st == this.master.constructor.skill) {
-                this.#updateSpriteInfo('attack1')
-                //log('render attack')
-            } else if (this.master.st == this.master.constructor.injured) {
-                this.#updateSpriteInfo('injured')
-                //log('render attack')
-            } else {
+            if (this.#updateSpriteInfo(this.master.state.name)) { }
+            else {
                 this.spriteName = ''
                 this.spriteImage = null
                 log('no shit to render')
@@ -2375,6 +1828,10 @@
                     c.save()
                     c.scale(-1, 1);
                     let _temp = -this.sprite.width
+                    if (this.master.Tag.greyout)
+                        c.filter = "saturate(0%)";  // 彩度を0%にしてグレースケールっぽく
+                    else if (this.master.Tag.invisible)
+                        c.filter = 'brightness(200%)'
                     c.drawImage(
                         this.spriteImage,
                         cropbox.position.x,
@@ -2387,12 +1844,14 @@
                         this.sprite.width,
                         this.sprite.height,
                     )
+
                     c.restore()
+                    c.filter = 'none'
                 }
 
             }
 
-            c.fillStyle = 'rgba(0,0,0,1)'
+            c.fillStyle = 'rgba(127,127,127,1)'
             c.fillText(this.currentFrame, this.drawposition.x, this.drawposition.y + 20, 24)
         }
     }
@@ -2568,26 +2027,26 @@
     const GM = new GameManager2()
     const PP = new PostProcessor()
     //let counter = 0
-    let player_2 = new Player2()
 
-    let enemy = new Player2()
+    let enemy = new Player(ModelHData2)
     enemy.ID = CharID.Enemy
     enemy.position = { x: 5, y: 2 }
 
-    let player2_2 = new Player2()
+    let player2_2 = new Player(ModelHData2)
     player2_2.ID = CharID.Actor
 
-    const charH = new Player(ModelHData2)
+    const charH = new PlayerFromData(ModelHData_eventDrived)
     const charL = new Player(ModelLData)
     let active_player = charH
 
     let data_player = new PlayerFromData(ModelHData_eventDrived)
 
     let characters = []
-    characters.push(player_2)
+    // actor test!
+    //characters.push(player_2) 
     characters.push(enemy)
     characters.push(active_player)
-    characters.push(data_player)
+    //characters.push(data_player)
 
     let terrain = []
     testTile = new Tile()
@@ -2604,7 +2063,7 @@
         //Renderer.render()
 
         if (keys.atk.pressed) {
-            data_player.pushEvent('atk')
+            active_player.pushEvent('atk')
         }
 
 
