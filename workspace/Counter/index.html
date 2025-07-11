@@ -1,43 +1,46 @@
 <canvas></canvas>
 
-<p>
-    <button class="b1"> </button>
-    <button class="b1" onmousedown="keyPress('up')">↑</button>
-    <button class="b1"> </button>
-</p>
-<p>
-    <button class="b1" onmousedown="keyPress('left')">←</button>
-    <button class="b1" onmousedown="keyPress('down')">↓</button>
-    <button class="b1" onmousedown="keyPress('right')">→</button>
-    <button class="b1"> </button>
-    <button onmousedown="keyPress('atk')">attack</button>
-    <button onmousedown="keyPress('ssss')">ssss</button>
-    <button onmousedown="keyPress('toModelL')">toModelL</button>
-    <button onmousedown="keyPress('toModelH')">toModelH</button>
+<body>
 
-</p>
 
-<div>
     <p>
-        <button onmousedown="keyPress('add_sword')">add sword</button>
-        <button onmousedown="keyPress('select')">select</button>
-        <button onmousedown="keyPress('pause')">pause</button>
-        <button onmousedown="keyPress('use_chip')">use the chip</button>
+        <button class="b1"> </button>
+        <button class="b1" onmousedown="keyPress('up')">↑</button>
+        <button class="b1"> </button>
     </p>
-</div>
-<button onmousedown="keyPress('test_injured')">test_injured </button>
+    <p>
+        <button class="b1" onmousedown="keyPress('left')">←</button>
+        <button class="b1" onmousedown="keyPress('down')">↓</button>
+        <button class="b1" onmousedown="keyPress('right')">→</button>
+        <button class="b1"> </button>
+        <button onmousedown="keyPress('atk')">attack</button>
+        <button onmousedown="keyPress('ssss')">ssss</button>
+        <button onmousedown="keyPress('toModelL')">toModelL</button>
+        <button onmousedown="keyPress('toModelH')">toModelH</button>
 
-<button onmousedown="keyPress('test')">add control counter</button>
-<button onmousedown="clearLog()">clear log </button>
+    </p>
 
-<p>
-<div id="position"></div>
+    <div>
+        <p>
+            <button onmousedown="keyPress('add_sword')">add sword</button>
+            <button onmousedown="keyPress('select')">select</button>
+            <button onmousedown="keyPress('pause')">pause</button>
+            <button onmousedown="keyPress('use_chip')">use the chip</button>
+        </p>
+    </div>
+    <button onmousedown="keyPress('test_injured')">test_injured </button>
 
-<div id="chips"></div>
-<div id="counters"></div>
-<div id="log"></div>
-</p>
+    <button onmousedown="keyPress('test')">add control counter</button>
+    <button onmousedown="clearLog()">clear log </button>
 
+    <p>
+    <div id="position"></div>
+
+    <div id="chips"></div>
+    <div id="counters"></div>
+    <div id="log"></div>
+    </p>
+</body>
 <style>
     .b1 {
         width: 40px;
@@ -64,7 +67,7 @@
 
 
 <script id="data">
-   
+
     const ModelHData2 =
     {
         name: "ModelH",
@@ -232,9 +235,10 @@
             idle: {
                 duration: 202,
                 sprite: {
-                    path: 'IMG_4865.png',
+                    path: 'IMG_4904.png',
                     length: 4,
                     flip: true,
+                    offset: { x: -1, y: 0 }
                 },
                 on: {
                     onMove: {
@@ -256,9 +260,10 @@
                         'IMG_4867.png',
                     length: 8,
                     flip: true,
+                    offset: { x: 0, y: -5 }
                 },
                 steps: [
-                    { time: 15, action: (target) => { console.log('pushed'); target.pushEvent('movable'); } }
+                    { time: 15, action: (target) => { target.pushEvent('movable'); } }
                 ],
 
                 on: {
@@ -273,40 +278,47 @@
 
             inStage: {
                 duration: 30,
-                on: {
-                    onEnd: {
-                        nextState: 'idle'
-                    },
 
-                },
                 sprite: {
                     path: 'IMG_4866.png',
                     length: 12,
                     flip: true,
                 },
-            },
-            outStage: {
-                duration: 30,
                 on: {
                     onEnd: {
                         nextState: 'idle'
                     },
 
                 },
+            },
+            outStage: {
+                duration: 30,
+
                 sprite: {
                     path: 'IMG_4901.png',
                     length: 8,
-                    flip: true,
+                    offset: { x: -20, y: 0 }
+                },
+                on: {
+                    onEnd: {
+                        nextState: 'idle'
+                    },
+
                 },
             },
             attack1: {
-                duration: 20,
+                duration: 40,
                 steps:
                     [
-                        { time: 30, action: (target) => target.showMSG('count 100') },
+                        { time: 40, action: (target) => target.showMSG('count 200') },
                         { time: 70, action: (target) => target.showMSG('count 300') },
                     ],
-
+                sprite: {
+                    path: 'IMG_4903.png',
+                    length: 11,
+                    flip: true,
+                    offset: { x: -9, y: -3 }
+                },
                 on: {
                     onEnd: {
                         nextState: 'idle'
@@ -316,15 +328,169 @@
                     },
 
                 },
-                sprite: {
-                    path: 'IMG_4863.png',
-                    length: 4,
-                },
             },
             attack2: {
                 duration: 80,
+                sprite: {
+                    path: 'IMG_4866.png',
+                    length: 12,
+                    flip: true,
+                    offset: { x: -27, y: -14 }
+                },
+                steps:
+                    [
+                        { time: 20, action: (target) => { target.Tag.hitStop = true; GM.pushEvent('hitStop', target, 30, 'just a test, you dont actually hit anyone'); } },
+                        { time: 40, action: (target) => { target.Tag.hitStop = true; GM.pushEvent('hitStop', target, 20, 'just a test, you dont actually hit anyone'); } },
+                    ],
+                on: {
+                    onEnd: {
+                        nextState: 'idle'
+                    },
+
+                },
+            },
+
+            injured: {
+                duration: 30,
+                transition: {
+                    onEnd: 'idle',
+                    atk: 'attack1'
+                },
+
+                sprite: {
+                    path: 'IMG_4873.png'
+                    ,
+                    length: 5,
+                    flip: true,
+                },
+                invisible: true,
+                on: {
+                    onEnd: {
+                        nextState: 'idle'
+                    },
+
+                },
+            },
 
 
+        },
+        spriteFolder: 'https://raw.githubusercontent.com/kurokoTJF/FUKAN/refs/heads/main/Sprites/Char/',
+
+    }
+    const ModelLData_EventDriven =
+    {
+        name: "ModelL",
+        element: "ICE?",
+        hp: 200,
+        initialState: 'idle',
+        spriteFolder: 'https://raw.githubusercontent.com/kurokoTJF/FUKAN/refs/heads/main/Sprites/Char/',
+
+        state: {
+            idle: {
+                duration: 202,
+                sprite: {
+                    path: 'IMG_4899.png',
+                    length: 4,
+                    flip: true,
+                    offset: { x: -5, y: 0 }
+                },
+                on: {
+                    onMove: {
+                        nextState: 'move'
+                    },
+                    onEnd: {
+                        nextState: 'idle'
+                    },
+                    atk: {
+                        nextState: 'attack1'
+                    },
+
+                },
+
+            },
+            move: {
+                duration: 30,
+                sprite: {
+                    path: 'IMG_4898.png',
+                    length: 7,
+                    flip: true,
+                    offset: { x: 0, y: -10 }
+                },
+                steps: [
+                    { time: 15, action: (target) => { console.log('pushed'); target.pushEvent('movable'); } }
+                ],
+                on: {
+                    movable: true,
+                    onEnd: {
+                        nextState: 'idle'
+                    },
+
+                },
+
+            },
+            inStage: {
+                duration: 60,
+                sprite: {
+                    path: 'IMG_4894.png'
+                    ,
+                    length: 5,
+                    flip: true,
+                },
+                on: {
+                    onEnd: {
+                        nextState: 'idle'
+                    },
+
+                },
+            },
+            outStage: {
+                duration: 30,
+
+                sprite: {
+                    path: 'IMG_4901.png',
+                    length: 8,
+                    flip: true,
+                },
+                on: {
+                    onEnd: {
+                        nextState: 'idle'
+                    },
+
+                },
+            },
+            attack1: {
+                duration: 50,
+                sprite: {
+                    path: 'IMG_4902.png'
+                    ,
+                    length: 12,
+                    flip: true,
+                    offset: { x: -50, y: -40 }
+                },
+                steps:
+                    [
+                        { time: 20, action: (target) => { GM.pushEvent('hitStop', target, 70, 'just a test, you dont actually hit anyone'); } },
+
+                    ],
+                on: {
+                    onEnd: {
+                        nextState: 'idle'
+                    },
+                    atk: {
+                        nextState: 'attack2'
+                    },
+
+                },
+            },
+            attack2: {
+                duration: 120,
+                sprite: {
+                    path: 'IMG_4902.png'
+                    ,
+                    length: 12,
+                    flip: true,
+                    offset: { x: -50, y: -40 }
+                },
                 on: {
                     onEnd: {
                         nextState: 'idle'
@@ -334,148 +500,31 @@
                     },
 
                 },
-                sprite: {
-                    path: 'IMG_4866.png',
-                    length: 12,
-                    flip: true,
-                },
             },
 
             injured: {
                 duration: 30,
-                transition: {
-                    onEnd: 'idle',
-                    atk: 'attack1'
-                },
-                on: {
-                    onEnd: {
-                        nextState: 'idle'
-                    },
-
-                },
                 sprite: {
                     path: 'IMG_4873.png'
                     ,
                     length: 5,
                     flip: true,
                 },
-                invisible: true
-
-            },
-
-
-        },
-        spriteFolder: 'https://raw.githubusercontent.com/kurokoTJF/FUKAN/refs/heads/main/Sprites/Char/',
-
-    }
-    const ModelLData =
-    {
-        name: "ModelL",
-        element: "ICE?",
-        hp: 120,
-        initialState: 'idle',
-
-        state: {
-            idle: {
-                duration: 202,
-                transition: {
-                    atk: 'attack1',
-                    onEnd: 'idle',
-                    onMove: 'move',
-                },
-            },
-            move: {
-                duration: 30,
-                steps: [
-                    { time: 15, action: (target) => GM.notify('movable', GM) }
-                ],
-                transition: {
-                    onEnd: 'idle'
-                },
-            },
-            inStage: {
-                duration: 60,
-                transition: {
-                    onEnd: 'idle'
-                },
-            },
-
-            attack1: {
-                duration: 100,
-                steps:
-                    [
-                        { time: 30, action: (target) => target.showMSG('count 100') },
-                        { time: 70, action: (target) => target.showMSG('count 300') },
-                    ],
-                transition: {
-                    atk: 'attack2',
-                    onEnd: 'idle'
-                }
-            },
-            attack2: {
-                duration: 120,
-                transition: {
-                    onEnd: 'idle',
-                    atk: 'injured'
-                }
-            },
-
-            injured: {
-                duration: 30,
                 transition: {
                     onEnd: 'idle',
                     atk: 'attack1'
                 },
-                invisible: true
+                invisible: true,
+                on: {
+                    onEnd: {
+                        nextState: 'idle'
+                    },
 
+                },
             },
 
 
         },
-        spriteFolder: 'https://raw.githubusercontent.com/kurokoTJF/FUKAN/refs/heads/main/Sprites/Char/',
-        spriteCollection: {
-
-            move: {
-                path: 'IMG_4898.png',
-                rect: { w: 40, h: 64 },
-                length: 7,
-                flip: true,
-            },
-            idle: {
-                path: 'IMG_4899.png'
-                , rect: { w: 44, h: 50 },
-                length: 4,
-                flip: true,
-            },
-            inStage: {
-                path: 'IMG_4894.png'
-                ,
-                rect: { w: 100, h: 64 },
-                length: 5,
-                flip: true,
-            },
-            attack1: {
-                path: 'IMG_4897.png'
-                ,
-                rect: { w: 44, h: 56 },
-                length: 12,
-                flip: true,
-            },
-            attack2: {
-                path: 'IMG_4894.png'
-                ,
-                rect: { w: 100, h: 64 },
-                length: 5,
-                flip: true,
-            },
-            injured: {
-                path: 'IMG_4873.png'
-                ,
-                rect: { w: 45, h: 50 },
-                length: 5,
-                flip: true,
-            }
-        }
 
     }
 
@@ -496,7 +545,21 @@
     });
 
     function showHTML(MSG, ID) {
-        document.getElementById(ID).innerText = MSG
+        let el = document.getElementById(ID);
+
+        if (!el) {
+            el = document.createElement('div');
+            el.id = ID;
+
+            const body = document.body;
+            if (body.firstChild) {
+                body.insertBefore(el, body.firstChild); // ← 先頭に挿入
+            } else {
+                body.appendChild(el); // ← 最悪何もないときは普通に追加
+            }
+        }
+
+        el.innerText = MSG;
     }
 
 
@@ -538,25 +601,22 @@
     class Counter {
         constructor({
             endTime = 100,
+            pause = false,
             name = "",
             end = false,
             target = undefined,
             msg = "__",
             processCall = null,
             endCall = () => { },
-            gen_list = false,
-            qte = false,
-            qteCall = false,
         } = {}) {
             this.time = 0
             this.endTime = endTime
+            this.pause = pause
             this.end = end
             this.target = target
             this.processCall = processCall
-            this.msg = msg
             this.endCall = endCall
-            this.gen_list = gen_list
-            this.qteCall = qteCall
+            this.msg = msg
         }
         start() { }
 
@@ -579,13 +639,69 @@
 
         update() {
             if (this.time < this.endTime) {
-                this.time++
                 if (this.processCall) this.processCall()
-
+                this.time++
             } else this.#endMethod()
         }
     }
 
+    function getActiveTags(tagObj, separator = " ") {
+        return Object.entries(tagObj)
+            .filter(([_, v]) => v === true)
+            .map(([k]) => k)
+            .join(separator);
+    }
+
+    function equipThisWithProxy(target) {
+        target.request = new Proxy({}, {
+            get: (target, prop) => {
+                const value = target[prop];
+                target[prop] = false; // 読んだら自動で false にする
+                return value ?? false;
+            }
+        });
+
+        // 未定義状態。自由に書き込める。デフォルト状態はfalse
+        target.Tag = new Proxy({}, {
+            get(target, prop) {
+                return prop in target ? target[prop] : false;
+            }
+        })
+    }
+
+    function equipThisWithEventHandler(target) {
+        target.handlers = {}
+        target.on = function (event, handler) {
+            this.handlers[event] = handler
+        }
+
+        target.onRequest = function (eventName, target, ...args) {
+            const handler = this.handlers[eventName]
+            if (handler) handler(target, ...args)
+        }
+    }
+
+    function equipThisWithEventManager(target) {
+        target.eventQueue = []
+        target.pushEvent = function (eName, ...args) {
+            this.eventQueue.push([eName, ...args])
+        }
+        target.dealEvent = function (state) {
+            for (const [ev, ...args] of this.eventQueue)
+                state.onRequest(ev, this, ...args)
+            this.eventQueue = []
+        }
+        target.resetEvent = function () {
+            this.eventQueue = []
+        }
+        target.showEventQueue = function () {
+            let str = ''
+            for (const [ev, ...args] of this.eventQueue) {
+                str += ev + ' '
+            }
+            return str
+        }
+    }
 
 </script>
 
@@ -614,10 +730,7 @@
                                 step.action(target)
                     },
                     endCall: () => {
-                        const nextStateName = data.transition?.onEnd;
-                        if (nextStateName) {
-                            target.cst(nextStateName)
-                        }
+                        log('end a counter')
                     }
                 })
 
@@ -702,20 +815,7 @@
 
             // 使い捨て外部リクエスト、自由に追加できる。
             // 確認するたびにfalseにリセットされる
-            this.request = new Proxy({}, {
-                get: (target, prop) => {
-                    const value = target[prop];
-                    target[prop] = false; // 読んだら自動で false にする
-                    return value ?? false;
-                }
-            });
-
-            // 未定義状態。自由に書き込める。デフォルト状態はfalse
-            this.Tag = new Proxy({}, {
-                get(target, prop) {
-                    return prop in target ? target[prop] : false;
-                }
-            })
+            equipThisWithProxy(this)
 
         }
 
@@ -869,34 +969,34 @@
 
     class StateOfPlayer {
         constructor() {
-            this.handlers = {}
+            equipThisWithEventHandler(this)
             this.Tag = new Proxy({}, {
                 get(target, prop) {
                     return prop in target ? target[prop] : false;
                 }
             })
-            this.on('getHurt', (target) => {
-                target.state = new ImportedState('injured', target.data.state['injured'])
-                target.state.enter(target)
+            this.on('getHurt', (target,dmg) => {
+                target.cst('injured')
+                target.HP-=dmg
             })
         }
         // 対応するeventとハンドラーを導入
-        on(event, handler) {
-            this.handlers[event] = handler
-        }
-
-        onRequest(eventName, target, ...args) {
-            const handler = this.handlers[eventName]
-            if (handler) handler(target, ...args)
-        }
 
         update(target) {
             // 通常経過処理。ここに集約
             if (target.Tag.hitByThisShit === true && target.Tag.invisible === false) {
                 target.Tag.invisible = true
-                target.pushEvent('getHurt')
-                log('noooo')
+                target.pushEvent('getHurt',10)
+                GM.addCounter({
+                    endTime:100,
+                    endCall:()=>{
+                        target.Tag.invisible = false
+                    }
+                })
             }
+
+            // reset specific Tags
+            target.Tag.hitByThisShit = false
         }
 
         enter(target) {
@@ -909,7 +1009,6 @@
             super()
             this.stateData = data
             this.name = sname
-            log(sname)
             for (const [eName, def] of Object.entries(data.on || {})) {
 
                 if (eName == 'movable') {
@@ -952,8 +1051,7 @@
                 }
                 if (keys.right.pressed) {
                     if (target.setDeltaPosition(1, 0))
-                        console.log('pushed')
-                    target.pushEvent('onMove')
+                        target.pushEvent('onMove')
                 }
 
             }
@@ -962,6 +1060,7 @@
         enter(target) {
             const _counter = GM.addCounter({
                 msg: '[' + this.name + ']',
+                target: target,
                 endTime: this.stateData.duration,
                 processCall: () => {
                     for (const step of this.stateData.steps || [])
@@ -987,10 +1086,13 @@
             this.counter = new Counter({
                 endTime: 100,
             })
+
+            equipThisWithEventManager(this)
+            equipThisWithProxy(this)
             const initialState = data.state[data.initialState]
             this.state = new ImportedState(data.initialState, initialState)
             this.state.enter(this)
-            this.eventQueue = []
+            //this.eventQueue = []
             console.log('Player event drived state machine from data initialized')
 
             this.state.enter(this)
@@ -1002,22 +1104,6 @@
 
             this.renderer = new MovieRenderer(this)
 
-            // 使い捨て外部リクエスト、自由に追加できる。
-            // 確認するたびにfalseにリセットされる
-            this.request = new Proxy({}, {
-                get: (target, prop) => {
-                    const value = target[prop];
-                    target[prop] = false; // 読んだら自動で false にする
-                    return value ?? false;
-                }
-            });
-
-            // 未定義状態。自由に書き込める。デフォルト状態はfalse
-            this.Tag = new Proxy({}, {
-                get(target, prop) {
-                    return prop in target ? target[prop] : false;
-                }
-            })
 
         }
 
@@ -1064,17 +1150,13 @@
 
 
 
-        pushEvent(eName, ...args) {
-            this.eventQueue.push([eName, ...args])
-        }
+
 
         update() {
             // apply checked delta
             // get new delta
             //if (this.ID == CharID.Player)
-            for (const [ev, ...args] of this.eventQueue)
-                this.state.onRequest(ev, this, ...args)
-            this.eventQueue = []
+            this.dealEvent(this.state)
             this.state.update(this)
 
             //
@@ -1196,9 +1278,37 @@
     }
 
 
-
-    class GMBattle {
+    class StateOfGM {
         constructor() {
+            equipThisWithEventHandler(this)
+            this.on('hitStop', (gm, target, _time, reason) => {
+                console.log(reason)
+                target.Tag.hitStop = true;
+                for (const c of GM.counters) {
+                    if (c.target?.Tag.hitStop)
+                        c.pause = true
+                }
+                GM.addCounter({
+                    mgs: 'hitStop',
+                    endTime: _time,
+                    endCall: () => {
+                        GM.pushEvent('cancelHitStop', target)
+                    }
+                })
+            })
+            this.on('cancelHitStop', (gm, target) => {
+                for (const c of GM.counters) {
+                    c.pause = false
+                }
+                target.Tag.hitStop = false
+            })
+        }
+
+    }
+
+    class GMBattle extends StateOfGM {
+        constructor() {
+            super()
             this.name = 'battle'
         }
         handleInput(t) {
@@ -1249,8 +1359,8 @@
                     // プレイヤーキャラを使って制御のテストする
                     // 懐かしいな。ムービーゲーの可能性を見つけたあの午後の雰囲気を思い出す
                     if (c.time == 1) {
-                        player2_2.position.x = player_2.position.x
-                        player2_2.position.y = player_2.position.y
+                        player2_2.position.x = active_player.position.x
+                        player2_2.position.y = active_player.position.y
                         characters.push(player2_2)
                     } else if (c.time == 30) {
                         if (player2_2.startMove(0, 1))
@@ -1273,14 +1383,16 @@
 
     }
 
-    class GMBattleWin {
+    class GMBattleWin extends StateOfGM {
         constructor() {
+            super()
             this.name = 'win!'
         }
     }
 
-    class GMTitle {
+    class GMTitle extends StateOfGM {
         constructor() {
+            super()
             this.name = 'title'
         }
         handleInput(t) {
@@ -1292,8 +1404,9 @@
     class GMDialog {
 
     }
-    class GMSelect {
+    class GMSelect extends StateOfGM {
         constructor() {
+            super()
             this.name = 'select'
             this.counter = null
         }
@@ -1345,6 +1458,7 @@
             this.observers = []
             this.dominantCounter = null
 
+            equipThisWithEventManager(this)
 
 
             this.request = new Proxy({}, {
@@ -1416,6 +1530,7 @@
                         next.position.x = active_player.position.x
                         next.position.y = active_player.position.y
                         characters.push(next)
+                        next.resetEvent()
                         next.cst('attack1')
                     } else if (c.time == 30) {
                         characters = characters.filter(item => item !== active_player);
@@ -1487,6 +1602,7 @@
 
         addCounter({
             msg = "[untitled]",
+            target = undefined,
             endTime = 10,
             processCall = null,
             endCall = () => {
@@ -1496,6 +1612,7 @@
         } = {}) {
             let _temp = new Counter({
                 endTime: endTime,
+                target: target,
                 msg: msg,
                 processCall: processCall,
                 endCall: endCall,
@@ -1607,6 +1724,9 @@
             }
 
             PP.draw()
+            for (const t of terrain) {
+                t.draw()
+            }
             for (let _p of characters) {
                 _p.draw()
                 //log('draw characters')
@@ -1623,7 +1743,8 @@
         #update_counters() {
             if (this.st == this.constructor.select) {
                 for (let _c of this.counters_select) {
-                    _c.update()
+                    if (_c.pause === false)
+                        _c.update()
                 }
                 this.counters_select = this.counters_select.filter((_c) => _c.end == false)
 
@@ -1636,13 +1757,15 @@
                 return
             }
             for (let _c of this.counters) {
-                _c.update()
+                if (_c.pause === false)
+                    _c.update()
             }
             this.counters = this.counters.filter((_c) => _c.end == false)
         }
 
         update() {
             const s = this.st.handleInput(this)
+            this.dealEvent(this.st)
             if (s) this.st = s
 
 
@@ -1652,8 +1775,12 @@
             } else {
                 if (this.st == this.constructor.battle) {
                     this.#update_counters()
+                    for (const t of terrain) {
+                        t.update()
+                    }
                     for (let p of characters) {
-                        p.update()
+                        if (!p.Tag.hitStop)
+                            p.update()
                     }
                     if (this.Tag.battle) {
                         if (enemy.HP <= 0) { this.Tag.battle_win = true; this.Tag.battle = false }
@@ -1673,6 +1800,7 @@
 
             //console.log(message+counter)
             this.#draw()
+
         }
     }
 
@@ -1750,25 +1878,21 @@
             if (this.spriteName == _name) return true
             let s = this.master.data.state[_name].sprite
 
+            this.offset = null
             this.spriteFlip = false
             this.spriteLoad = false
             this.spriteName = _name
             if (s.flip) this.spriteFlip = true
+            if (s.offset) this.offset = s.offset
             if (!this.spriteImage) this.spriteImage = this.damiSprite
-            this.spriteImage.src = this.master.data.spriteFolder+s.path
+            this.spriteImage.src = this.master.data.spriteFolder + s.path
 
             this.length = 1
-            this.sprite = {
-                width: 0,
-                height: 0
-            }
+
             this.spriteImage.onload = () => {
                 this.spriteLoad = true
                 this.length = s.length
-                this.sprite = {
-                    width: this.spriteImage.width / this.length,
-                    height: this.spriteImage.height
-                }
+
             }
 
             return true
@@ -1800,17 +1924,29 @@
         draw() {
             this.#update()
 
+            const sw = this.spriteImage.width / this.length
+            const sh = this.spriteImage.height
             const cropbox = {
                 position: {
-                    x: this.sprite.width * this.currentFrame,
+                    x: sw * this.currentFrame,
                     y: 0,
                 },
-                width: this.sprite.width,
-                height: this.sprite.height,
+                width: sw,
+                height: sh,
             }
 
             if (this.spriteImage) {
                 if (!this.spriteLoad) return
+                if (this.offset) {
+                    this.drawposition.x += this.offset.x
+                    this.drawposition.y += this.offset.y
+                }
+                c.filter = 'none'
+                if (this.master.Tag.greyout)
+                    c.filter = "saturate(0%)";  // 彩度を0%にしてグレースケールっぽく
+                else if (this.master.Tag.invisible)
+                    c.filter = 'brightness(200%)'
+
                 if (!this.spriteFlip) {
                     c.drawImage(
                         this.spriteImage,
@@ -1821,17 +1957,14 @@
 
                         this.drawposition.x,
                         this.drawposition.y,
-                        this.sprite.width,
-                        this.sprite.height,
+                        sw,
+                        sh,
                     )
                 } else {
                     c.save()
                     c.scale(-1, 1);
-                    let _temp = -this.sprite.width
-                    if (this.master.Tag.greyout)
-                        c.filter = "saturate(0%)";  // 彩度を0%にしてグレースケールっぽく
-                    else if (this.master.Tag.invisible)
-                        c.filter = 'brightness(200%)'
+                    let _temp = sw
+
                     c.drawImage(
                         this.spriteImage,
                         cropbox.position.x,
@@ -1839,10 +1972,10 @@
                         cropbox.width,
                         cropbox.height,
 
-                        -this.drawposition.x + _temp,
+                        -(this.drawposition.x + _temp),
                         this.drawposition.y,
-                        this.sprite.width,
-                        this.sprite.height,
+                        sw,
+                        sh,
                     )
 
                     c.restore()
@@ -2030,16 +2163,16 @@
 
     let enemy = new Player(ModelHData2)
     enemy.ID = CharID.Enemy
-    enemy.position = { x: 5, y: 2 }
+    enemy.position = { x: 4, y: 2 }
 
     let player2_2 = new Player(ModelHData2)
     player2_2.ID = CharID.Actor
 
     const charH = new PlayerFromData(ModelHData_eventDrived)
-    const charL = new Player(ModelLData)
+    const charL = new PlayerFromData(ModelLData_EventDriven)
     let active_player = charH
 
-    let data_player = new PlayerFromData(ModelHData_eventDrived)
+    let data_player = charH
 
     let characters = []
     // actor test!
@@ -2056,6 +2189,7 @@
 
     GM.observers.push(active_player)
 
+
     function update() {
 
         //polygon renderer,描画順などがめんどくさいので、あとにする
@@ -2070,13 +2204,11 @@
 
         GM.update()
         //GM.notify('tests', GM)
-        for (const t of terrain) {
-            t.update()
-            t.draw()
-        }
+
 
         showHTML('active_player: ' + active_player.position.x + '' + active_player.position.y + ',charH: ' + charH.position.x + '' + charH.position.y + ',charL: ' + charL.position.x + '' + charL.position.y, 'position')
-
+        showHTML("current event queue: " + active_player.showEventQueue(), 'messs')
+        showHTML("current Tags: " + getActiveTags(active_player.Tag), 'tags')
         requestAnimationFrame(update)
 
 
