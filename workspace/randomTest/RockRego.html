@@ -14,6 +14,11 @@
 <div id="log">log</div>
 </p>
 <script>
+
+    function get2dLine(x0, y0, x1, y1, x) {
+        return (y0 - y1) / (x0 - x1) * x + (x0 * y1 - x1 * y0) / (x0 - x1)
+    }
+
     keyPress = function (key) {
         keys[key].pressed = true
     }
@@ -26,23 +31,6 @@
             return target[prop];
         }
     });
-
-    // 使い捨て外部リクエスト、自由に追加できる。
-    // 確認するたびにfalseにリセットされる
-    const sample_request = new Proxy({}, {
-        get: (target, prop) => {
-            const value = target[prop];
-            target[prop] = false; // 読んだら自動で false にする
-            return value ?? false;
-        }
-    });
-
-    // 未定義状態。自由に書き込める。デフォルト状態はfalse
-    const sample_Tag = new Proxy({}, {
-        get(target, prop) {
-            return prop in target ? target[prop] : false;
-        }
-    })
 
     function log(msg) {
         document.getElementById("log").innerText += "\n_" + msg
@@ -66,7 +54,14 @@
         el.innerText = MSG;
     }
 
+    function equipThisWithState(target) {
+        target.cst = function (stateName) {
+            this.state = new ImportedState(stateName, this.data.state[stateName])
 
+            this.counter.setEnd()
+            this.state.enter(this)
+        }
+    }
 
     function getActiveTags(tagObj, separator = " ") {
         return Object.entries(tagObj)
@@ -127,25 +122,356 @@
     }
 </script>
 
-<script id="data"></script>
+<script id="data">
+    const Hue =
+    {
+        name: "Hue Williams",
+        hp: 100,
+        initialState: 'idle',
+
+        state: {
+            idle: {
+                duration: 202,
+                sprite: {
+                    path: 'IMG_4904.png',
+                    length: 4,
+                    flip: true,
+                    offset: { x: -1, y: 0 }
+                },
+                on: {
+                    onMove: {
+                        nextState: 'move'
+                    },
+                    onEnd: {
+                        nextState: 'idle'
+                    },
+                    atk: {
+                        nextState: 'attack1'
+                    },
+
+                },
+            },
+            move: {
+                duration: 30,
+                sprite: {
+                    path:
+                        'IMG_4867.png',
+                    length: 8,
+                    flip: true,
+                    offset: { x: 0, y: -5 }
+                },
+                steps: [
+                    { time: 15, action: (target) => { target.pushEvent('movable'); } }
+                ],
+
+                on: {
+                    movable: true,
+                    onEnd: {
+                        nextState: 'idle'
+                    },
+
+                },
+
+            },
+
+            inStage: {
+                duration: 30,
+
+                sprite: {
+                    path: 'IMG_4866.png',
+                    length: 12,
+                    flip: true,
+                },
+                on: {
+                    onEnd: {
+                        nextState: 'idle'
+                    },
+
+                },
+            },
+            outStage: {
+                duration: 30,
+
+                sprite: {
+                    path: 'IMG_4901.png',
+                    length: 8,
+                    offset: { x: -20, y: 0 }
+                },
+                on: {
+                    onEnd: {
+                        nextState: 'idle'
+                    },
+
+                },
+            },
+            attack1: {
+                duration: 40,
+                steps:
+                    [
+                        { time: 40, action: (target) => target.showMSG('count 200') },
+                        { time: 70, action: (target) => target.showMSG('count 300') },
+                    ],
+                sprite: {
+                    path: 'IMG_4903.png',
+                    length: 11,
+                    flip: true,
+                    offset: { x: -9, y: -3 }
+                },
+                on: {
+                    onEnd: {
+                        nextState: 'idle'
+                    },
+                    atk: {
+                        nextState: 'attack2'
+                    },
+
+                },
+            },
+            attack2: {
+                duration: 80,
+                sprite: {
+                    path: 'IMG_4866.png',
+                    length: 12,
+                    flip: true,
+                    offset: { x: -27, y: -14 }
+                },
+                steps:
+                    [
+                        { time: 20, action: (target) => { target.Tag.hitStop = true; GM.pushEvent('hitStop', target, 30, 'just a test, you dont actually hit anyone'); } },
+                        { time: 40, action: (target) => { target.Tag.hitStop = true; GM.pushEvent('hitStop', target, 20, 'just a test, you dont actually hit anyone'); } },
+                    ],
+                on: {
+                    onEnd: {
+                        nextState: 'idle'
+                    },
+
+                },
+            },
+
+            injured: {
+                duration: 30,
+                transition: {
+                    onEnd: 'idle',
+                    atk: 'attack1'
+                },
+
+                sprite: {
+                    path: 'IMG_4873.png'
+                    ,
+                    length: 5,
+                    flip: true,
+                },
+                invisible: true,
+                on: {
+                    onEnd: {
+                        nextState: 'idle'
+                    },
+
+                },
+            },
+
+
+        },
+        spriteFolder: 'https://raw.githubusercontent.com/kurokoTJF/FUKAN/refs/heads/main/Sprites/Char/',
+
+    }
+
+</script>
 
 <script id="class">
+    class Counter {
+        constructor({
+            endTime = 100,
+            pause = false,
+            name = "",
+            end = false,
+            target = undefined,
+            msg = "__",
+            processCall = null,
+            endCall = () => { },
+        } = {}) {
+            this.time = 0
+            this.endTime = endTime
+            this.pause = pause
+            this.end = end
+            this.target = target
+            this.processCall = processCall
+            this.endCall = endCall
+            this.msg = msg
+        }
+        progress() {
+            return this.time / this.endTime
+        }
+        start() {
+            this.pause = false
+        }
+        pause() {
+            this.pause = true
+        }
+
+        setEnd() {
+            this.end = true
+        }
+        isEnd() {
+            return this.end
+        }
+
+        #endMethod() {
+            //console.log(this.msg + " " + this.endTime + " counter end")
+            this.end = true
+            this.endCall()
+        }
+
+
+        update() {
+            if (this.time < this.endTime) {
+                if (this.processCall) this.processCall()
+                this.time++
+            } else this.#endMethod()
+        }
+    }
+
+    class StateOfPlayer {
+        constructor() {
+            equipThisWithEventHandler(this)
+            this.Tag = new Proxy({}, {
+                get(target, prop) {
+                    return prop in target ? target[prop] : false;
+                }
+            })
+            this.on('getHurt', (target, dmg) => {
+                target.cst('injured')
+                target.HP -= dmg
+            })
+        }
+        // 対応するeventとハンドラーを導入
+
+        update(target) {
+            target.position.x += target.deltaPosition.x
+            target.position.y += target.deltaPosition.y
+
+            target.deltaPosition.y += 0.2
+
+            // 通常経過処理。ここに集約
+            if (target.Tag.hitByThisShit === true && target.Tag.invisible === false) {
+                target.Tag.invisible = true
+                target.pushEvent('getHurt', 10)
+                GM.addCounter({
+                    endTime: 100,
+                    endCall: () => {
+                        target.Tag.invisible = false
+                    }
+                })
+            }
+
+            // reset specific Tags
+            target.Tag.hitByThisShit = false
+
+
+            if (this.Tag.onMove) {
+                /* if (keys.down.pressed) {
+                    // check direction
+                    if (target.setDeltaPosition(0, 1))
+                        target.pushEvent('onMove')
+                }
+                if (keys.up.pressed) {
+                    if (target.setDeltaPosition(0, -1))
+                        target.pushEvent('onMove')
+                }
+                if (keys.left.pressed) {
+                    if (target.setDeltaPosition(-1, 0))
+                        target.pushEvent('onMove')
+                }
+                if (keys.right.pressed) {
+                    if (target.setDeltaPosition(1, 0))
+                        target.pushEvent('onMove')
+                } */
+
+            }
+
+        }
+
+        enter(target) {
+            console.log('entered!')
+        }
+    }
+
+    class ImportedState extends StateOfPlayer {
+        constructor(sname, data) {
+            super()
+            this.stateData = data
+            this.name = sname
+            for (const [eName, def] of Object.entries(data.on || {})) {
+
+                if (eName == 'movable') {
+                    this.on('movable', (target) => {
+                        console.log('movable')
+                        target.position.x += target.deltaPosition.x
+                        target.position.y += target.deltaPosition.y
+                    })
+                    continue
+                }
+                if (eName == 'onMove') {
+                    this.Tag.onMove = true
+                }
+                this.on(eName, (target, eData) => {
+                    if (def.log) log(target.name + ' ' + def.log)
+                    if (def.nextState) {
+                        target.cst(def.nextState)
+                    }
+                })
+
+
+            }
+        }
+
+        update(target) {
+            super.update(target)
+
+        }
+
+        enter(target) {
+            const _counter = GM.addCounter({
+                msg: '[' + this.name + ']',
+                target: target,
+                endTime: this.stateData.duration,
+                processCall: () => {
+                    for (const step of this.stateData.steps || [])
+                        if (_counter.time === step.time)
+                            step.action(target)
+                },
+                endCall: () => {
+                    target.pushEvent('onEnd')
+                }
+            })
+
+            // counter must be end
+            if (target.counter) target.counter.setEnd()
+            target.counter = _counter
+        }
+    }
     class Player {
         constructor(data) {
             this.position = { x: 200, y: 100 }
             this.width = 30
             this.height = 30
             this.deltaPosition = { x: 0, y: 0 }
-            this.renderer = new movieRenderer(this)
+            this.renderer = new MovieRenderer(this)
 
+            this.data = data
+            const initialState = data.state[data.initialState]
+            this.state = new ImportedState(data.initialState, initialState)
+            this.state.enter(this)
+            equipThisWithState(this)
+
+            equipThisWithEventManager(this)
+            equipThisWithProxy(this)
 
         }
         update() {
+            this.dealEvent(this.state)
+            this.state.update(this)
 
-            this.position.x += this.deltaPosition.x
-            this.position.y += this.deltaPosition.y
-
-            this.deltaPosition.y += 0.2
         }
 
         draw() {
@@ -164,19 +490,37 @@
             if (ID == 'slop') {
                 this.slopHeight = function () {
                     const rpx = player.position.x - this.position.x
-                    const clampedX = Math.max(-player.width, Math.min(rpx, this.width));
+                    const clampedX = Math.max(-player.width / 2, Math.min(rpx, this.width - player.width / 2));
                     if (player.position.y < this.position.y + this.height)
                         if (clampedX > -player.width && clampedX < this.width) {
-                            return this.position.y + this.height - this.height / (this.width+player.width) * rpx
+
+                            return this.position.y + this.height -
+                                get2dLine(
+                                    - player.width / 2,
+                                    0,
+                                    this.width - player.width / 2,
+                                    this.height,
+                                    clampedX)
+                            return this.position.y + this.height - this.height / (this.width + player.width) * clampedX
                         }
+
                     return this.position.y
                 }
                 this.draw = function () {
+                    if (!this.drawposition) this.drawposition = { x: 0, y: 0 }
+                    this.drawposition.x = this.position.x
+                    this.drawposition.y = this.slopHeight()
+                    c.fillStyle = 'grey'
+                    c.fillRect(this.drawposition.x, this.drawposition.y, this.width, this.height)
+
+
+                    this.drawposition.x = this.position.x
+                    this.drawposition.y = this.position.y
                     c.fillStyle = 'black'
                     c.beginPath()
-                    c.moveTo(this.position.x, this.position.y + this.height)
-                    c.lineTo(this.position.x + this.width, this.position.y + this.height)
-                    c.lineTo(this.position.x + this.width, this.position.y)
+                    c.moveTo(this.drawposition.x, this.drawposition.y + this.height)
+                    c.lineTo(this.drawposition.x + this.width, this.drawposition.y + this.height)
+                    c.lineTo(this.drawposition.x + this.width, this.drawposition.y)
                     c.closePath()
                     c.fill()
                 }
@@ -188,7 +532,7 @@
             }
         }
 
-        hitTest(target){
+        hitTest(target) {
             const py1 = target.position.y + target.height + target.deltaPosition.y
             const py2 = target.position.y + target.deltaPosition.y
             const px1 = target.position.x + target.width + target.deltaPosition.x
@@ -219,7 +563,6 @@
                     target.position.x = this.position.x - target.width
                     target.deltaPosition.x = 0
                 } else {
-                    log('?!')
                     const centerfromAbove = target.position.y + target.height / 2 <= this.position.y + this.height / 2;
                     const centerfromBelow = target.position.y + target.height / 2 >= this.position.y + this.height / 2;
                     const centerfromRight = target.position.x + target.width / 2 >= this.position.x + this.width / 2;
@@ -248,7 +591,7 @@
             if (this.slopHeight) {
                 this.position.y = this.slopHeight()
             }
-            
+
             this.hitTest(target)
 
             this.position.y = y
@@ -257,41 +600,241 @@
 
     }
 
-    class movieRenderer {
+    class MovieRenderer {
+
+
         constructor(master) {
             this.master = master
+            this.drawposition = { x: 0, y: 0 }
+            this.spriteName = ''
+            this.damiSprite = new Image()
+            this.spriteImage = this.damiSprite
+            this.spriteLoad = false
+            this.spriteFlip = false
+            this.length = 1 // numbers of frames
+            this.currentFrame = 0
+            this.cropbox = {}
+            this.sprite = {
+                width: 0,
+                height: 0
+            }
         }
 
+        #updateSpriteInfo(_name) {
+            if (!this.master.data.state[_name].sprite) {
+                console.log('not found sprite name')
+                return false
+            }
+            if (this.spriteName == _name) return true
+            let s = this.master.data.state[_name].sprite
+
+            this.offset = null
+            this.spriteFlip = false
+            this.spriteLoad = false
+            this.spriteName = _name
+            if (s.flip) this.spriteFlip = true
+            if (s.offset) this.offset = s.offset
+            if (!this.spriteImage) this.spriteImage = this.damiSprite
+            this.spriteImage.src = this.master.data.spriteFolder + s.path
+
+            this.length = 1
+
+            this.spriteImage.onload = () => {
+                this.spriteLoad = true
+                this.length = s.length
+
+            }
+
+            return true
+        }
+
+        // master state, main counter
+        #update() {
+            if (this.#updateSpriteInfo(this.master.state.name)) { }
+            else {
+                this.spriteName = ''
+                this.spriteImage = null
+                console.log('no shit to render')
+                return
+            }
+
+
+            const mc = this.master.counter
+            const mp = this.master.position
+            const mw = this.master.width
+            const mh = this.master.height
+            const cx = mp.x + mw / 2
+            const cy = mp.y + mh
+            const sw = this.spriteImage.width / this.length
+            const sh = this.spriteImage.height
+
+            this.drawposition.x = cx - sw / 2
+            this.drawposition.y = cy - sh
+
+
+            let FrameBuffer = mc.endTime / this.length
+            this.currentFrame = Math.floor(mc.time / FrameBuffer)
+            this.currentFrame %= this.length // loop
+        }
+
+        // draw position + Current Frame
         draw() {
+
+            this.#update()
+
             c.fillStyle = 'grey'
             c.fillRect(this.master.position.x, this.master.position.y, this.master.width, this.master.height)
 
+            const sw = this.spriteImage.width / this.length
+            const sh = this.spriteImage.height
+            const cropbox = {
+                position: {
+                    x: sw * this.currentFrame,
+                    y: 0,
+                },
+                width: sw,
+                height: sh,
+            }
+
+            if (this.spriteImage) {
+                if (!this.spriteLoad) return
+                if (this.offset) {
+                    this.drawposition.x += this.offset.x
+                    this.drawposition.y += this.offset.y
+                }
+                c.filter = 'none'
+                if (this.master.Tag.greyout)
+                    c.filter = "saturate(0%)";  // 彩度を0%にしてグレースケールっぽく
+                else if (this.master.Tag.invisible)
+                    c.filter = 'brightness(200%)'
+
+                if (!this.spriteFlip) {
+                    c.drawImage(
+                        this.spriteImage,
+                        cropbox.position.x,
+                        cropbox.position.y,
+                        cropbox.width,
+                        cropbox.height,
+
+                        this.drawposition.x,
+                        this.drawposition.y,
+                        sw,
+                        sh,
+                    )
+                } else {
+                    c.save()
+                    c.scale(-1, 1);
+                    let _temp = sw
+
+                    c.drawImage(
+                        this.spriteImage,
+                        cropbox.position.x,
+                        cropbox.position.y,
+                        cropbox.width,
+                        cropbox.height,
+
+                        -(this.drawposition.x + _temp),
+                        this.drawposition.y,
+                        sw,
+                        sh,
+                    )
+
+                    c.restore()
+                    c.filter = 'none'
+                }
+
+            }
+
+            c.fillStyle = 'rgba(127,127,127,1)'
+            c.fillText(this.currentFrame, this.drawposition.x, this.drawposition.y + 20, 24)
         }
     }
+
+
+
+    const GM = {
+
+        counters: [],
+        update_counters: function () {
+
+            for (let _c of this.counters) {
+                if (_c.pause === false)
+                    _c.update()
+            }
+            this.counters = this.counters.filter((_c) => _c.end == false)
+        },
+        showCounters: function () {
+            let _table = ""
+            for (let _c of this.counters) {
+                _table += _c.msg + ":" + _c.time + "/" + _c.endTime + "\n"
+            }
+            return _table
+        }
+        ,
+        addCounter: function ({
+            msg = "[untitled]",
+            target = undefined,
+            endTime = 10,
+            processCall = null,
+            endCall = () => {
+                this.end = true
+            },
+
+        } = {}) {
+            let _temp = new Counter({
+                endTime: endTime,
+                target: target,
+                msg: msg,
+                processCall: processCall,
+                endCall: endCall,
+            })
+            this.counters.push(_temp)
+            return _temp
+        },
+        update: function () {
+            this.update_counters()
+        }
+
+    }
 </script>
+
 
 
 
 <script>
     const canvas = document.querySelector("canvas")
     const c = canvas.getContext("2d", { willReadFrequently: true })
+    w = canvas.width
+    h = canvas.height
 
-
-    const player = new Player({})
+    GM.addCounter({
+        endTime: 100,
+        endCall: () => {
+            log('yeah')
+        }
+    })
+    const player = new Player(Hue)
     const terrain = new Tiles()
     terrain.width = 300
     terrain.height = 30
 
     const terrain2 = new Tiles('slop')
-    terrain2.width = 200
-    terrain2.height = 50
+    terrain2.width = 250
+    terrain2.height = 80
     terrain2.position.x = 200
-    terrain2.position.y = 150
+    terrain2.position.y = 100
 
+    terrains = []
+    terrains.push(terrain)
+    terrains.push(terrain2)
     function update() {
+
+
+        GM.update()
         // terrain update
-        terrain.update(player)
-        terrain2.update(player)
+        terrains.forEach(element => {
+            element.update(player)
+        })
 
         //player update
         player.update()
@@ -308,7 +851,8 @@
         // player
         player.draw()
 
-
+        showHTML(player.state.name, 'name')
+        showHTML(GM.showCounters(), 'counter')
 
 
         if (keys.atk.pressed)
