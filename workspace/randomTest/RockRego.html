@@ -1,0 +1,245 @@
+<body></body>
+<canvas id="canvas" width="500" height="300"></canvas>
+
+<p>
+    <button onmousedown="keyPress('atk')"> atk </button>
+    <button onmousedown="keyPress('jump')"> jump </button>
+</p>
+
+<p>
+<div id="log">log</div>
+</p>
+<script>
+    keyPress = function (key) {
+        keys[key].pressed = true
+    }
+
+    const keys = new Proxy({}, {
+        get(target, prop) {
+            if (!(prop in target)) {
+                target[prop] = { press: false, pressed: false };
+            }
+            return target[prop];
+        }
+    });
+
+    // 使い捨て外部リクエスト、自由に追加できる。
+    // 確認するたびにfalseにリセットされる
+    const sample_request = new Proxy({}, {
+        get: (target, prop) => {
+            const value = target[prop];
+            target[prop] = false; // 読んだら自動で false にする
+            return value ?? false;
+        }
+    });
+
+    // 未定義状態。自由に書き込める。デフォルト状態はfalse
+    const sample_Tag = new Proxy({}, {
+        get(target, prop) {
+            return prop in target ? target[prop] : false;
+        }
+    })
+
+    function log(msg) {
+        document.getElementById("log").innerText += "\n_" + msg
+    }
+
+    function showHTML(MSG, ID) {
+        let el = document.getElementById(ID);
+
+        if (!el) {
+            el = document.createElement('div');
+            el.id = ID;
+
+            const body = document.body;
+            if (body.firstChild) {
+                body.insertBefore(el, body.firstChild); // ← 先頭に挿入
+            } else {
+                body.appendChild(el); // ← 最悪何もないときは普通に追加
+            }
+        }
+
+        el.innerText = MSG;
+    }
+
+
+
+    function getActiveTags(tagObj, separator = " ") {
+        return Object.entries(tagObj)
+            .filter(([_, v]) => v === true)
+            .map(([k]) => k)
+            .join(separator);
+    }
+
+    function equipThisWithProxy(target) {
+        target.request = new Proxy({}, {
+            get: (target, prop) => {
+                const value = target[prop];
+                target[prop] = false; // 読んだら自動で false にする
+                return value ?? false;
+            }
+        });
+
+        // 未定義状態。自由に書き込める。デフォルト状態はfalse
+        target.Tag = new Proxy({}, {
+            get(target, prop) {
+                return prop in target ? target[prop] : false;
+            }
+        })
+    }
+
+    function equipThisWithEventHandler(target) {
+        target.handlers = {}
+        target.on = function (event, handler) {
+            this.handlers[event] = handler
+        }
+
+        target.onRequest = function (eventName, target, ...args) {
+            const handler = this.handlers[eventName]
+            if (handler) handler(target, ...args)
+        }
+    }
+
+    function equipThisWithEventManager(target) {
+        target.eventQueue = []
+        target.pushEvent = function (eName, ...args) {
+            this.eventQueue.push([eName, ...args])
+        }
+        target.dealEvent = function (state) {
+            for (const [ev, ...args] of this.eventQueue)
+                state.onRequest(ev, this, ...args)
+            this.eventQueue = []
+        }
+        target.resetEvent = function () {
+            this.eventQueue = []
+        }
+        target.showEventQueue = function () {
+            let str = ''
+            for (const [ev, ...args] of this.eventQueue) {
+                str += ev + ' '
+            }
+            return str
+        }
+    }
+</script>
+
+<script id="data"></script>
+
+<script id="class">
+    class Player {
+        constructor(data) {
+            this.position = { x: 200, y: 100 }
+            this.width = 30
+            this.height = 30
+            this.deltaPosition = { x: 0, y: 0 }
+            this.renderer = new movieRenderer(this)
+
+
+        }
+        update() {
+
+            this.position.x += this.deltaPosition.x
+            this.position.y += this.deltaPosition.y
+
+            this.deltaPosition.y += 0.2
+        }
+
+        draw() {
+            this.renderer.draw()
+
+        }
+
+
+    }
+
+    class Tiles {
+        constructor() {
+            this.position = { x: 20, y: 250 }
+            this.width = 30
+            this.height = 30
+        }
+
+        update() {
+            const px1 = player.position.x + player.width + player.deltaPosition.x
+            const py1 = player.position.y + player.height + player.deltaPosition.y
+            const px2 = player.position.x - player.deltaPosition.x
+            const py2 = player.position.y - player.deltaPosition.y
+            if (px1 > this.position.x &&
+                py1 > this.position.y &&
+                px2 < this.position.x + this.width &&
+                py2 < this.position.y + this.height
+            ) {
+                player.deltaPosition.x = 0
+                player.deltaPosition.y = 0
+                if (player.position.y + player.height / 2 < this.position.y + this.height / 2) {
+                    player.position.y = this.position.y - player.height
+                }
+            }
+        }
+
+        draw() {
+            c.fillRect(this.position.x, this.position.y, 300, 30)
+
+        }
+
+    }
+
+    class movieRenderer {
+        constructor(master) {
+            this.master = master
+        }
+
+        draw() {
+            c.fillStyle = 'black'
+            c.fillRect(this.master.position.x, this.master.position.y, this.master.width, this.master.height)
+
+        }
+    }
+</script>
+
+
+
+<script>
+    const canvas = document.querySelector("canvas")
+    const c = canvas.getContext("2d", { willReadFrequently: true })
+
+
+    const player = new Player({})
+    const terrain = new Tiles()
+    terrain.width = 300
+    terrain.height = 30
+
+    function update() {
+        // terrain update
+        terrain.update()
+
+        //player update
+        player.update()
+
+        //bg
+        c.fillStyle = 'rgb(220,220,220)'
+        c.fillRect(0, 0, canvas.width, canvas.height)
+
+        // player
+        player.draw()
+
+        // terrain
+        terrain.draw()
+
+
+        if (keys.atk.pressed)
+            log('shir')
+        if (keys.jump.pressed)
+            player.deltaPosition.y = -6
+        requestAnimationFrame(update)
+
+        for (let _key in keys) keys[_key].pressed = false
+
+
+    }
+
+
+
+    update()
+
+</script>
