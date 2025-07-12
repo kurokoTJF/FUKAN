@@ -1,6 +1,7 @@
-<body></body>
 <canvas id="canvas" width="500" height="300"></canvas>
 
+<body></body>
+<div id="counter"></div>
 <p>
     <button onmousedown="keyPress('atk')"> atk </button>
     <button onmousedown="keyPress('jump')"> jump </button>
@@ -19,8 +20,36 @@
         return (y0 - y1) / (x0 - x1) * x + (x0 * y1 - x1 * y0) / (x0 - x1)
     }
 
+    const keyMap = {
+        'a': 'left',
+        'd': 'right',
+        'w': 'jump',
+        's': 'stop',
+        'j': 'atk',
+    }
+    document.addEventListener("keydown", (e) => {
+        const action = keyMap[e.key.toLowerCase()]
+        if (action) {
+            keys[action].pressed = true
+            e.preventDefault()  // ページスクロールなどを防止
+        }
+    })
+
+    // 離されたとき → pressed = false（押しっぱなし解除）
+    document.addEventListener("keyup", (e) => {
+        const action = keyMap[e.key.toLowerCase()]
+        if (action) {
+            keys[action].pressed = false
+            keys[action].press = false
+            e.preventDefault()
+        }
+    })
+
+
+
     keyPress = function (key) {
         keys[key].pressed = true
+        keys[key].source = 'button'
     }
 
     const keys = new Proxy({}, {
@@ -142,6 +171,12 @@
                     onMove: {
                         nextState: 'move'
                     },
+                    fall: {
+                        nextState: 'jump'
+                    },
+                    jump: {
+                        nextState: 'jump'
+                    },
                     onEnd: {
                         nextState: 'idle'
                     },
@@ -149,6 +184,20 @@
                         nextState: 'attack1'
                     },
 
+                },
+            },
+            jump: {
+                duration: 202,
+                sprite: {
+                    path: 'IMG_4904.png',
+                    length: 4,
+                    flip: true,
+                    offset: { x: -1, y: 0 }
+                },
+                on: {
+                    land: {
+                        nextState: 'idle'
+                    },
                 },
             },
             move: {
@@ -350,7 +399,14 @@
             target.position.x += target.deltaPosition.x
             target.position.y += target.deltaPosition.y
 
-            target.deltaPosition.y += 0.2
+            if (target.deltaPosition.y > 0)
+                target.pushEvent('fall')
+
+            target.renderer.update()
+
+            if (!target.gravity) target.gravity = 0.4
+            target.deltaPosition.y += target.gravity
+            target.deltaPosition.x = 0
 
             // 通常経過処理。ここに集約
             if (target.Tag.hitByThisShit === true && target.Tag.invisible === false) {
@@ -549,6 +605,7 @@
                 const fromRight = target.position.x >= this.position.x + this.width;
                 const fromLeft = target.position.x + target.width <= this.position.x;
                 if (fromAbove) {
+                    target.pushEvent('land')
                     target.position.y = this.position.y - target.height
                     target.deltaPosition.y = 0
                 } else if (fromBelow) {
@@ -568,6 +625,8 @@
                     const centerfromRight = target.position.x + target.width / 2 >= this.position.x + this.width / 2;
                     const centerfromLeft = target.position.x + target.width / 2 <= this.position.x + this.width / 2;
                     if (centerfromAbove) {
+                        target.pushEvent('land')
+
                         target.position.y = this.position.y - target.height
                         target.deltaPosition.y = 0
                     } else if (centerfromBelow) {
@@ -626,13 +685,13 @@
                 return false
             }
             if (this.spriteName == _name) return true
-            let s = this.master.data.state[_name].sprite
+            const s = this.master.data.state[_name].sprite
 
             this.offset = null
-            this.spriteFlip = false
             this.spriteLoad = false
             this.spriteName = _name
-            if (s.flip) this.spriteFlip = true
+
+
             if (s.offset) this.offset = s.offset
             if (!this.spriteImage) this.spriteImage = this.damiSprite
             this.spriteImage.src = this.master.data.spriteFolder + s.path
@@ -649,8 +708,22 @@
         }
 
         // master state, main counter
-        #update() {
-            if (this.#updateSpriteInfo(this.master.state.name)) { }
+        update() {
+            if (this.#updateSpriteInfo(this.master.state.name)) {
+                const s = this.master.data.state[this.master.state.name].sprite
+
+                if (s.flip) { // left sprite
+                    if (this.master.deltaPosition.x > 0)
+                        this.spriteFlip = true
+                    else if (this.master.deltaPosition.x < 0)
+                        this.spriteFlip = false
+                } else
+                    if (this.master.deltaPosition.x > 0)
+                        this.spriteFlip = false
+                    else if (this.master.deltaPosition.x < 0)
+                        this.spriteFlip = true
+
+            }
             else {
                 this.spriteName = ''
                 this.spriteImage = null
@@ -680,7 +753,6 @@
         // draw position + Current Frame
         draw() {
 
-            this.#update()
 
             c.fillStyle = 'grey'
             c.fillRect(this.master.position.x, this.master.position.y, this.master.width, this.master.height)
@@ -708,20 +780,8 @@
                 else if (this.master.Tag.invisible)
                     c.filter = 'brightness(200%)'
 
-                if (!this.spriteFlip) {
-                    c.drawImage(
-                        this.spriteImage,
-                        cropbox.position.x,
-                        cropbox.position.y,
-                        cropbox.width,
-                        cropbox.height,
+                if (this.spriteFlip || this.master.deltaPosition.x > 0) {
 
-                        this.drawposition.x,
-                        this.drawposition.y,
-                        sw,
-                        sh,
-                    )
-                } else {
                     c.save()
                     c.scale(-1, 1);
                     let _temp = sw
@@ -740,8 +800,22 @@
                     )
 
                     c.restore()
-                    c.filter = 'none'
+
+                } else if (!this.spriteFlip || this.master.deltaPosition.x < 0) {
+                    c.drawImage(
+                        this.spriteImage,
+                        cropbox.position.x,
+                        cropbox.position.y,
+                        cropbox.width,
+                        cropbox.height,
+
+                        this.drawposition.x,
+                        this.drawposition.y,
+                        sw,
+                        sh,
+                    )
                 }
+                c.filter = 'none'
 
             }
 
@@ -793,6 +867,43 @@
         },
         update: function () {
             this.update_counters()
+            terrains.forEach(element => {
+                element.update(player)
+            })
+
+            //player update
+            player.update()
+
+            //bg
+            c.fillStyle = 'rgb(220,220,220)'
+            c.fillRect(0, 0, canvas.width, canvas.height)
+            const cellSize = 30; // 1マスのサイズ
+            const cols = Math.floor(w / cellSize); // 横方向のマス数
+            const rows = Math.floor(h / cellSize); // 縦方向のマス数
+
+            c.strokeStyle = 'grey';
+
+            for (let i = 0; i <= cols; i++) {
+                c.beginPath();
+                c.moveTo(i * cellSize, 0);
+                c.lineTo(i * cellSize, h);
+                c.stroke();
+            }
+
+            for (let j = 0; j <= rows; j++) {
+                c.beginPath();
+                c.moveTo(0, j * cellSize);
+                c.lineTo(w, j * cellSize);
+                c.stroke();
+            }
+
+            // terrain
+            terrain.draw()
+            terrain2.draw()
+
+
+            // player
+            player.draw()
         }
 
     }
@@ -827,29 +938,28 @@
     terrains = []
     terrains.push(terrain)
     terrains.push(terrain2)
+
+
+    const onPressHandlers = {
+        jump: () => {
+            player.deltaPosition.y = -8
+            player.pushEvent('jump')
+        },
+        atk: () => {
+            // ここにattack開始など
+        },
+        left: () => {
+            // 初期加速など
+        }
+        // 必要なキーだけ登録すればOK
+    }
+
     function update() {
 
 
         GM.update()
         // terrain update
-        terrains.forEach(element => {
-            element.update(player)
-        })
 
-        //player update
-        player.update()
-
-        //bg
-        c.fillStyle = 'rgb(220,220,220)'
-        c.fillRect(0, 0, canvas.width, canvas.height)
-
-        // terrain
-        terrain.draw()
-        terrain2.draw()
-
-
-        // player
-        player.draw()
 
         showHTML(player.state.name, 'name')
         showHTML(GM.showCounters(), 'counter')
@@ -857,18 +967,30 @@
 
         if (keys.atk.pressed)
             player.deltaPosition.x = 0
-        if (keys.jump.pressed)
-            player.deltaPosition.y = -6
         if (keys.left.pressed)
             player.deltaPosition.x = -1
         if (keys.stop.pressed)
             player.deltaPosition.x = 0
         if (keys.right.pressed)
             player.deltaPosition.x = 1
+
+        for (const key in onPressHandlers) {
+            if (keys[key].pressed && !keys[key].press) {
+                onPressHandlers[key]() // 押された瞬間だけ実行
+                keys[key].press = true
+            }
+        }
+
+
+        for (let _key in keys) {
+            if (keys[_key].source === 'button') {
+                keys[_key].pressed = false
+                keys[_key].press = false
+                keys[_key].source = null
+            }
+        }
+
         requestAnimationFrame(update)
-
-        for (let _key in keys) keys[_key].pressed = false
-
 
     }
 
