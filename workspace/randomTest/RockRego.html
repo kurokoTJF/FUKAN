@@ -12,25 +12,29 @@
 </p>
 
 <p>
+    <button onmousedown="keyPress('shot')"> shot </button>
+</p>
+
+<p>
 <div id="log">log</div>
 </p>
-<script>
+<script id="equipment & engine & utilities">
 
     function get2dLine(x0, y0, x1, y1, x) {
         return (y0 - y1) / (x0 - x1) * x + (x0 * y1 - x1 * y0) / (x0 - x1)
     }
 
-    const keyMap = {
-        'a': 'left',
-        'd': 'right',
-        'w': 'jump',
-        's': 'stop',
-        'j': 'atk',
-    }
+
     document.addEventListener("keydown", (e) => {
         const action = keyMap[e.key.toLowerCase()]
         if (action) {
             keys[action].pressed = true
+            if (onPressHandlers[action]) {
+                onPressHandlers[action]
+            } else {
+                keys[action].press = true
+
+            }
             e.preventDefault()  // ページスクロールなどを防止
         }
     })
@@ -40,7 +44,12 @@
         const action = keyMap[e.key.toLowerCase()]
         if (action) {
             keys[action].pressed = false
-            keys[action].press = false
+            if (onReleasehandlers[action]) {
+                onReleasehandlers[action]
+            } else {
+                keys[action].press = false
+
+            }
             e.preventDefault()
         }
     })
@@ -89,6 +98,83 @@
 
             this.counter.setEnd()
             this.state.enter(this)
+        }
+    }
+
+    function cameraProjection(target, camera) {
+        //target.drawPosition.x = target.position.x
+        //target.drawPosition.y = target.position.y
+        c.save()
+
+        target.drawPosition.x = target.position.x - camera.position.x + w / 2
+        target.drawPosition.y = target.position.y - camera.position.y + h / 2
+
+        const scale = 1.5
+        c.scale(scale, scale)
+        // 左上がスケールの原点
+        // 真ん中の点を真ん中に戻せばいい
+        //　拡大したら、点の調整もスケールかけるので、最後に/scaleが必要
+        target.drawPosition.x -= ((scale - 1) * w / 2) / scale
+        target.drawPosition.y -= ((scale - 1) * h / 2) / scale
+
+        target.draw()
+
+        c.restore()
+
+
+    }
+
+    function equipThisWithCollision(target) {
+        target.position = { x: 0, y: 0 }
+        target.deltaPosition = { x: 0, y: 0 }
+        target.drawPosition = { x: 0, y: 0 }
+        target.width = 1
+        target.height = 1
+        target.gravity = 0
+        target.direction = 1
+
+        target.updateDir = function () {
+            if (target.deltaPosition.x > 0) target.direction = 1
+            else if (target.deltaPosition.x < 0) target.direction = -1
+        }
+        target.drawRect = function (ctx) {
+            ctx.fillStyle = 'black'
+            ctx.fillRect(target.drawPosition.x, target.drawPosition.y, this.width, this.height)
+        }
+
+        target.initialize = function (x, y, w, h) {
+            this.position = { x: x, y: y }
+            this.width = w
+            this.height = h
+        }
+
+        target.swapPosition = function () {
+            target.position.x += target.deltaPosition.x
+            target.position.y += target.deltaPosition.y
+        }
+
+        target.updateGravity = function () {
+            target.deltaPosition.y += target.gravity
+        }
+
+        target.Ytop = function () {
+            return { now: this.position.y, next: this.position.y + this.deltaPosition.y }
+        }
+        target.Ybottom = function () {
+            return { now: this.position.y + this.height, next: this.position.y + this.height + this.deltaPosition.y }
+
+        }
+        target.Xleft = function () {
+            return { now: this.position.x, next: this.position.x + this.deltaPosition.x }
+
+        }
+        target.Xright = function () {
+            return { now: this.position.x + this.width, next: this.position.x + this.width + this.deltaPosition.x }
+
+            return this.position.x + this.width
+        }
+        target.centerPosition = function () {
+            return { x: this.position.x + this.width / 2, y: this.position.y + this.height / 2 }
         }
     }
 
@@ -162,17 +248,15 @@
             idle: {
                 duration: 202,
                 sprite: {
-                    path: 'IMG_4904.png',
-                    length: 4,
-                    flip: true,
-                    offset: { x: -1, y: 0 }
+                    path: 'IMG_4913.png',
+                    length: 2,
                 },
                 on: {
                     onMove: {
                         nextState: 'move'
                     },
                     fall: {
-                        nextState: 'jump'
+                        nextState: 'fall'
                     },
                     jump: {
                         nextState: 'jump'
@@ -186,28 +270,100 @@
 
                 },
             },
-            jump: {
-                duration: 202,
+            idle_shoot: {
                 sprite: {
-                    path: 'IMG_4904.png',
-                    length: 4,
-                    flip: true,
-                    offset: { x: -1, y: 0 }
+                    path: 'IMG_4920.png',
+                    length: 1,
+                    offset: { x: -4, y: -1 }
+                },
+            },
+            jump: {
+                duration: 15,
+
+                sprite: {
+                    loop: 0,
+                    path: 'IMG_4914.png',
+                    length: 1,
                 },
                 on: {
+                    onMove: {},
                     land: {
                         nextState: 'idle'
                     },
+                    fall: {
+                        nextState: 'fall'
+                    }
                 },
             },
+            jump_shoot: {
+                sprite: {
+                    loop: 0,
+                    path: 'IMG_4911.png',
+                    length: 1,
+                },
+            },
+
+            fall: {
+                duration: 15,
+                sprite: {
+                    loop: 0,
+                    path: 'IMG_4914.png',
+                    length: 1,
+                },
+                on: {
+                    onMove: {},
+
+                    land: {
+                        nextState: 'idle'
+                    },
+                    jump: {
+                        nextState: 'jump'
+                    }
+                },
+            },
+            fall_shoot: {
+                sprite: {
+                    loop: 0,
+                    path: 'IMG_4911.png',
+                    length: 1,
+                },
+
+            },
+
+            land: {
+                duration: 0,
+                sprite: {
+
+                    path: 'IMG_4908.png',
+                    length: 2,
+                    flip: true,
+                },
+                on: {
+                    onMove: {
+                        nextState: 'move'
+                    },
+                    fall: {
+                        nextState: 'fall'
+                    },
+                    jump: {
+                        nextState: 'jump'
+                    },
+                    onEnd: {
+                        nextState: 'idle'
+                    },
+                    atk: {
+                        nextState: 'attack1'
+                    },
+                },
+            },
+
             move: {
                 duration: 30,
                 sprite: {
-                    path:
-                        'IMG_4867.png',
-                    length: 8,
-                    flip: true,
-                    offset: { x: 0, y: -5 }
+                    loop: 1,
+                    path: 'IMG_4922.png',
+                    length: 5,
+                    offset: { x: 0, y: -1 }
                 },
                 steps: [
                     { time: 15, action: (target) => { target.pushEvent('movable'); } }
@@ -215,11 +371,30 @@
 
                 on: {
                     movable: true,
+                    onMove: {},
+                    stopMove: { nextState: 'idle' },
+                    jump: {
+                        nextState: 'jump'
+                    },
                     onEnd: {
                         nextState: 'idle'
                     },
+                    fall: {
+                        nextState: 'fall'
+                    }
 
                 },
+
+            },
+            move_shoot: {
+                sprite: {
+                    loop: 1,
+                    path: 'IMG_4921.png',
+                    length: 5,
+                    offset: { x: -5, y: -2 }
+
+                },
+
 
             },
 
@@ -255,16 +430,12 @@
             },
             attack1: {
                 duration: 40,
-                steps:
-                    [
-                        { time: 40, action: (target) => target.showMSG('count 200') },
-                        { time: 70, action: (target) => target.showMSG('count 300') },
-                    ],
+
                 sprite: {
                     path: 'IMG_4903.png',
                     length: 11,
                     flip: true,
-                    offset: { x: -9, y: -3 }
+                    offset: { x: 7, y: 1 }
                 },
                 on: {
                     onEnd: {
@@ -282,13 +453,9 @@
                     path: 'IMG_4866.png',
                     length: 12,
                     flip: true,
-                    offset: { x: -27, y: -14 }
+                    offset: { x: 1, y: 0 }
+
                 },
-                steps:
-                    [
-                        { time: 20, action: (target) => { target.Tag.hitStop = true; GM.pushEvent('hitStop', target, 30, 'just a test, you dont actually hit anyone'); } },
-                        { time: 40, action: (target) => { target.Tag.hitStop = true; GM.pushEvent('hitStop', target, 20, 'just a test, you dont actually hit anyone'); } },
-                    ],
                 on: {
                     onEnd: {
                         nextState: 'idle'
@@ -396,18 +563,10 @@
         // 対応するeventとハンドラーを導入
 
         update(target) {
+            // apply
             target.position.x += target.deltaPosition.x
             target.position.y += target.deltaPosition.y
-
-            if (target.deltaPosition.y > 0)
-                target.pushEvent('fall')
-
-            target.renderer.update()
-
-            if (!target.gravity) target.gravity = 0.4
-            target.deltaPosition.y += target.gravity
-            target.deltaPosition.x = 0
-
+            target.updateDir()
             // 通常経過処理。ここに集約
             if (target.Tag.hitByThisShit === true && target.Tag.invisible === false) {
                 target.Tag.invisible = true
@@ -422,6 +581,22 @@
 
             // reset specific Tags
             target.Tag.hitByThisShit = false
+
+            target.renderer.update()
+
+
+
+            // next-frame thing
+            if (target.deltaPosition.y < 0)
+                target.pushEvent('jump')
+
+            if (target.deltaPosition.y > 0)
+                target.pushEvent('fall')
+
+            if (!target.gravity) target.gravity = 0.4
+            target.deltaPosition.y += target.gravity
+            target.deltaPosition.x = 0
+
 
 
             if (this.Tag.onMove) {
@@ -459,17 +634,31 @@
             this.name = sname
             for (const [eName, def] of Object.entries(data.on || {})) {
 
-                if (eName == 'movable') {
-                    this.on('movable', (target) => {
-                        console.log('movable')
-                        target.position.x += target.deltaPosition.x
-                        target.position.y += target.deltaPosition.y
+                if (eName == 'onMove') {
+                    this.Tag.onMove = true
+                    this.on(eName, (target, moveSpd) => {
+                        if (def.nextState) {
+                            target.cst(def.nextState)
+                        }
+                        if (moveSpd)
+                            target.deltaPosition.x = moveSpd
+
+
                     })
                     continue
                 }
-                if (eName == 'onMove') {
-                    this.Tag.onMove = true
+                if (eName == 'jump') {
+                    this.on(eName, (target, jumpSpd) => {
+                        if (def.nextState) {
+                            target.cst(def.nextState)
+                            if (jumpSpd)
+                                target.deltaPosition.y = -jumpSpd
+
+                        }
+                    })
+                    continue
                 }
+
                 this.on(eName, (target, eData) => {
                     if (def.log) log(target.name + ' ' + def.log)
                     if (def.nextState) {
@@ -492,15 +681,33 @@
                 target: target,
                 endTime: this.stateData.duration,
                 processCall: () => {
-                    for (const step of this.stateData.steps || [])
-                        if (_counter.time === step.time)
-                            step.action(target)
+
                 },
                 endCall: () => {
                     target.pushEvent('onEnd')
                 }
             })
 
+            const loop = this.stateData.sprite.loop
+            const length = this.stateData.sprite.length
+            const duration = this.stateData.duration
+            if (loop) {
+                _counter.processCall = () => {
+                    for (const step of this.stateData.steps || [])
+                        if (_counter.time === step.time)
+                            step.action(target)
+                    if (_counter.time === duration - 1)
+                        if (loop < length && duration > 0) {
+                            _counter.time = Math.floor(loop / length * duration)
+                        }
+                }
+            } else {
+                _counter.processCall = () => {
+                    for (const step of this.stateData.steps || [])
+                        if (_counter.time === step.time)
+                            step.action(target)
+                }
+            }
             // counter must be end
             if (target.counter) target.counter.setEnd()
             target.counter = _counter
@@ -508,24 +715,25 @@
     }
     class Player {
         constructor(data) {
-            this.position = { x: 200, y: 100 }
-            this.width = 30
-            this.height = 30
-            this.deltaPosition = { x: 0, y: 0 }
-            this.renderer = new MovieRenderer(this)
 
             this.data = data
             const initialState = data.state[data.initialState]
             this.state = new ImportedState(data.initialState, initialState)
             this.state.enter(this)
+
+
+
+            equipThisWithCollision(this)
             equipThisWithState(this)
 
             equipThisWithEventManager(this)
             equipThisWithProxy(this)
 
+            this.renderer = new MovieRenderer(this)
+
         }
         update() {
-            this.dealEvent(this.state)
+            //this.dealEvent(this.state)
             this.state.update(this)
 
         }
@@ -540,59 +748,57 @@
 
     class Tiles {
         constructor(ID) {
-            this.position = { x: 20, y: 250 }
-            this.width = 30
-            this.height = 30
+            equipThisWithCollision(this)
             if (ID == 'slop') {
                 this.slopHeight = function () {
                     const rpx = player.position.x - this.position.x
                     const clampedX = Math.max(-player.width / 2, Math.min(rpx, this.width - player.width / 2));
                     if (player.position.y < this.position.y + this.height)
                         if (clampedX > -player.width && clampedX < this.width) {
-
-                            return this.position.y + this.height -
+                            const height = this.position.y + this.height -
                                 get2dLine(
                                     - player.width / 2,
                                     0,
                                     this.width - player.width / 2,
                                     this.height,
                                     clampedX)
+                            return Math.floor(height)
                             return this.position.y + this.height - this.height / (this.width + player.width) * clampedX
                         }
 
                     return this.position.y
                 }
                 this.draw = function () {
-                    if (!this.drawposition) this.drawposition = { x: 0, y: 0 }
-                    this.drawposition.x = this.position.x
-                    this.drawposition.y = this.slopHeight()
+                    /* const y = this.drawPosition.y
+                    this.drawPosition.y += this.slopHeight() - this.height - 30
                     c.fillStyle = 'grey'
-                    c.fillRect(this.drawposition.x, this.drawposition.y, this.width, this.height)
+                    c.fillRect(this.drawPosition.x, this.drawPosition.y, this.width, this.height)
 
 
-                    this.drawposition.x = this.position.x
-                    this.drawposition.y = this.position.y
+                    this.drawPosition.y = y */
+
                     c.fillStyle = 'black'
                     c.beginPath()
-                    c.moveTo(this.drawposition.x, this.drawposition.y + this.height)
-                    c.lineTo(this.drawposition.x + this.width, this.drawposition.y + this.height)
-                    c.lineTo(this.drawposition.x + this.width, this.drawposition.y)
+                    c.moveTo(this.drawPosition.x, this.drawPosition.y + this.height)
+                    c.lineTo(this.drawPosition.x + this.width, this.drawPosition.y + this.height)
+                    c.lineTo(this.drawPosition.x + this.width, this.drawPosition.y)
                     c.closePath()
                     c.fill()
                 }
             } else {
                 this.draw = function () {
+
                     c.fillStyle = 'black'
-                    c.fillRect(this.position.x, this.position.y, this.width, this.height)
+                    c.fillRect(this.drawPosition.x, this.drawPosition.y, this.width, this.height)
                 }
             }
         }
 
         hitTest(target) {
-            const py1 = target.position.y + target.height + target.deltaPosition.y
-            const py2 = target.position.y + target.deltaPosition.y
-            const px1 = target.position.x + target.width + target.deltaPosition.x
-            const px2 = target.position.x + target.deltaPosition.x
+            const py1 = target.Ybottom().next
+            const py2 = target.Ytop().next
+            const px1 = target.Xright().next
+            const px2 = target.Xleft().next
             if (
                 py1 > this.position.y &&
                 py2 < this.position.y + this.height &&
@@ -600,10 +806,10 @@
                 px2 < this.position.x + this.width
             ) {
 
-                const fromAbove = target.position.y + target.height <= this.position.y;
-                const fromBelow = target.position.y >= this.position.y + this.height;
-                const fromRight = target.position.x >= this.position.x + this.width;
-                const fromLeft = target.position.x + target.width <= this.position.x;
+                const fromAbove = target.Ybottom().now <= this.position.y;
+                const fromBelow = target.Ytop().now >= this.position.y + this.height;
+                const fromRight = target.Xleft().now >= this.position.x + this.width;
+                const fromLeft = target.Xright().now <= this.position.x;
                 if (fromAbove) {
                     target.pushEvent('land')
                     target.position.y = this.position.y - target.height
@@ -620,16 +826,18 @@
                     target.position.x = this.position.x - target.width
                     target.deltaPosition.x = 0
                 } else {
-                    const centerfromAbove = target.position.y + target.height / 2 <= this.position.y + this.height / 2;
-                    const centerfromBelow = target.position.y + target.height / 2 >= this.position.y + this.height / 2;
-                    const centerfromRight = target.position.x + target.width / 2 >= this.position.x + this.width / 2;
-                    const centerfromLeft = target.position.x + target.width / 2 <= this.position.x + this.width / 2;
+                    console.log('?!')
+                    const centerfromAbove = target.centerPosition().y <= this.position.y + this.height / 2;
+                    const centerfromBelow = target.centerPosition().y >= this.position.y + this.height / 2;
+                    const centerfromRight = target.centerPosition().x >= this.position.x + this.width / 2;
+                    const centerfromLeft = target.centerPosition().x <= this.position.x + this.width / 2;
                     if (centerfromAbove) {
                         target.pushEvent('land')
 
                         target.position.y = this.position.y - target.height
                         target.deltaPosition.y = 0
                     } else if (centerfromBelow) {
+                        console.log('left innera')
                         target.position.y = this.position.y + this.height + 1
                         target.deltaPosition.y = 0
 
@@ -640,6 +848,8 @@
                     } else if (centerfromLeft) {
                         target.position.x = this.position.x - target.width
                         target.deltaPosition.x = 0
+                    } else {
+                        conosle.log('bakana!')
                     }
                 }
             }
@@ -654,6 +864,10 @@
             this.hitTest(target)
 
             this.position.y = y
+
+            // draw update
+            this.drawPosition.x = this.position.x
+            this.drawPosition.y = this.position.y
         }
 
 
@@ -664,23 +878,20 @@
 
         constructor(master) {
             this.master = master
-            this.drawposition = { x: 0, y: 0 }
+            this.drawPosition = { x: 0, y: 0 }
             this.spriteName = ''
             this.damiSprite = new Image()
             this.spriteImage = this.damiSprite
             this.spriteLoad = false
-            this.spriteFlip = false
+            this.spriteFlip = this.master.data.state[this.master.state.name].sprite.flip
             this.length = 1 // numbers of frames
             this.currentFrame = 0
             this.cropbox = {}
-            this.sprite = {
-                width: 0,
-                height: 0
-            }
+            this.sprites = {}
         }
 
         #updateSpriteInfo(_name) {
-            if (!this.master.data.state[_name].sprite) {
+            if (!this.master.data.state[_name]?.sprite) {
                 console.log('not found sprite name')
                 return false
             }
@@ -709,9 +920,11 @@
 
         // master state, main counter
         update() {
-            if (this.#updateSpriteInfo(this.master.state.name)) {
+            let sprite_name = this.master.state.name
+            if (this.master.Tag.shooting)
+                sprite_name += '_shoot'
+            if (this.#updateSpriteInfo(sprite_name)) {
                 const s = this.master.data.state[this.master.state.name].sprite
-
                 if (s.flip) { // left sprite
                     if (this.master.deltaPosition.x > 0)
                         this.spriteFlip = true
@@ -733,16 +946,16 @@
 
 
             const mc = this.master.counter
-            const mp = this.master.position
+            const mp = this.master.drawPosition
             const mw = this.master.width
             const mh = this.master.height
             const cx = mp.x + mw / 2
             const cy = mp.y + mh
+
             const sw = this.spriteImage.width / this.length
             const sh = this.spriteImage.height
-
-            this.drawposition.x = cx - sw / 2
-            this.drawposition.y = cy - sh
+            this.drawPosition.x = cx - sw / 2
+            this.drawPosition.y = cy - sh + 5 //+5は良くない…
 
 
             let FrameBuffer = mc.endTime / this.length
@@ -752,11 +965,9 @@
 
         // draw position + Current Frame
         draw() {
+            //this.master.drawRect(c)
 
-
-            c.fillStyle = 'grey'
-            c.fillRect(this.master.position.x, this.master.position.y, this.master.width, this.master.height)
-
+            if (!this.spriteImage) return
             const sw = this.spriteImage.width / this.length
             const sh = this.spriteImage.height
             const cropbox = {
@@ -770,18 +981,18 @@
 
             if (this.spriteImage) {
                 if (!this.spriteLoad) return
-                if (this.offset) {
-                    this.drawposition.x += this.offset.x
-                    this.drawposition.y += this.offset.y
-                }
+
                 c.filter = 'none'
                 if (this.master.Tag.greyout)
                     c.filter = "saturate(0%)";  // 彩度を0%にしてグレースケールっぽく
                 else if (this.master.Tag.invisible)
                     c.filter = 'brightness(200%)'
 
-                if (this.spriteFlip || this.master.deltaPosition.x > 0) {
-
+                if (this.spriteFlip) {
+                    if (this.offset) {
+                        this.drawPosition.x += this.offset.x
+                        this.drawPosition.y += this.offset.y
+                    }
                     c.save()
                     c.scale(-1, 1);
                     let _temp = sw
@@ -793,15 +1004,19 @@
                         cropbox.width,
                         cropbox.height,
 
-                        -(this.drawposition.x + _temp),
-                        this.drawposition.y,
+                        -(this.drawPosition.x + _temp),
+                        this.drawPosition.y,
                         sw,
                         sh,
                     )
 
                     c.restore()
 
-                } else if (!this.spriteFlip || this.master.deltaPosition.x < 0) {
+                } else if (!this.spriteFlip) {
+                    if (this.offset) {
+                        this.drawPosition.x -= this.offset.x
+                        this.drawPosition.y += this.offset.y
+                    }
                     c.drawImage(
                         this.spriteImage,
                         cropbox.position.x,
@@ -809,8 +1024,8 @@
                         cropbox.width,
                         cropbox.height,
 
-                        this.drawposition.x,
-                        this.drawposition.y,
+                        this.drawPosition.x,
+                        this.drawPosition.y,
                         sw,
                         sh,
                     )
@@ -820,7 +1035,7 @@
             }
 
             c.fillStyle = 'rgba(127,127,127,1)'
-            c.fillText(this.currentFrame, this.drawposition.x, this.drawposition.y + 20, 24)
+            c.fillText(this.currentFrame, this.drawPosition.x, this.drawPosition.y + 20, 24)
         }
     }
 
@@ -866,7 +1081,39 @@
             return _temp
         },
         update: function () {
+            // gathering and deal all Events 1
+            if (keys.atk.pressed) { }
+
+            if (keys.left.pressed) {
+                player.pushEvent('onMove', -3)
+            }
+            if (keys.stop.pressed)
+                player.deltaPosition.x = 0
+            if (keys.right.pressed) {
+                player.pushEvent('onMove', 3)
+            }
+
+            for (const key in onPressHandlers) {
+                if (keys[key].pressed && !keys[key].press) {
+                    onPressHandlers[key]() // 押された瞬間だけ実行
+                    keys[key].press = true
+                }
+            }
+            for (const key in onReleasehandlers) {
+                if (!keys[key].pressed && keys[key].press) {
+                    onReleasehandlers[key]() // 離された瞬間だけ実行
+                    keys[key].press = false
+                }
+            }
+
+
+
+
+            // gathering and deal all Events 2
             this.update_counters()
+            player.dealEvent(player.state)
+
+            // hitTest the 2nd Buffer
             terrains.forEach(element => {
                 element.update(player)
             })
@@ -874,6 +1121,16 @@
             //player update
             player.update()
 
+            Bullets.forEach(element => {
+                element.update()
+            })
+            camera.update()
+
+            // render()
+            this.draw()
+
+        },
+        draw: function () {
             //bg
             c.fillStyle = 'rgb(220,220,220)'
             c.fillRect(0, 0, canvas.width, canvas.height)
@@ -897,15 +1154,32 @@
                 c.stroke();
             }
 
-            // terrain
-            terrain.draw()
-            terrain2.draw()
+            renderQueue.length = 0
+            renderQueue.push(...terrains)
+            renderQueue.push(player)
+            renderQueue.push(...Bullets)
+            renderQueue.forEach(e => {
 
+                cameraProjection(e, camera)
 
-            // player
-            player.draw()
+            })
+
         }
 
+    }
+
+    class Bullet {
+        constructor() {
+            equipThisWithCollision(this)
+        }
+
+        update() {
+            this.swapPosition()
+        }
+
+        draw() {
+            this.drawRect(c)
+        }
     }
 </script>
 
@@ -918,69 +1192,98 @@
     w = canvas.width
     h = canvas.height
 
-    GM.addCounter({
-        endTime: 100,
-        endCall: () => {
-            log('yeah')
-        }
-    })
     const player = new Player(Hue)
+    player.initialize(200, 0, 30, 30)
+
     const terrain = new Tiles()
-    terrain.width = 300
-    terrain.height = 30
+    terrain.initialize(20, 250, 300, 30)
+
+    const terrain1 = new Tiles()
+    terrain1.initialize(-100, h, 1000, 30)
+
 
     const terrain2 = new Tiles('slop')
-    terrain2.width = 250
-    terrain2.height = 80
-    terrain2.position.x = 200
-    terrain2.position.y = 100
+    terrain2.initialize(200, 100, 300, 80)
+
 
     terrains = []
     terrains.push(terrain)
+    terrains.push(terrain1)
     terrains.push(terrain2)
 
+    const Bullets = []
 
+    const renderQueue = []
+
+
+    const keyMap = {
+        'a': 'left',
+        'd': 'right',
+        'w': 'jump',
+        's': 'stop',
+        'j': 'atk',
+        ' ': 'shot',
+    }
     const onPressHandlers = {
         jump: () => {
-            player.deltaPosition.y = -8
-            player.pushEvent('jump')
+            player.pushEvent('jump', 10)
         },
         atk: () => {
             // ここにattack開始など
+            player.pushEvent('atk')
         },
-        left: () => {
-            // 初期加速など
+        shot: () => {
+            const b = new Bullet()
+            Bullets.push(b)
+            if (player.direction > 0) {
+                b.initialize(player.Xright().now, player.centerPosition().y, 5, 5)
+            } else {
+                b.initialize(player.Xleft().now, player.centerPosition().y, 5, 5)
+            }
+                b.deltaPosition.x = player.direction*10
+
+            if (!player.counters) player.counters = {}
+            player.Tag.shooting = true
+            if (player.counters.shootCounter) player.counters.shootCounter.setEnd()
+            player.counters.shootCounter = GM.addCounter({
+                endTime: 100,
+                endCall: () => {
+                    player.Tag.shooting = false
+                    player.counters.shootCounter = null
+                }
+            })
         }
         // 必要なキーだけ登録すればOK
     }
 
-    function update() {
+    const onReleasehandlers = {
+        left: () => {
+            // 初期加速など
+            player.pushEvent('stopMove')
+        },
+        right: () => {
+            // 初期加速など
+            player.pushEvent('stopMove')
+        }
+    }
 
-
-        GM.update()
-        // terrain update
-
-
-        showHTML(player.state.name, 'name')
-        showHTML(GM.showCounters(), 'counter')
-
-
-        if (keys.atk.pressed)
-            player.deltaPosition.x = 0
-        if (keys.left.pressed)
-            player.deltaPosition.x = -1
-        if (keys.stop.pressed)
-            player.deltaPosition.x = 0
-        if (keys.right.pressed)
-            player.deltaPosition.x = 1
-
-        for (const key in onPressHandlers) {
-            if (keys[key].pressed && !keys[key].press) {
-                onPressHandlers[key]() // 押された瞬間だけ実行
-                keys[key].press = true
+    camera = {
+        position: { x: 0, y: 0 },
+        target: null,
+        update: function () {
+            if (this.target) {
+                this.position.x += (this.target.position.x - this.position.x) * 0.1
+                this.position.y += (this.target.position.y - this.position.y) * 0.1
             }
         }
+    }
+    camera.target = player
 
+
+    function update() {
+
+        // the game loop
+        GM.update()
 
         for (let _key in keys) {
             if (keys[_key].source === 'button') {
@@ -989,6 +1292,12 @@
                 keys[_key].source = null
             }
         }
+
+        showHTML(player.state.name, 'name')
+        showHTML(player.position.x + ',' + player.position.y, 'position')
+        showHTML(GM.showCounters(), 'counter')
+        showHTML("current event queue: " + player.showEventQueue(), 'messs')
+
 
         requestAnimationFrame(update)
 
