@@ -65,6 +65,61 @@
     }
 </style>
 
+<script>
+    const canvas = document.querySelector("canvas")
+    const c = canvas.getContext("2d", { willReadFrequently: true })
+    canvas.width = 300
+    canvas.height = 200
+    const tileSize = 50
+    const keys = new Proxy({}, {
+        get(target, prop) {
+            if (!(prop in target)) {
+                target[prop] = { press: false, pressed: false };
+            }
+            return target[prop];
+        }
+    });
+    keyPress = function (key) {
+        keys[key].pressed = true
+        keys[key].source = 'button'
+    }
+    document.addEventListener("keydown", (e) => {
+        const action = keyMap[e.key.toLowerCase()]
+        if (action) {
+            keys[action].pressed = true
+            if (onPressHandlers[action]) {
+                if (!keys[action].press) {
+                    onPressHandlers[action]()
+                    keys[action].press = true
+                }
+            } else {
+                keys[action].press = true
+
+            }
+            e.preventDefault()  // ページスクロールなどを防止
+        }
+    })
+
+    // 離されたとき → pressed = false（押しっぱなし解除）
+    document.addEventListener("keyup", (e) => {
+        const action = keyMap[e.key.toLowerCase()]
+        if (action) {
+            keys[action].pressed = false
+            if (onReleasehandlers[action]) {
+                if (keys[action].press) {
+                    onReleasehandlers[action]()
+                    keys[action].press = false
+                }
+            } else {
+                keys[action].press = false
+
+            }
+            e.preventDefault()
+        }
+    })
+
+
+</script>
 
 <script id="data">
 
@@ -250,6 +305,9 @@
                     atk: {
                         nextState: 'attack1'
                     },
+                    chargeSlash:{
+                        nextState:'attack2'
+                    }
 
                 },
             },
@@ -531,18 +589,14 @@
 </script>
 
 <script id="functions Engine">
-    keyPress = function (key) {
-        keys[key].pressed = true
+    function gameLoop() {
+        console.log('game start')
     }
-
-    const keys = new Proxy({}, {
-        get(target, prop) {
-            if (!(prop in target)) {
-                target[prop] = { press: false, pressed: false };
-            }
-            return target[prop];
-        }
-    });
+    function update() {
+        gameLoop()
+        requestAnimationFrame(update)
+    }
+    update()
 
     function showHTML(MSG, ID) {
         let el = document.getElementById(ID);
@@ -602,7 +656,6 @@
         constructor({
             endTime = 100,
             pause = false,
-            name = "",
             end = false,
             target = undefined,
             msg = "__",
@@ -652,7 +705,7 @@
             .join(separator);
     }
 
-    function equipThisWithProxy(target) {
+    function getProxy(target) {
         target.request = new Proxy({}, {
             get: (target, prop) => {
                 const value = target[prop];
@@ -669,7 +722,7 @@
         })
     }
 
-    function equipThisWithEventHandler(target) {
+    function getEventHandler(target) {
         target.handlers = {}
         target.on = function (event, handler) {
             this.handlers[event] = handler
@@ -681,7 +734,7 @@
         }
     }
 
-    function equipThisWithEventManager(target) {
+    function getEventManager(target) {
         target.eventQueue = []
         target.pushEvent = function (eName, ...args) {
             this.eventQueue.push([eName, ...args])
@@ -815,7 +868,7 @@
 
             // 使い捨て外部リクエスト、自由に追加できる。
             // 確認するたびにfalseにリセットされる
-            equipThisWithProxy(this)
+            getProxy(this)
 
         }
 
@@ -964,20 +1017,17 @@
 
 
 
-
-
-
     class StateOfPlayer {
         constructor() {
-            equipThisWithEventHandler(this)
+            getEventHandler(this)
             this.Tag = new Proxy({}, {
                 get(target, prop) {
                     return prop in target ? target[prop] : false;
                 }
             })
-            this.on('getHurt', (target,dmg) => {
+            this.on('getHurt', (target, dmg) => {
                 target.cst('injured')
-                target.HP-=dmg
+                target.HP -= dmg
             })
         }
         // 対応するeventとハンドラーを導入
@@ -986,10 +1036,10 @@
             // 通常経過処理。ここに集約
             if (target.Tag.hitByThisShit === true && target.Tag.invisible === false) {
                 target.Tag.invisible = true
-                target.pushEvent('getHurt',10)
+                target.pushEvent('getHurt', 10)
                 GM.addCounter({
-                    endTime:100,
-                    endCall:()=>{
+                    endTime: 100,
+                    endCall: () => {
                         target.Tag.invisible = false
                     }
                 })
@@ -1087,8 +1137,8 @@
                 endTime: 100,
             })
 
-            equipThisWithEventManager(this)
-            equipThisWithProxy(this)
+            getEventManager(this)
+            getProxy(this)
             const initialState = data.state[data.initialState]
             this.state = new ImportedState(data.initialState, initialState)
             this.state.enter(this)
@@ -1156,7 +1206,7 @@
             // apply checked delta
             // get new delta
             //if (this.ID == CharID.Player)
-            this.dealEvent(this.state)
+
             this.state.update(this)
 
             //
@@ -1280,7 +1330,7 @@
 
     class StateOfGM {
         constructor() {
-            equipThisWithEventHandler(this)
+            getEventHandler(this)
             this.on('hitStop', (gm, target, _time, reason) => {
                 console.log(reason)
                 target.Tag.hitStop = true;
@@ -1346,9 +1396,6 @@
                 active_player = GM.switchCharacter(active_player, charH)
 
             }
-
-
-
 
 
             if (keys.test.pressed) {
@@ -1458,7 +1505,7 @@
             this.observers = []
             this.dominantCounter = null
 
-            equipThisWithEventManager(this)
+            getEventManager(this)
 
 
             this.request = new Proxy({}, {
@@ -1489,7 +1536,7 @@
             showCounters(_table)
         }
 
-        #showChips() {
+        showChips() {
             let _table = ""
             for (let chip of chip_selected) {
                 _table += chip.name + ", "
@@ -1644,103 +1691,7 @@
             return _temp
         }
 
-        #print_state() {
-            c.fillStyle = "rgba(255,255,255,255)"
-            c.fillText(this.st.name, 10, 10)
-            //log(this.st.name)
-        }
-
-        #draw() {
-            if (this.st == this.constructor.title) {
-                c.fillStyle = "rgba(0,0,0,1)"
-                c.fillRect(0, 0, canvas.width, canvas.height)
-                c.fillStyle = "rgba(255,255,255,1)"
-                c.fillText("press select key to start", 10, canvas.height / 2)
-                return
-            }
-            if (this.st == this.constructor.battle || this.st == this.constructor.select) {
-                c.fillStyle = "rgba(0,0,0,1)"
-                c.fillRect(0, 0, canvas.width, canvas.height)
-                c.fillStyle = "rgba(255,255,255,1)"
-                if (this.Mugshot.loaded)
-                    c.drawImage(this.Mugshot.img, 0, 24, 48, 24)
-                else { c.fillStyle = 'red'; c.fillRect(0, 24, 48, 24); }
-            }
-
-            if (this.Tag.battle_win) {
-                c.fillStyle = "rgba(200,230,250,1)"
-                c.fillRect(0, 0, canvas.width, canvas.height)
-                c.fillStyle = "rgba(0,20,0,1)"
-                c.fillText("you win!", 10, canvas.height / 2)
-                return
-            }
-
-
-
-            // draw floor
-            const _draw_floor = () => {
-                c.fillStyle = "rgba(220,220,220,1)"
-                c.fillRect(0, canvas.height / 2, canvas.width, canvas.height)
-
-                c.strokeStyle = "purple"
-                c.lineWidth = 5
-                c.beginPath() // パスの開始
-                c.moveTo(0, canvas.height / 2) // 開始点（x:50, y:50）
-                c.lineTo(0, canvas.height)
-                c.lineTo(canvas.width, canvas.height) // 終点（x:250, y:100）
-                c.lineTo(canvas.width, canvas.height / 2)
-                c.lineTo(0, canvas.height / 2)
-                for (let i = 1; i < 3; i++) {
-                    c.moveTo(0, (canvas.height / 6) * i + canvas.height / 2)
-                    c.lineTo(canvas.width, (canvas.height / 6) * i + canvas.height / 2)
-                }
-                for (let i = 1; i < 6; i++) {
-                    c.moveTo((canvas.width / 6) * i, canvas.height / 2)
-                    c.lineTo((canvas.width / 6) * i, canvas.height)
-                }
-                c.stroke()
-            }
-            _draw_floor()
-
-            if (this.Tag.pause) {
-                this._draw_Darken()
-            }
-
-            this._showCounters()
-            this.#showChips()
-
-
-            if (this.Tag.dialog) {
-                if (imgLoaded) {
-                    c.drawImage(img, 0, 0, 30, 30)
-                }
-                c.fillStyle = "rgba(100,100,100,1)"
-                c.fillRect(
-                    10,
-                    (canvas.height / 4) * 3,
-                    canvas.width - 20,
-                    canvas.height / 5,
-                )
-            }
-
-            PP.draw()
-            for (const t of terrain) {
-                t.draw()
-            }
-            for (let _p of characters) {
-                _p.draw()
-                //log('draw characters')
-            }
-
-
-            if (this.st == this.constructor.select) {
-                this.st.draw(this)
-            }
-
-            this.#print_state()
-        }
-
-        #update_counters() {
+        update_counters() {
             if (this.st == this.constructor.select) {
                 for (let _c of this.counters_select) {
                     if (_c.pause === false)
@@ -1763,43 +1714,23 @@
             this.counters = this.counters.filter((_c) => _c.end == false)
         }
 
+        print_state() {
+            c.fillStyle = "rgba(255,255,255,255)"
+            c.fillText(this.st.name, 10, 10)
+            //log(this.st.name)
+        }
+
+        draw_sandbox() {
+
+        }
+
+        draw() {
+            this.draw_sandbox()
+        }
+
+
         update() {
-            const s = this.st.handleInput(this)
-            this.dealEvent(this.st)
-            if (s) this.st = s
-
-
-            if (this.Tag.title) {
-            } else if (this.Tag.pause) {
-                //     console.log('paused')
-            } else {
-                if (this.st == this.constructor.battle) {
-                    this.#update_counters()
-                    for (const t of terrain) {
-                        t.update()
-                    }
-                    for (let p of characters) {
-                        if (!p.Tag.hitStop)
-                            p.update()
-                    }
-                    if (this.Tag.battle) {
-                        if (enemy.HP <= 0) { this.Tag.battle_win = true; this.Tag.battle = false }
-                    }
-                    if (this.Tag.battle_win) { }
-                }
-                if (this.st == this.constructor.select) {
-                    this.#update_counters()
-
-                }
-
-
-
-            }
-
-            for (let _key in keys) keys[_key].pressed = false
-
-            //console.log(message+counter)
-            this.#draw()
+            this.update_sandbox()
 
         }
     }
@@ -1870,7 +1801,7 @@
             }
         }
 
-        #updateSpriteInfo(_name) {
+        updateSpriteInfo(_name) {
             if (!this.master.data.state[_name].sprite) {
                 log('not found sprite name')
                 return false
@@ -1899,8 +1830,8 @@
         }
 
         // master state, main counter
-        #update() {
-            if (this.#updateSpriteInfo(this.master.state.name)) { }
+        update() {
+            if (this.updateSpriteInfo(this.master.state.name)) { }
             else {
                 this.spriteName = ''
                 this.spriteImage = null
@@ -1922,7 +1853,7 @@
 
         // draw position + Current Frame
         draw() {
-            this.#update()
+            this.update()
 
             const sw = this.spriteImage.width / this.length
             const sh = this.spriteImage.height
@@ -2008,7 +1939,7 @@
             }
         }
 
-        #updateSpriteInfo(_name) {
+        updateSpriteInfo(_name) {
             if (!this.spriteCollection.p[_name]) {
                 log('not found sprite name')
                 return false
@@ -2041,8 +1972,8 @@
         }
 
         // master state, main counter
-        #update() {
-            if (this.#updateSpriteInfo(this.master.state.name)) { }
+        update() {
+            if (this.updateSpriteInfo(this.master.state.name)) { }
             else {
                 this.spriteName = ''
                 this.spriteImage = null
@@ -2064,7 +1995,7 @@
 
         // draw position + Current Frame
         draw() {
-            this.#update()
+            this.update()
 
             const cropbox = {
                 position: {
@@ -2122,6 +2053,67 @@
         }
     }
 
+
+      class Charger {
+        constructor(target) {
+            this.target = target
+            this.power = 0
+            getEventManager(this)
+            getEventHandler(this)
+            this.logic_charge = {
+                update:()=>{
+                    if (this.power < 300)
+                    this.power++
+                }
+            }
+
+            this.logic_standby ={
+                update:()=>{
+                }
+            }
+            this.on('test Event', (target, value) => {
+                console.log('charger get number: ' + value)
+            })
+            this.on('start', () => {
+                this.logic = this.logic_charge
+            })
+            this.on('release', () => {
+                this.logic = this.logic_standby
+                this.relase()
+            })
+
+            this.logic = this.logic_standby
+        }
+
+        update() {
+            this.logic.update()
+        }
+
+        relase() {
+            if (this.power >= 300 )
+                console.log('level 3')
+            else if (this.power >= 200)
+                console.log('level 2')
+            else if (this.power >= 100)
+                console.log('level 1')
+            else
+                console.log('normal attack')
+            this.power = 0
+            this.target.pushEvent('chargeSlash')
+        }
+
+        draw() {
+            showHTML('press space to charge: '+this.power,'charger power')
+            const _w = 32*this.power/300
+            const _h = 32*this.power/300
+            const _cx = this.target.renderer.drawposition.x+24
+            const _cy = this.target.renderer.drawposition.y+24
+            c.fillRect(_cx-_w/2,_cy-_h/2,_w,_h)
+        }
+    }
+
+
+
     ////////////////////////////////////////////////////////////
     ////////////////////////////////////////////////////////////
     //
@@ -2143,6 +2135,41 @@
         log(_c.name)
     }
 
+
+
+</script>
+<script id='new difinition'>
+  
+    const keyMap = {
+        'a': 'left',
+        'd': 'right',
+        'w': 'up',
+        's': 'down',
+        'j': 'atk',
+        ' ': 'shot',
+        
+    }
+
+    const onPressHandlers = {
+        jump: () => {
+        },
+        atk: () => {
+        },
+        shot: () => {
+            charger.pushEvent('start')
+        }
+        // 必要なキーだけ登録すればOK
+    }
+
+    const onReleasehandlers = {
+        left: () => {
+        },
+        right: () => {
+        },
+        shot: () => {
+            charger.pushEvent('release')
+        }
+    }
     //////////////////////////////
     //////////////////////////////
     //                          //
@@ -2151,68 +2178,194 @@
     //////////////////////////////
     //////////////////////////////
 
-    const canvas = document.querySelector("canvas")
-    const c = canvas.getContext("2d", { willReadFrequently: true })
-    canvas.width = 300
-    canvas.height = 200
-    const tileSize = 50
+
 
     const GM = new GameManager2()
     const PP = new PostProcessor()
-    //let counter = 0
-
     let enemy = new Player(ModelHData2)
-    enemy.ID = CharID.Enemy
-    enemy.position = { x: 4, y: 2 }
-
     let player2_2 = new Player(ModelHData2)
-    player2_2.ID = CharID.Actor
-
     const charH = new PlayerFromData(ModelHData_eventDrived)
     const charL = new PlayerFromData(ModelLData_EventDriven)
     let active_player = charH
-
     let data_player = charH
-
     let characters = []
-    // actor test!
+    let terrain = []
+    const charger= new Charger(active_player)
+
+
+    //let counter = 0
+
+    enemy.ID = CharID.Enemy
+    enemy.position = { x: 4, y: 2 }
+
+    player2_2.ID = CharID.Actor
+
+
     //characters.push(player_2) 
     characters.push(enemy)
     characters.push(active_player)
     //characters.push(data_player)
 
-    let terrain = []
+
     testTile = new Tile()
     terrain.push(testTile)
 
 
 
     GM.observers.push(active_player)
+    GM.draw_sandbox = function () {
+        if (this.st == this.constructor.title) {
+            c.fillStyle = "rgba(0,0,0,1)"
+            c.fillRect(0, 0, canvas.width, canvas.height)
+            c.fillStyle = "rgba(255,255,255,1)"
+            c.fillText("press select key to start", 10, canvas.height / 2)
+            return
+        }
+        if (this.st == this.constructor.battle || this.st == this.constructor.select) {
+            c.fillStyle = "rgba(0,0,0,1)"
+            c.fillRect(0, 0, canvas.width, canvas.height)
+            c.fillStyle = "rgba(255,255,255,1)"
+            if (this.Mugshot.loaded)
+                c.drawImage(this.Mugshot.img, 0, 24, 48, 24)
+            else { c.fillStyle = 'red'; c.fillRect(0, 24, 48, 24); }
+        }
 
-
-    function update() {
-
-        //polygon renderer,描画順などがめんどくさいので、あとにする
-        // R_angle += 0.001
-        //Renderer.render()
-
-        if (keys.atk.pressed) {
-            active_player.pushEvent('atk')
+        if (this.Tag.battle_win) {
+            c.fillStyle = "rgba(200,230,250,1)"
+            c.fillRect(0, 0, canvas.width, canvas.height)
+            c.fillStyle = "rgba(0,20,0,1)"
+            c.fillText("you win!", 10, canvas.height / 2)
+            return
         }
 
 
 
-        GM.update()
-        //GM.notify('tests', GM)
+        // draw floor
+        const _draw_floor = () => {
+            c.fillStyle = "rgba(220,220,220,1)"
+            c.fillRect(0, canvas.height / 2, canvas.width, canvas.height)
+
+            c.strokeStyle = "purple"
+            c.lineWidth = 5
+            c.beginPath() // パスの開始
+            c.moveTo(0, canvas.height / 2) // 開始点（x:50, y:50）
+            c.lineTo(0, canvas.height)
+            c.lineTo(canvas.width, canvas.height) // 終点（x:250, y:100）
+            c.lineTo(canvas.width, canvas.height / 2)
+            c.lineTo(0, canvas.height / 2)
+            for (let i = 1; i < 3; i++) {
+                c.moveTo(0, (canvas.height / 6) * i + canvas.height / 2)
+                c.lineTo(canvas.width, (canvas.height / 6) * i + canvas.height / 2)
+            }
+            for (let i = 1; i < 6; i++) {
+                c.moveTo((canvas.width / 6) * i, canvas.height / 2)
+                c.lineTo((canvas.width / 6) * i, canvas.height)
+            }
+            c.stroke()
+        }
+        _draw_floor()
+
+        if (this.Tag.pause) {
+            this._draw_Darken()
+        }
+
+        this._showCounters()
+        this.showChips()
 
 
+        if (this.Tag.dialog) {
+            if (imgLoaded) {
+                c.drawImage(img, 0, 0, 30, 30)
+            }
+            c.fillStyle = "rgba(100,100,100,1)"
+            c.fillRect(
+                10,
+                (canvas.height / 4) * 3,
+                canvas.width - 20,
+                canvas.height / 5,
+            )
+        }
+
+        PP.draw()
+        for (const t of terrain) {
+            t.draw()
+        }
+        for (let _p of characters) {
+            _p.draw()
+            //log('draw characters')
+        }
+
+        charger.draw()
+
+
+        if (this.st == this.constructor.select) {
+            this.st.draw(this)
+        }
+
+        this.print_state()
         showHTML('active_player: ' + active_player.position.x + '' + active_player.position.y + ',charH: ' + charH.position.x + '' + charH.position.y + ',charL: ' + charL.position.x + '' + charL.position.y, 'position')
         showHTML("current event queue: " + active_player.showEventQueue(), 'messs')
         showHTML("current Tags: " + getActiveTags(active_player.Tag), 'tags')
-        requestAnimationFrame(update)
-
-
     }
 
-    update()
+    GM.update_sandbox = function () {
+        const s = this.st.handleInput(this)
+        this.dealEvent(this.st)
+        if (s) this.st = s
+
+
+        if (this.Tag.title) {
+        } else if (this.Tag.pause) {
+            //     console.log('paused')
+        } else {
+            if (this.st == this.constructor.battle) {
+                
+                // get input and handle event
+                if (keys.atk.pressed) {
+                    active_player.pushEvent('atk')
+                }
+
+
+                this.update_counters()
+                charger.dealEvent(charger)
+                if (!active_player.Tag.hitStop)
+                    active_player.dealEvent(active_player.state)
+
+                // physic check
+                for (const t of terrain) {
+                    t.update()
+                }
+
+                // applyS
+                charger.update()
+                for (let p of characters) {
+                    if (!p.Tag.hitStop)
+                        p.update()
+                }
+
+                
+                if (this.Tag.battle) {
+                    if (enemy.HP <= 0) { this.Tag.battle_win = true; this.Tag.battle = false }
+                }
+                if (this.Tag.battle_win) { }
+            }
+            if (this.st == this.constructor.select) {
+                this.update_counters()
+
+            }
+
+
+
+        }
+
+        for (let _key in keys) keys[_key].pressed = false
+
+        this.draw()
+    }
+
+    gameLoop = function(){
+        GM.update()
+    }
+
+    
 </script>
