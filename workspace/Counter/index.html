@@ -305,8 +305,8 @@
                     atk: {
                         nextState: 'attack1'
                     },
-                    chargeSlash:{
-                        nextState:'attack2'
+                    chargeSlash: {
+                        nextState: 'attack2'
                     }
 
                 },
@@ -658,7 +658,7 @@
             pause = false,
             end = false,
             target = undefined,
-            msg = "__",
+            msg = "__",     
             processCall = null,
             endCall = () => { },
         } = {}) {
@@ -739,9 +739,9 @@
         target.pushEvent = function (eName, ...args) {
             this.eventQueue.push([eName, ...args])
         }
-        target.dealEvent = function (state) {
+        target.dealEvent = function (logic_object) {
             for (const [ev, ...args] of this.eventQueue)
-                state.onRequest(ev, this, ...args)
+                logic_object.onRequest(ev, this, ...args)
             this.eventQueue = []
         }
         target.resetEvent = function () {
@@ -1127,32 +1127,32 @@
             target.counter = _counter
         }
     }
-    class PlayerFromData {
+    class PlayerPrefab {
         constructor(data) {
-            this.data = data
-            this.name = data.name
-            this.HP = data.hp
+            console.log('Player event drived state machine from data initialized')
 
+            this.data = data
+            this.name = this.data.name
+            this.HP = this.data.hp
+
+            this.position = { x: 1, y: 1 }
+            this.deltaPosition = { x: 0, y: 0 }
+            
             this.counter = new Counter({
                 endTime: 100,
             })
 
             getEventManager(this)
             getProxy(this)
-            const initialState = data.state[data.initialState]
-            this.state = new ImportedState(data.initialState, initialState)
+
+            const initialState = this.data.state[this.data.initialState]
+            this.state = new ImportedState(this.data.initialState, initialState)
             this.state.enter(this)
-            //this.eventQueue = []
-            console.log('Player event drived state machine from data initialized')
-
-            this.state.enter(this)
-
-            this.position = { x: 1, y: 1 }
-            this.movable = false
-            this.deltaPosition = { x: 0, y: 0 }
+            
+            
 
 
-            this.renderer = new MovieRenderer(this)
+            joinComponent(new MovieRenderer(this),this)
 
 
         }
@@ -1167,16 +1167,7 @@
 
         }
 
-        showMSG(msg) {
-            log("[MSG] " + msg)
-        }
-
-        // shift+alt+A
-        /* observeUpdate(subject) {
-            for (const n of subject.notification) {
-                if (n.content == 'test') log('got it!!')
-            }
-        } */
+       
 
         observeUpdate(subject, content, owner) {
             if (content == 'test') log('got it!!!!')
@@ -1203,20 +1194,10 @@
 
 
         update() {
-            // apply checked delta
-            // get new delta
-            //if (this.ID == CharID.Player)
-
             this.state.update(this)
-
-            //
-
         }
 
         draw() {
-            if (this.counter) {
-                this.renderer.draw()
-            }
 
             const temp_draw = () =>
                 c.fillRect(
@@ -1295,7 +1276,6 @@
 
     class Tile {
         constructor() {
-            console.log('tile online')
             this.position = { x: 2, y: 2 }
         }
 
@@ -1853,10 +1833,13 @@
 
         // draw position + Current Frame
         draw() {
-            this.update()
+            if (this.master.counter === undefined || this.master.counter === null) return
+
 
             const sw = this.spriteImage.width / this.length
             const sh = this.spriteImage.height
+            let dpx = this.drawposition.x
+            let dpy = this.drawposition.y
             const cropbox = {
                 position: {
                     x: sw * this.currentFrame,
@@ -1869,8 +1852,8 @@
             if (this.spriteImage) {
                 if (!this.spriteLoad) return
                 if (this.offset) {
-                    this.drawposition.x += this.offset.x
-                    this.drawposition.y += this.offset.y
+                    dpx += this.offset.x
+                    dpy += this.offset.y
                 }
                 c.filter = 'none'
                 if (this.master.Tag.greyout)
@@ -1886,8 +1869,8 @@
                         cropbox.width,
                         cropbox.height,
 
-                        this.drawposition.x,
-                        this.drawposition.y,
+                        dpx,
+                        dpy,
                         sw,
                         sh,
                     )
@@ -1903,8 +1886,8 @@
                         cropbox.width,
                         cropbox.height,
 
-                        -(this.drawposition.x + _temp),
-                        this.drawposition.y,
+                        -(dpx + _temp),
+                        dpy,
                         sw,
                         sh,
                     )
@@ -2054,21 +2037,21 @@
     }
 
 
-      class Charger {
+    class Charger {
         constructor(target) {
             this.target = target
             this.power = 0
             getEventManager(this)
             getEventHandler(this)
             this.logic_charge = {
-                update:()=>{
+                update: () => {
                     if (this.power < 300)
-                    this.power++
+                        this.power++
                 }
             }
 
-            this.logic_standby ={
-                update:()=>{
+            this.logic_standby = {
+                update: () => {
                 }
             }
             this.on('test Event', (target, value) => {
@@ -2090,7 +2073,7 @@
         }
 
         relase() {
-            if (this.power >= 300 )
+            if (this.power >= 300)
                 console.log('level 3')
             else if (this.power >= 200)
                 console.log('level 2')
@@ -2103,12 +2086,13 @@
         }
 
         draw() {
-            showHTML('press space to charge: '+this.power,'charger power')
-            const _w = 32*this.power/300
-            const _h = 32*this.power/300
-            const _cx = this.target.renderer.drawposition.x+24
-            const _cy = this.target.renderer.drawposition.y+24
-            c.fillRect(_cx-_w/2,_cy-_h/2,_w,_h)
+            showHTML('press space to charge: ' + this.power, 'charger power')
+            const _w = 32 * this.power / 300
+            const _h = 32 * this.power / 300
+            const _cx = 100
+            const _cy = 100
+            c.fillStyle ='white'
+            c.fillRect(_cx - _w / 2, _cy - _h / 2, _w, _h)
         }
     }
 
@@ -2139,7 +2123,7 @@
 
 </script>
 <script id='new difinition'>
-  
+
     const keyMap = {
         'a': 'left',
         'd': 'right',
@@ -2147,7 +2131,7 @@
         's': 'down',
         'j': 'atk',
         ' ': 'shot',
-        
+
     }
 
     const onPressHandlers = {
@@ -2178,19 +2162,36 @@
     //////////////////////////////
     //////////////////////////////
 
+    function joinComponent(cmpnt, trgt) {
+
+        const update_ = trgt.update.bind(trgt) 
+        const draw_ = trgt.draw.bind(trgt) 
+        trgt.update = function () {
+            update_()
+            cmpnt.update()
+        }
+        trgt.draw = function () {
+            draw_()
+            cmpnt.draw()
+        }
+
+    }
 
 
     const GM = new GameManager2()
     const PP = new PostProcessor()
     let enemy = new Player(ModelHData2)
     let player2_2 = new Player(ModelHData2)
-    const charH = new PlayerFromData(ModelHData_eventDrived)
-    const charL = new PlayerFromData(ModelLData_EventDriven)
+    const charH = new PlayerPrefab(ModelHData_eventDrived)
+    const charL = new PlayerPrefab(ModelLData_EventDriven)
     let active_player = charH
     let data_player = charH
     let characters = []
     let terrain = []
-    const charger= new Charger(active_player)
+
+    
+    const charger = new Charger(active_player)
+
 
 
     //let counter = 0
@@ -2295,13 +2296,14 @@
             //log('draw characters')
         }
 
-        charger.draw()
 
 
         if (this.st == this.constructor.select) {
             this.st.draw(this)
         }
 
+        charger.draw()
+        
         this.print_state()
         showHTML('active_player: ' + active_player.position.x + '' + active_player.position.y + ',charH: ' + charH.position.x + '' + charH.position.y + ',charL: ' + charL.position.x + '' + charL.position.y, 'position')
         showHTML("current event queue: " + active_player.showEventQueue(), 'messs')
@@ -2319,17 +2321,17 @@
             //     console.log('paused')
         } else {
             if (this.st == this.constructor.battle) {
-                
+
                 // get input and handle event
                 if (keys.atk.pressed) {
                     active_player.pushEvent('atk')
                 }
 
-
                 this.update_counters()
                 charger.dealEvent(charger)
                 if (!active_player.Tag.hitStop)
                     active_player.dealEvent(active_player.state)
+
 
                 // physic check
                 for (const t of terrain) {
@@ -2343,7 +2345,7 @@
                         p.update()
                 }
 
-                
+
                 if (this.Tag.battle) {
                     if (enemy.HP <= 0) { this.Tag.battle_win = true; this.Tag.battle = false }
                 }
@@ -2363,9 +2365,9 @@
         this.draw()
     }
 
-    gameLoop = function(){
+    gameLoop = function () {
         GM.update()
     }
 
-    
+
 </script>
