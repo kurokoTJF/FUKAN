@@ -2,7 +2,7 @@
 <canvas width="500" height="300"></canvas>
 
 <p>
-    <button onmousedown="keyPress('atk')"> atk </button>
+    <button onmousedown="keyPress('test')"> test </button>
 </p>
 
 <script>
@@ -32,7 +32,6 @@
         }
     })
 
-    // 離されたとき → pressed = false（押しっぱなし解除）
     document.addEventListener("keyup", (e) => {
         const action = keyMap[e.key.toLowerCase()]
         if (action) {
@@ -64,17 +63,8 @@
             return target[prop];
         }
     });
-
-
-    function get2dLine(x0, y0, x1, y1, x) {
-        return (y0 - y1) / (x0 - x1) * x + (x0 * y1 - x1 * y0) / (x0 - x1)
-    }
-
-
-    function log(msg) {
-        document.getElementById("log").innerText += "\n_" + msg
-    }
-
+    
+    // 画面になにか
     function showHTML(MSG, ID) {
         let el = document.getElementById(ID);
 
@@ -93,7 +83,8 @@
         el.innerText = MSG;
     }
 
-    // State machine
+    // 正式なState machine Component
+    // 外部データが必要なので
     function getStateMachine(target) {
         // 初期化
         const initialState = target.data.state[target.data.initialState]
@@ -116,6 +107,7 @@
 
     }
 
+    // render queueと一緒に使う、一気に変換
     function cameraProjection(target, camera) {
         //target.drawPosition.x = target.position.x
         //target.drawPosition.y = target.position.y
@@ -139,33 +131,38 @@
 
     }
 
+    // 四角い判定ボックスと　予測型コリジョン判定用のやつ
     function getCollision(target, draw = true, ctx = c) {
         target.position = { x: 0, y: 0 }
         target.deltaPosition = { x: 0, y: 0 }
         target.drawPosition = { x: 0, y: 0 }
-        target.width = 100
-        target.height = 100
+        target.width = 32
+        target.height = 32
         target.gravity = 0
         target.direction = 1
 
+        const _update = target.update.bind(target)
+        target.update = function () {
+            _update()
+            target.drawPosition.x = target.position.x
+            target.drawPosition.y = target.position.y
+        }
+
+        target.moveTo = function (x, y) {
+            target.position.x = x
+            target.position.y = y
+        }
         target.updateDir = function () {
             if (target.deltaPosition.x > 0) target.direction = 1
             else if (target.deltaPosition.x < 0) target.direction = -1
         }
-        target.drawRect = function (ctx) {
+        target.drawRect = function (ctx = c) {
             ctx.fillStyle = 'grey'
             ctx.fillRect(target.drawPosition.x, target.drawPosition.y, this.width, this.height)
         }
 
-        if (draw == true) {
-            console.log('draw rect')
-            const _draw = target.draw.bind(target)
-            target.draw = function () {
-                _draw()
-                target.drawRect(ctx)
-
-            }
-        }
+        addMethodLast(target,'draw',target,'drawRect')
+        
 
         target.initialize = function (x, y, w, h) {
             this.position = { x: x, y: y }
@@ -203,12 +200,7 @@
         }
 
 
-        const _update = target.update.bind(target)
-        target.update = function () {
-            _update()
-            target.drawPosition.x = target.position.x
-            target.drawPosition.y = target.position.y
-        }
+
     }
 
     function getHitTester(_target) {
@@ -268,7 +260,9 @@
             }
         }
     }
+    
     // 2種類のProxyを実装する
+    // でも、正直Tagは使いたくないけどね
     function getProxy(target) {
         target.request = new Proxy({}, {
             get: (target, prop) => {
@@ -293,6 +287,7 @@
             .join(separator);
     }
 
+    //　疎結合のためのEvent対応ようComponent
     function getEventHandler(target) {
         target.handlers = {}
         target.on = function (event, handler) {
@@ -337,7 +332,8 @@
         }
     }
 
-    function addMethodLast(target, target_method, comp, method) {
+    // Methodを結合する。returnのスコープを注意
+    function addMethodFirst(target, target_method, comp, method) {
         const t = target[target_method].bind(target)
         const c = comp[method].bind(comp)
         target[target_method] = function (...args) {
@@ -345,7 +341,6 @@
             t(...args)
         }
     }
-
 
     function addMethodLast(target, target_method, comp, method = target_method) {
         const t = target[target_method].bind(target)
@@ -356,8 +351,7 @@
         }
     }
 
-
-
+    // 独自のupdateとDrawを持ったcomponentを内部に埋め込む
     function joinComponent(cmpnt, trgt) {
 
         addMethodLast(trgt, 'update', cmpnt)
@@ -395,12 +389,17 @@
 
     }
 
+    class GameObject {
+        update() { }
+        draw() { }
+    }
+
     class Counter {
         constructor({
             endTime = 100,
             pause = false,
             end = false,
-            target = undefined,
+            target = null,
             msg = "__",
             processCall = null,
             endCall = () => { },
@@ -420,7 +419,7 @@
         start() {
             this.pause = false
         }
-        pause() {
+        stop() {
             this.pause = true
         }
 
@@ -432,7 +431,6 @@
         }
 
         #endMethod() {
-            //console.log(this.msg + " " + this.endTime + " counter end")
             this.end = true
             this.endCall()
         }
@@ -446,6 +444,32 @@
         }
     }
 
+    // 対象がCounterを持つようになる
+    // Counterを描画するための関数が追加される
+    function getCounterComponent(t, gm = GM) {
+        t.counter = GM.addCounter({
+            endTime: 100,
+            target: t,
+            processCall: function () {
+                if (this.time == this.endTime - 1) {
+                    this.time = 0
+                }
+            },
+            endCall: () => {
+                console.log('no chance to end')
+            }
+        })
+
+        t.drawCounter = function () {
+            c.fillStyle = 'red'
+            c.fillRect(t.drawPosition.x, t.drawPosition.y, 32 * t.counter.progress(), 10)
+        }
+
+        addMethodLast(t, 'draw', t, 'drawCounter')
+    }
+
+    
+    // test 用のGameManagerObject
     const GM = {
 
         counters: [],
@@ -483,31 +507,29 @@
             this.counters.push(_temp)
             return _temp
         },
+        // counterはEventになる、そしてEventとInputと同様
         gameLoop_input: function () {
             this.update_counters()
         },
-
+        //　予測型コリジョン判定用
         gameLoop_check: function () {
 
         },
+        // 数値の適応と更新
         gameLoop_update: function () {
 
         },
         update: function () {
-
-            this.update_sandbox()
-
             this.gameLoop_input()
             this.gameLoop_check()
             this.gameLoop_update()
 
-            this.draw()
-
         },
         draw: function () {
-            this.draw_sandbox()
+
 
         },
+
         update_sandbox: function () {
 
         },
@@ -517,11 +539,8 @@
 
     }
 
-    function joinGameLoop(target, gm) {
-        const gl_input = gm.gameLoop_input.bind(gm)
-        const gl_check = gm.gameLoop_check.bind(gm)
-        const gl_update = gm.gameLoop_update.bind(gm)
-        const gl_draw = gm.draw.bind(gm)
+    // 本当は配列に入れたほうが、あとから消すことができるけどね
+    function joinGameLoop(target, gm = GM) {
 
         if (target.dealEvent)
             addMethodLast(gm, 'gameLoop_input', target, 'dealEvent')
@@ -533,6 +552,7 @@
             addMethodLast(gm, 'draw', target, 'draw')
     }
 
+    // ここに入れれば、繰り返し呼び出される
     function gameLoop() {
         console.log('1st frame, game start')
     }
@@ -557,7 +577,6 @@
     const onPressHandlers = {
         up: () => {
             tm.pushEvent('previous')
-
         },
         down: () => {
             tm.pushEvent('next')
@@ -565,7 +584,6 @@
         atk: () => {
         },
         shot: () => {
-            active_player.pushEvent('move', 10)
         }
         // 必要なキーだけ登録すればOK
     }
@@ -580,3 +598,13 @@
     }
 </script>
 
+<script>
+    // 基本gameLoopに入れればいい
+    // GameObject用意してある
+    // dealEventする必要があれば、それをgameLoopにいれる
+    // Objectが増えたら、GMに管理してもらう
+    // join Game Loop で、ゲーム世界に参入。GMの管理化に入れて動かして、描画してもらう
+    gameLoop = function () {
+        
+    }
+</script>
