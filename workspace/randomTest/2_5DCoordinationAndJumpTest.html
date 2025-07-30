@@ -32,6 +32,7 @@
         const rows = Math.floor(h / cellSize); // 縦方向のマス数
 
         c.strokeStyle = 'rgba(0,0,0,0.2)';
+        c.lineWidth = 2
         c.font = '10px sans-serif' // フォント指定も忘れずに
 
         for (let i = 0; i <= cols; i++) {
@@ -674,12 +675,16 @@
         'd': 'right',
         'w': 'up',
         's': 'down',
-        'j': 'atk',
+        'i': 'camera_up',
+        'j': 'j',
+        'k': 'camera_down',
+        'l': 'l',
         ' ': 'shot',
     }
 
     const onPressHandlers = {
         up: () => {
+
         },
         down: () => {
         },
@@ -688,6 +693,7 @@
         right: () => {
         },
         shot: () => {
+            player.vz = 10
         }
         // 必要なキーだけ登録すればOK
     }
@@ -735,28 +741,29 @@
         }
         draw_point_canvas() {
             c.fillStyle = 'rgba(0,0,0,0.1)'
-            c.fillRect(this.position.x - this.drawSize/2, this.position.y - this.drawSize/2, this.drawSize, this.drawSize)
+            c.fillRect(this.position.x - this.drawSize / 2, this.position.y - this.drawSize / 2, this.drawSize, this.drawSize)
         }
         draw_point() {
             c.fillStyle = 'black'
-            c.fillRect(this.drawPosition.x - this.drawSize/2, this.drawPosition.y - this.drawSize/2, this.drawSize, this.drawSize)
+            c.fillRect(this.drawPosition.x - this.drawSize / 2, this.drawPosition.y - this.drawSize / 2, this.drawSize, this.drawSize)
         }
     }
 
     const Vertices = []
 
-
-    function cameraProjection2_5D(v,camera) {
+    let camera_angle_deg = 15
+    let camera_angle = camera_angle_deg * Math.PI / 180
+    // canvas XYZ to screen XYZ
+    function cameraProjection2_5D(v, camera, angle = camera_angle) {
         const vp = v.position
         const cp = camera.position
-        const deg = 45
-        const rad = deg / 180 * Math.PI
+        const rad = angle
         // my canvas XYZ to Blender XYZ
         // the origin is left-top
         const v2 = {
-            x: vp.x -cp.x+w/2,
-            y: h - (vp.y-cp.y+h/2),
-            z: vp.z -cp.z
+            x: vp.x - cp.x + w / 2,
+            y: h - (vp.y - cp.y + h / 2),
+            z: vp.z - cp.z
         }
         // world to camera(Maya XYZ)
         const v3 = {
@@ -793,14 +800,92 @@
 
 
     const player = new Vertex(200, 200)
-    player.drawSize = 40
+    player.drawSize = 4
     let time = 0
-    const player_shadow = new Vertex(player.position.x,player.position.y)
+    const player_shadow = new Vertex(player.position.x, player.position.y)
 
     Vertices.push(player)
     Vertices.push(player_shadow)
 
+
+
+
+    // day2
+
+    const world = []
+    const size = 10
+    const worldSize = { x: 10, y: 10, z: 5 }
+
+    for (let x = 0; x < size; x++) {
+        world[x] = []
+        for (let y = 0; y < size; y++) {
+            world[x][y] = []
+            const height = Math.floor(Math.random() * 5)
+            for (let z = 0; z < height; z++) {
+                world[x][y][z] = 1
+            }
+        }
+    }
+
+    function drawWorld() {
+        for (let x = 0; x < size; x++) {
+            for (let y = 0; y < size; y++) {
+                for (let z = 0; z < 5; z++) {
+                    if (world[x][y][z]) {
+                        const v = new Vertex(x * 32, y * 32, z * 32)
+                        cameraProjection2_5D(v, player)
+
+
+                        c.fillStyle = `hsl(${z * 30}, 30%, 30%)`
+                        c.fillRect(v.drawPosition.x, v.drawPosition.y, 32, 32 * Math.cos(camera_angle))
+                        
+                        if (!world[x][y][z + 1]) {
+                            const vt = new Vertex(x * 32, y * 32, (z + 1) * 32)
+                            cameraProjection2_5D(vt, player)
+                            c.fillStyle = `hsl(${(z + 1) * 30}, ${y * 5+50}%, ${y * 5+30}%)`
+                            c.fillRect(vt.drawPosition.x, vt.drawPosition.y, 32, 32 * Math.cos(camera_angle))
+                            c.fillStyle = 'black'
+                            c.fillText(z, vt.drawPosition.x + 10, vt.drawPosition.y + 10)
+                            
+                            c.strokeStyle  ='white'
+                            c.lineWidth=2
+                            c.beginPath()
+                            c.moveTo(vt.drawPosition.x,vt.drawPosition.y)
+                            c.lineTo(vt.drawPosition.x+32,vt.drawPosition.y)
+                            c.stroke()
+
+                        }
+
+                        //v.drawSize = 4
+                        //v.draw_point()
+
+                    }
+                }
+            }
+        }
+    }
+
+    function getGroundHeight(x, y, _world = world) {
+        const bx = Math.floor(x / 32); // ワールド座標をブロックインデックスに変換
+        const by = Math.floor(y / 32);
+        if (bx < 0 || by < 0 || bx >= worldSize.x || by >= worldSize.y) {
+            return 0;
+        }
+
+        // 一番上のブロックを探す（下から上に走査）
+        for (let z = worldSize.z - 1; z >= 0; z--) {
+            if (_world[bx][by][z]) {
+                return z * 32 + 32; // ブロックの上面（高さ）
+            }
+        }
+
+        return 0
+    }
+
+    player.vz = 0
+
     gameLoop = function () {
+        // events
         if (keys.down.pressed)
             player.position.y += 1
         else if (keys.up.pressed)
@@ -811,16 +896,40 @@
         else if (keys.right.pressed)
             player.position.x += 1
 
+        if (keys.camera_up.pressed)
+            camera_angle_deg += 1
+        else if (keys.camera_down.pressed)
+            camera_angle_deg -= 1
 
-        player.position.z = Math.abs(Math.sin(time++ / 20)) * 200
-        player_shadow.position.x = player.position.x
-        player_shadow.position.y = player.position.y
+        player.vz -= 0.5
 
+
+        // check
+        const groundZ = getGroundHeight(player.position.x, player.position.y)
+        showHTML(groundZ, 0)
+        if (player.position.z + player.vz < groundZ) {
+            player.vz = 0
+            player.position.z = groundZ
+        }
+        if (camera_angle_deg > 45)
+            camera_angle_deg = 45
+        else if (camera_angle_deg < 0)
+            camera_angle_deg = 0
+
+        // update
+        camera_angle = camera_angle_deg / 180 * Math.PI
+        player.position.z += player.vz
+        //player.position.z = Math.abs(Math.sin(time++ / 20)) * 200
+        //player_shadow.position.x = player.position.x
+        //player_shadow.position.y = player.position.y
+
+        // draw
         c.clearRect(0, 0, w, h)
         drawGrid()
+        drawWorld()
         Vertices.forEach(e => {
-            e.draw_point_canvas()
-            cameraProjection2_5D(e,player)
+            //e.draw_point_canvas()
+            cameraProjection2_5D(e, player)
             e.draw_point()
         })
     }
