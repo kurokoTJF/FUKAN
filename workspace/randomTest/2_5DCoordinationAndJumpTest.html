@@ -33,6 +33,7 @@
 
         c.strokeStyle = 'rgba(0,0,0,0.2)';
         c.lineWidth = 2
+        c.fillStyle = 'black'
         c.font = '10px sans-serif' // フォント指定も忘れずに
 
         for (let i = 0; i <= cols; i++) {
@@ -55,7 +56,22 @@
 
 <script id="equipment & engine & utilities">
 
+    document.addEventListener("keyup", (e) => {
+        const action = keyMap[e.key.toLowerCase()]
+        if (action) {
+            keys[action].pressed = false
+            if (onReleasehandlers[action]) {
+                if (keys[action].press) {
+                    onReleasehandlers[action]()
+                    keys[action].press = false
+                }
+            } else {
+                keys[action].press = false
 
+            }
+            e.preventDefault()
+        }
+    })
 
     document.addEventListener("keydown", (e) => {
         const action = keyMap[e.key.toLowerCase()]
@@ -682,6 +698,7 @@
         ' ': 'shot',
     }
 
+    // 必要なキーだけ登録すればOK
     const onPressHandlers = {
         up: () => {
 
@@ -693,9 +710,7 @@
         right: () => {
         },
         shot: () => {
-            player.vz = 10
         }
-        // 必要なキーだけ登録すればOK
     }
 
     const onReleasehandlers = {
@@ -734,6 +749,13 @@
             this.drawPosition.x = x
             this.drawPosition.y = y
             this.drawPosition.z = z
+        }
+
+        getDepth() {
+            return this.position.x + this.position.y + this.position.z
+        }
+        getCenterDepth() {
+            return this.getDepth()
         }
         print() {
             const msg = '(' + this.position.x + ', ' + this.position.y + ', ' + this.position.z + ')'
@@ -781,93 +803,203 @@
     }
 
     // you can paint dot by clicking!
-    document.addEventListener("keyup", (e) => {
-        const action = keyMap[e.key.toLowerCase()]
-        if (action) {
-            keys[action].pressed = false
-            if (onReleasehandlers[action]) {
-                if (keys[action].press) {
-                    onReleasehandlers[action]()
-                    keys[action].press = false
-                }
-            } else {
-                keys[action].press = false
-
-            }
-            e.preventDefault()
-        }
-    })
 
 
-    const player = new Vertex(200, 200)
+
+
+    const player = new Vertex(200, 200, 500)
+    player.width = 18
+    player.height = 24
     player.drawSize = 4
-    let time = 0
+    player.vx = 0
+    player.vy = 0
+    player.vz = 0
+
+
     const player_shadow = new Vertex(player.position.x, player.position.y)
-
-    Vertices.push(player)
-    Vertices.push(player_shadow)
-
-
-
-
     // day2
 
     const world = []
     const size = 10
-    const worldSize = { x: 10, y: 10, z: 5 }
+    const worldSize = { x: 20, y: 20, z: 5 }
+    const block_size = 60
 
-    for (let x = 0; x < size; x++) {
+
+    // genarate world
+    for (let x = 0; x < worldSize.x; x++) {
         world[x] = []
-        for (let y = 0; y < size; y++) {
+        for (let y = 0; y < worldSize.y; y++) {
             world[x][y] = []
-            const height = Math.floor(Math.random() * 5)
+            const height = Math.floor(Math.random() * (worldSize.z - 1)) + 1
             for (let z = 0; z < height; z++) {
                 world[x][y][z] = 1
             }
         }
     }
 
+
+
+
     function drawWorld() {
-        for (let x = 0; x < size; x++) {
-            for (let y = 0; y < size; y++) {
-                for (let z = 0; z < 5; z++) {
+        const drawList = []
+
+        // 1. draw World block
+        for (let x = 0; x < worldSize.x; x++) {
+            for (let y = 0; y < worldSize.y; y++) {
+                for (let z = 0; z < worldSize.z; z++) {
                     if (world[x][y][z]) {
-                        const v = new Vertex(x * 32, y * 32, z * 32)
+                        const v = new Vertex(x * block_size, y * block_size, z * block_size)
                         cameraProjection2_5D(v, player)
 
+                        // draw height
+                        drawList.push({
+                            depth: x + y + z,
+                            color: `hsl(${z * 40/worldSize.z+200}, 50%, ${z * 100/worldSize.z}%)`,
+                            draw: function () {
+                                c.fillStyle = this.color;
+                                c.fillRect(
+                                    v.drawPosition.x,
+                                    v.drawPosition.y + block_size * Math.cos(camera_angle) - block_size * Math.sin(camera_angle),
+                                    block_size,
+                                    block_size * Math.sin(camera_angle)
+                                );
 
-                        c.fillStyle = `hsl(${z * 30}, 30%, 30%)`
-                        c.fillRect(v.drawPosition.x, v.drawPosition.y, 32, 32 * Math.cos(camera_angle))
-                        
+                            }
+                        })
+
+                        // draw top!
                         if (!world[x][y][z + 1]) {
-                            const vt = new Vertex(x * 32, y * 32, (z + 1) * 32)
+                            const vt = new Vertex(x * block_size, y * block_size, (z + 1) * block_size)
                             cameraProjection2_5D(vt, player)
-                            c.fillStyle = `hsl(${(z + 1) * 30}, ${y * 5+50}%, ${y * 5+30}%)`
-                            c.fillRect(vt.drawPosition.x, vt.drawPosition.y, 32, 32 * Math.cos(camera_angle))
-                            c.fillStyle = 'black'
-                            c.fillText(z, vt.drawPosition.x + 10, vt.drawPosition.y + 10)
-                            
-                            c.strokeStyle  ='white'
-                            c.lineWidth=2
-                            c.beginPath()
-                            c.moveTo(vt.drawPosition.x,vt.drawPosition.y)
-                            c.lineTo(vt.drawPosition.x+32,vt.drawPosition.y)
-                            c.stroke()
 
+                            drawList.push({
+                                depth: x + y + z + 1,
+                                color: `hsl(${(z + 1) * 40/worldSize.z}, 80%, ${(z+1) * 100/worldSize.z}%)`,
+                                draw: function () {
+                                    c.fillStyle = this.color;
+                                    c.fillRect(
+                                        vt.drawPosition.x,
+                                        vt.drawPosition.y,
+                                        block_size,
+                                        block_size * Math.cos(camera_angle)
+                                    );
+
+                                }
+                            })
                         }
-
-                        //v.drawSize = 4
-                        //v.draw_point()
-
                     }
                 }
             }
         }
+
+        // 2. プレイヤーも描画リストに追加
+        let vp = new Vertex(player.position.x, player.position.y, player.position.z);
+        cameraProjection2_5D(vp, player);
+        drawList.push({
+            screen: vp.drawPosition,
+            depth:
+                player.getDepth() / block_size + 0.1,
+            color: "red",
+            draw: function () {
+                c.fillStyle = 'black'
+                c.fillRect(
+                    this.screen.x - player.width / 2,
+                    this.screen.y - player.width * Math.cos(camera_angle) / 2,
+                    player.width,
+                    player.width * Math.cos(camera_angle)
+                );
+                c.fillStyle = this.color;
+                c.fillRect(
+                    this.screen.x - player.width / 2,
+                    this.screen.y - player.height * Math.sin(camera_angle) - player.width * Math.cos(camera_angle) / 2,
+                    player.width,
+                    player.width * Math.cos(camera_angle)
+                );
+                c.fillStyle = 'rgba(160,0,100,1)';
+                c.fillRect(
+                    this.screen.x - player.width / 2,
+                    this.screen.y - player.height * Math.sin(camera_angle) + player.width * Math.cos(camera_angle) / 2,
+                    player.width,
+                    player.height * Math.sin(camera_angle)
+                );
+
+            }
+
+        });
+        vp = new Vertex(player_shadow.position.x, player_shadow.position.y, player_shadow.position.z)
+        cameraProjection2_5D(vp, player);
+        drawList.push({
+            depth:
+                player_shadow.getDepth() / block_size,
+            color: "rgba(0,0,0,0.5)",
+            draw: function () {
+                c.fillStyle = this.color;
+                c.fillRect(
+                    vp.drawPosition.x - player.width / 2,
+                    vp.drawPosition.y - player.width * Math.cos(camera_angle) / 2,
+                    player.width,
+                    player.width * Math.cos(camera_angle)
+                );
+
+            }
+
+        });
+
+        // 3. Zバッファソート (奥から手前)
+        drawList.sort((a, b) => a.depth - b.depth);
+
+        // 4. 描画
+        for (const item of drawList) {
+            item.draw()
+        }
+    }
+
+
+    // マイクラの醍醐味
+    // positionとwidth, height, blockSizeの定義も必須
+    function moveAxisCheck(pp, axis, delta, pw = block_size, ph = block_size, _world = world,block = block_size) {
+        const np = { x: pp.x, y: pp.y, z: pp.z }
+        np[axis] += delta
+        const eps = 0.001
+
+        // この計算…一回だけでいいよね？
+        // いやだめだ、軸ごとにPositionの更新が入るので、引っかかるBlockも更新されるべき
+        const minX = Math.floor((np.x - pw / 2) / block)
+        const maxX = Math.floor((np.x + pw / 2 - eps) / block)
+        const minY = Math.floor((np.y - pw / 2) / block)
+        const maxY = Math.floor((np.y + pw / 2 - eps) / block)
+        const minZ = Math.floor((np.z) / block)
+        const maxZ = Math.floor((np.z + ph - eps) / block)
+
+        for (let bx = minX; bx <= maxX; bx++) {
+            for (let by = minY; by <= maxY; by++) {
+                for (let bz = minZ; bz <= maxZ; bz++) {
+                    if (_world[bx]?.[by]?.[bz]) {
+                        // 衝突補正: 進行方向に応じて位置をブロックの端に揃える
+                        if (axis === 'x') {
+                            if (delta > 0) pp[axis] = bx * block - pw / 2;
+                            if (delta < 0) pp[axis] = (bx + 1) * block + pw / 2
+                        } else if (axis === 'y') {
+                            if (delta > 0) pp[axis] = by * block - pw / 2;
+                            if (delta < 0) pp[axis] = (by + 1) * block + pw / 2
+                        } else if (axis === 'z') {
+                            if (delta > 0) pp[axis] = bz * block - ph;       // top
+                            if (delta < 0) pp[axis] = (bz + 1) * block;   // landing
+
+                        }
+
+                        return 0; // 衝突したら移動終了
+                    }
+                }
+            }
+        }
+
+        return delta
     }
 
     function getGroundHeight(x, y, _world = world) {
-        const bx = Math.floor(x / 32); // ワールド座標をブロックインデックスに変換
-        const by = Math.floor(y / 32);
+        const bx = Math.floor(x / block_size); // ワールド座標をブロックインデックスに変換
+        const by = Math.floor(y / block_size);
         if (bx < 0 || by < 0 || bx >= worldSize.x || by >= worldSize.y) {
             return 0;
         }
@@ -875,62 +1007,72 @@
         // 一番上のブロックを探す（下から上に走査）
         for (let z = worldSize.z - 1; z >= 0; z--) {
             if (_world[bx][by][z]) {
-                return z * 32 + 32; // ブロックの上面（高さ）
+                return block_size + z * block_size; // ブロックの上面（高さ）
             }
         }
 
         return 0
     }
 
-    player.vz = 0
-
     gameLoop = function () {
-        // events
-        if (keys.down.pressed)
-            player.position.y += 1
-        else if (keys.up.pressed)
-            player.position.y -= 1
 
+        // GM update
+
+
+        // events and check
+        // AABB
         if (keys.left.pressed)
-            player.position.x -= 1
+            player.vx = moveAxisCheck(player.position, 'x', -1, player.width, player.height)
         else if (keys.right.pressed)
-            player.position.x += 1
+            player.vx = moveAxisCheck(player.position, 'x', 1, player.width, player.height)
+
+        if (keys.down.pressed)
+            player.vy = moveAxisCheck(player.position, 'y', 1, player.width, player.height)
+        else if (keys.up.pressed)
+            player.vy = moveAxisCheck(player.position, 'y', -1, player.width, player.height)
+
+        if (keys.shot.pressed) {
+            player.vz = 10; // ジャンプ速度
+        }
+        player.vz = moveAxisCheck(player.position, 'z', player.vz - 0.5, player.width, player.height)
 
         if (keys.camera_up.pressed)
             camera_angle_deg += 1
         else if (keys.camera_down.pressed)
             camera_angle_deg -= 1
 
-        player.vz -= 0.5
 
+        if (camera_angle_deg > 85)
+            camera_angle_deg = 85
+        else if (camera_angle_deg < 5)
+            camera_angle_deg = 5
 
-        // check
-        const groundZ = getGroundHeight(player.position.x, player.position.y)
-        showHTML(groundZ, 0)
-        if (player.position.z + player.vz < groundZ) {
-            player.vz = 0
-            player.position.z = groundZ
-        }
-        if (camera_angle_deg > 45)
-            camera_angle_deg = 45
-        else if (camera_angle_deg < 0)
-            camera_angle_deg = 0
+        // apply
+        showHTML(`${player.vx},${player.vy},${player.vz}`)
+        showHTML(`${player.position.x},${player.position.y},${player.position.z}`, 'pos')
 
-        // update
-        camera_angle = camera_angle_deg / 180 * Math.PI
+        player.position.x += player.vx
+        player.position.y += player.vy
         player.position.z += player.vz
-        //player.position.z = Math.abs(Math.sin(time++ / 20)) * 200
-        //player_shadow.position.x = player.position.x
-        //player_shadow.position.y = player.position.y
+
+        camera_angle = camera_angle_deg / 180 * Math.PI
+
+        player_shadow.position.x = player.position.x
+        player_shadow.position.y = player.position.y
+        player_shadow.position.z = getGroundHeight(player_shadow.position.x, player_shadow.position.y)
+
+        player.vx = 0
+        player.vy = 0
+
+
 
         // draw
         c.clearRect(0, 0, w, h)
         drawGrid()
+
+
         drawWorld()
-        Vertices.forEach(e => {
-            //e.draw_point_canvas()
-            cameraProjection2_5D(e, player)
-            e.draw_point()
-        })
+
+
     }
 </script>
