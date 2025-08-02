@@ -1,4 +1,4 @@
-<body>redefine the gameLoop method</body>
+<body>2.5D MineCraft Test</body>
 <canvas width="512" height="512"></canvas>
 
 <p>
@@ -13,14 +13,7 @@
     w = canvas.width
     h = canvas.height
 
-    canvas.addEventListener('click', (event) => {
-        // Canvas上の位置を計算
-        const rect = canvas.getBoundingClientRect();
-        const x = event.clientX - rect.left;
-        const y = event.clientY - rect.top;
-        Vertices.push(new Vertex(x, y, 0))
-        //console.log(`Vertices.push(new Vertex(x=${x}, y=${500-y},z=0))`);
-    });
+
 
     function drawSimpleBG(color) {
         c.fillStyle = color
@@ -664,6 +657,53 @@
     update()
 </script>
 
+<script id="3D accessable world engine">
+    // マイクラ世界の醍醐味の一つ
+    // positionとwidth, height, blockSizeの定義も必須
+    // アクセスできる世界の情報で、好きなタイミングで checkができる。
+    function moveAxisCheck(pp, axis, delta, pw = block_size, ph = block_size, _world = world, block = block_size) {
+        const np = { x: pp.x, y: pp.y, z: pp.z }
+        np[axis] += delta
+
+        // この計算…一回だけでいいよね？
+        // いやだめだ、軸ごとにPositionの更新が入るので、引っかかるBlockも更新されるべき
+        const eps = 0.001// Math.floorは[0,1)なので、max側にくっつけた状態が良くない
+        const minX = Math.floor((np.x - pw / 2) / block)
+        const maxX = Math.floor((np.x + pw / 2 - eps) / block)
+        const minY = Math.floor((np.y - pw / 2) / block)
+        const maxY = Math.floor((np.y + pw / 2 - eps) / block)
+        const minZ = Math.floor((np.z) / block)
+        const maxZ = Math.floor((np.z + ph - eps) / block)
+
+        for (let bx = minX; bx <= maxX; bx++) {
+            for (let by = minY; by <= maxY; by++) {
+                for (let bz = minZ; bz <= maxZ; bz++) {
+                    if (_world[bx]?.[by]?.[bz]) {
+                        // 衝突補正: 進行方向に応じて位置をブロックの端に揃える
+                        if (axis === 'x') {
+                            if (delta > 0) pp[axis] = bx * block - pw / 2;
+                            if (delta < 0) pp[axis] = (bx + 1) * block + pw / 2
+                        } else if (axis === 'y') {
+                            if (delta > 0) pp[axis] = by * block - pw / 2;
+                            if (delta < 0) pp[axis] = (by + 1) * block + pw / 2
+                        } else if (axis === 'z') {
+                            if (delta > 0) pp[axis] = bz * block - ph;       // top
+                            if (delta < 0) pp[axis] = (bz + 1) * block;   // landing
+
+                        }
+
+                        return 0; // 衝突したら移動終了
+                    }
+                }
+            }
+        }
+
+        return delta
+    }
+
+</script>
+
+
 <script id="key mapping">
     // EventID好きなだけ追加
     const eventID = new Proxy({}, (() => {
@@ -692,9 +732,9 @@
         'w': 'up',
         's': 'down',
         'i': 'camera_up',
-        'j': 'j',
+        'j': 'camera_radius_up',
         'k': 'camera_down',
-        'l': 'l',
+        'l': 'camera_radius_down',
         ' ': 'shot',
     }
 
@@ -776,37 +816,54 @@
     let camera_angle_deg = 15
     let camera_angle = camera_angle_deg * Math.PI / 180
     // canvas XYZ to screen XYZ
-    function cameraProjection2_5D(v, camera, angle = camera_angle) {
+    // xy the ground, z to sky, and I look down
+    // position, update_drawPosition
+    function cameraProjection2_5D(v, camera = player, angle = camera_angle, radius = world_radius) {
         const vp = v.position
         const cp = camera.position
         const rad = angle
-        // my canvas XYZ to Blender XYZ
+        radius += v.position.z
+        // my canvas XYZ to Maya XYZ
         // the origin is left-top
-        const v2 = {
-            x: vp.x - cp.x + w / 2,
-            y: h - (vp.y - cp.y + h / 2),
+        const v1 = {
+            x: vp.x - cp.x,
+            y: vp.y - cp.y,
             z: vp.z - cp.z
         }
-        // world to camera(Maya XYZ)
+
+
+        if (v1.y < 0) {
+            const theta = v1.y / radius;
+            v1.y = radius * Math.sin(theta);
+            v1.z -= radius * (1 - Math.cos(theta));
+        }
+
+
+
+        const v2 = {
+            x: v1.x,
+            y: h - v1.y,
+            z: v1.z
+        }
+        // world to camera(in Maya XYZ)
+        // the dot production, to get the coords in new coordination
         const v3 = {
             x: v2.x,
             y: v2.y * Math.cos(rad) + v2.z * Math.sin(rad),
             z: v2.y * Math.sin(rad) - v2.z * Math.cos(rad)
         }
-        // camera to screen(invert the y)
+        // camera(Maya XYZ) to screen(invert the y)
+        // camera center! (x, h * Math.cos(rad))
         const v4 = {
-            x: v3.x,
-            y: h - v3.y,
+            x: (v3.x) + w / 2,
+            y: (h * Math.cos(rad) - v3.y) + h / 2,
             z: v3.z
         }
         v.update_drawPosition(v4)
+        return v4
     }
 
     // you can paint dot by clicking!
-
-
-
-
     const player = new Vertex(200, 200, 500)
     player.width = 18
     player.height = 24
@@ -819,10 +876,31 @@
     const player_shadow = new Vertex(player.position.x, player.position.y)
     // day2
 
+    class BlockInfo {
+        constructor(type = "air") {
+            this.type = type;     // "air", "dirt", "stone", etc.
+            this.highlighted = false;
+        }
+
+        isSolid() {
+            return this.type !== "air";
+        }
+
+        setHighlight(state) {
+            this.highlighted = state;
+        }
+
+        isHighlighted() {
+            return this.highlighted;
+        }
+    }
+
+
     const world = []
     const size = 10
     const worldSize = { x: 20, y: 20, z: 5 }
     const block_size = 60
+    let world_radius = 200
 
 
     // genarate world
@@ -832,7 +910,7 @@
             world[x][y] = []
             const height = Math.floor(Math.random() * (worldSize.z - 1)) + 1
             for (let z = 0; z < height; z++) {
-                world[x][y][z] = 1
+                world[x][y][z] = new BlockInfo('block')
             }
         }
     }
@@ -840,6 +918,7 @@
 
 
 
+    // draw the 3d world with only rectangle!!!
     function drawWorld() {
         const drawList = []
 
@@ -848,44 +927,50 @@
             for (let y = 0; y < worldSize.y; y++) {
                 for (let z = 0; z < worldSize.z; z++) {
                     if (world[x][y][z]) {
-                        const v = new Vertex(x * block_size, y * block_size, z * block_size)
-                        cameraProjection2_5D(v, player)
+                        const v = new Vertex(x * block_size, (y + 1) * block_size, z * block_size)
+                        const v2 = new Vertex(x * block_size, (y + 1) * block_size, (z + 1) * block_size)
+                        const h1 = cameraProjection2_5D(v2, player).y // top
+                        const h2 = cameraProjection2_5D(v, player).y // bottom
 
-                        // draw height
-                        drawList.push({
-                            depth: x + y + z,
-                            color: `hsl(${z * 40/worldSize.z+200}, 50%, ${z * 100/worldSize.z}%)`,
-                            draw: function () {
-                                c.fillStyle = this.color;
-                                c.fillRect(
-                                    v.drawPosition.x,
-                                    v.drawPosition.y + block_size * Math.cos(camera_angle) - block_size * Math.sin(camera_angle),
-                                    block_size,
-                                    block_size * Math.sin(camera_angle)
-                                );
-
-                            }
-                        })
-
-                        // draw top!
-                        if (!world[x][y][z + 1]) {
-                            const vt = new Vertex(x * block_size, y * block_size, (z + 1) * block_size)
-                            cameraProjection2_5D(vt, player)
-
+                        if (h2 - h1 > 0)
+                            // draw height
                             drawList.push({
                                 depth: x + y + z + 1,
-                                color: `hsl(${(z + 1) * 40/worldSize.z}, 80%, ${(z+1) * 100/worldSize.z}%)`,
+                                color: `hsl(${z * 40 / worldSize.z + 200}, 50%, ${z * 100 / worldSize.z}%)`,
                                 draw: function () {
                                     c.fillStyle = this.color;
                                     c.fillRect(
-                                        vt.drawPosition.x,
-                                        vt.drawPosition.y,
+                                        v2.drawPosition.x,
+                                        v2.drawPosition.y,
                                         block_size,
-                                        block_size * Math.cos(camera_angle)
+                                        h2 - h1
                                     );
 
                                 }
                             })
+
+                        // draw top!
+                        if (!world[x][y][z + 1]) {
+                            const vt = new Vertex(x * block_size, y * block_size, (z + 1) * block_size)
+                            const vt2 = new Vertex(x * block_size, (y + 1) * block_size, (z + 1) * block_size)
+                            const h1 = cameraProjection2_5D(vt, player).y // top
+                            const h2 = cameraProjection2_5D(vt2, player).y // bottom
+
+                            if (h2 - h1 > 0)
+                                drawList.push({
+                                    depth: x + y + z + 1,
+                                    color: `hsl(${(z + 1) * 40 / worldSize.z}, 80%, ${(z + 1) * 100 / worldSize.z}%)`,
+                                    draw: function () {
+                                        c.fillStyle = this.color;
+                                        c.fillRect(
+                                            vt.drawPosition.x,
+                                            vt.drawPosition.y,
+                                            block_size,
+                                            h2 - h1
+                                        );
+
+                                    }
+                                })
                         }
                     }
                 }
@@ -945,8 +1030,33 @@
 
         });
 
+
+
         // 3. Zバッファソート (奥から手前)
         drawList.sort((a, b) => a.depth - b.depth);
+
+
+        if (hightLight.draw) {
+            const hp = hightLight.position
+            const v = new Vertex(hp.x, hp.y, hp.z + block_size)
+            h1 = cameraProjection2_5D(v, player).y
+            h2 = cameraProjection2_5D(new Vertex(hp.x, hp.y + block_size, hp.z), player).y
+            drawList.push({
+                depth: 0,
+                color: "rgba(255,255,0,0.5)",
+                draw: function () {
+                    c.fillStyle = this.color;
+                    c.fillRect(
+                        v.drawPosition.x,
+                        v.drawPosition.y,
+                        block_size,
+                        Math.max(h2 - h1, 0)
+                    );
+
+                }
+
+            });
+        }
 
         // 4. 描画
         for (const item of drawList) {
@@ -955,47 +1065,6 @@
     }
 
 
-    // マイクラの醍醐味
-    // positionとwidth, height, blockSizeの定義も必須
-    function moveAxisCheck(pp, axis, delta, pw = block_size, ph = block_size, _world = world,block = block_size) {
-        const np = { x: pp.x, y: pp.y, z: pp.z }
-        np[axis] += delta
-        const eps = 0.001
-
-        // この計算…一回だけでいいよね？
-        // いやだめだ、軸ごとにPositionの更新が入るので、引っかかるBlockも更新されるべき
-        const minX = Math.floor((np.x - pw / 2) / block)
-        const maxX = Math.floor((np.x + pw / 2 - eps) / block)
-        const minY = Math.floor((np.y - pw / 2) / block)
-        const maxY = Math.floor((np.y + pw / 2 - eps) / block)
-        const minZ = Math.floor((np.z) / block)
-        const maxZ = Math.floor((np.z + ph - eps) / block)
-
-        for (let bx = minX; bx <= maxX; bx++) {
-            for (let by = minY; by <= maxY; by++) {
-                for (let bz = minZ; bz <= maxZ; bz++) {
-                    if (_world[bx]?.[by]?.[bz]) {
-                        // 衝突補正: 進行方向に応じて位置をブロックの端に揃える
-                        if (axis === 'x') {
-                            if (delta > 0) pp[axis] = bx * block - pw / 2;
-                            if (delta < 0) pp[axis] = (bx + 1) * block + pw / 2
-                        } else if (axis === 'y') {
-                            if (delta > 0) pp[axis] = by * block - pw / 2;
-                            if (delta < 0) pp[axis] = (by + 1) * block + pw / 2
-                        } else if (axis === 'z') {
-                            if (delta > 0) pp[axis] = bz * block - ph;       // top
-                            if (delta < 0) pp[axis] = (bz + 1) * block;   // landing
-
-                        }
-
-                        return 0; // 衝突したら移動終了
-                    }
-                }
-            }
-        }
-
-        return delta
-    }
 
     function getGroundHeight(x, y, _world = world) {
         const bx = Math.floor(x / block_size); // ワールド座標をブロックインデックスに変換
@@ -1012,6 +1081,75 @@
         }
 
         return 0
+    }
+
+
+    const hightLight = new Vertex(0, 0, 0)
+
+    canvas.addEventListener("mousemove", (e) => {
+        const rect = canvas.getBoundingClientRect();
+        const mouseX = e.clientX - rect.left;
+        const mouseY = e.clientY - rect.top;
+
+        const dir = getViewDirectionFromMouse(mouseX, mouseY, player)
+        const hit = raycastFromPlayer(player, dir);
+
+        if (hit) {
+            hightLight.draw = true
+            hightLight.position.x = hit.x * block_size
+            hightLight.position.y = hit.y * block_size
+            hightLight.position.z = hit.z * block_size
+        } else {
+            hightLight.draw = false
+        }
+    });
+    canvas.addEventListener("click", (e) => {
+        const hit = {}
+        hit.x = hightLight.position.x / block_size
+        hit.y = hightLight.position.y / block_size
+        hit.z = hightLight.position.z / block_size
+
+        if (hit) {
+            console.log("ヒット:", hit);
+            world[hit.x][hit.y][hit.z] = 0; // ブロック削除
+
+        }
+    });
+
+
+    function getViewDirectionFromMouse(mouseX, mouseY, camera) {
+        // スクリーン→ワールド方向へのベクトル
+        const dx = mouseX - canvas.width / 2;
+        const dy = mouseY - canvas.height / 2;
+
+        // 2.5DなのでZは固定で水平ベクトル
+        const length = Math.hypot(dx, dy);
+        return {
+            x: dx / length,
+            y: dy / length,
+            z: 0 // ジャンプや高さ方向を見ない場合
+        };
+    }
+
+    function raycastFromPlayer(player, dir, maxDist = 500, step = 4) {
+        let ox = player.position.x;
+        let oy = player.position.y;
+        let oz = player.position.z;
+
+        for (let d = 0; d < maxDist; d += step) {
+            const bx = Math.floor(ox / block_size);
+            const by = Math.floor(oy / block_size);
+            const bz = Math.floor(oz / block_size);
+
+            if (world[bx]?.[by]?.[bz]) {
+                return { x: bx, y: by, z: bz };
+            }
+
+            ox += dir.x * step;
+            oy += dir.y * step;
+            oz += dir.z * step;
+        }
+        return null;
     }
 
     gameLoop = function () {
@@ -1040,6 +1178,11 @@
             camera_angle_deg += 1
         else if (keys.camera_down.pressed)
             camera_angle_deg -= 1
+
+        if (keys.camera_radius_up.pressed)
+            world_radius = Math.min(world_radius + 10, 800)
+        else if (keys.camera_radius_down.pressed)
+            world_radius = Math.max(world_radius - 10, 10)
 
 
         if (camera_angle_deg > 85)
@@ -1073,6 +1216,7 @@
 
         drawWorld()
 
+        showHTML('==========\nW,A,S,D to move \n SPACE to fly \n LMB to delete block\n I,J,K,L to adjust camera \n========== ')
 
     }
 </script>
