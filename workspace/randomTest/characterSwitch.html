@@ -745,6 +745,7 @@
             this.target = target
             this.world = world
             this.radius = 400
+            this.tilt = 0
             this.rotation = 45
             this.zoom = 1
             this.renderQueue = []
@@ -763,7 +764,7 @@
 
 
             //const k = Math.min(Math.abs(v1.y) / this.world.block_size/2, 1)
-            const k=1
+            const k = 1
             const theta = v1.y / radius
             v1.y = v1.y * (1 - k) + k * (radius + position.z) * Math.sin(theta)
             v1.z = v1.z * (1 - k) + k * (v1.z - (radius + position.z) * (1 - Math.cos(theta)))
@@ -789,22 +790,28 @@
                 z: v3.z
             }
 
-            const v5 = {
-                x: (v4.x - w / 2) * this.zoom + w / 2,
-                y: (v4.y - h / 2) * this.zoom + h / 2,
-                z: v4.z * this.zoom
-            }
+
+
+
             //v.update_drawPosition(v4)
-            return v5
+            return v4
         }
 
         getDepth() { }
 
         draw() {
             this.getRenderQueue()
+            c.save(); // 現在の状態を保存
+            // 中心を回転の基準点に移動
+            c.translate(w / 2, h / 2);
+            c.rotate(this.tilt * Math.PI / 180);
+            c.scale(1+(this.zoom-1)*2, this.zoom)
+            c.translate(-w / 2, -h / 2);
             this.renderQueue.forEach(e => {
                 e.draw()
             })
+            c.restore(); // 状態を元に戻す
+
             this.renderQueue = []
         }
 
@@ -814,7 +821,6 @@
             const block_size = this.world.block_size
             const world = this.world.world
             const camera_angle = this.rotation / 180 * Math.PI
-            const zoom = this.zoom
 
             for (let x = 0; x < worldSize.x; x++) for (let y = 0; y < worldSize.y; y++) for (let z = 0; z < worldSize.z; z++) if (world[x][y][z]) {
                 const v_p = this.projection({
@@ -834,14 +840,14 @@
                     // draw height
                     this.renderQueue.push({
                         depth: x + y + z + 1,
-                        color: `hsl(${z / worldSize.z* 20+y /worldSize.y* 20  + 200}, 50%, ${z /worldSize.z * 50 +y /worldSize.y * 50 }%)`,
+                        color: `hsl(${z / worldSize.z * 20 + y / worldSize.y * 20 + 200}, 50%, ${z / worldSize.z * 50 + y / worldSize.y * 50}%)`,
                         draw: function () {
                             c.fillStyle = this.color;
                             c.fillRect(
                                 v2_p.x,
                                 v2_p.y,
-                                block_size * zoom,
-                                Math.ceil(h2 - h1)+1
+                                block_size ,
+                                Math.ceil(h2 - h1) + 1
                             );
 
                         }
@@ -871,8 +877,8 @@
                                 c.fillRect(
                                     vt_p.x,
                                     vt_p.y,
-                                    block_size * zoom,
-                                    Math.ceil(h2 - h1)+1
+                                    block_size ,
+                                    Math.ceil(h2 - h1) + 1
                                 );
 
                             }
@@ -908,7 +914,7 @@
                         c.fillRect(
                             vp1.x,
                             vp1.y,
-                            e.size.x * zoom,
+                            e.size.x ,
                             (vp2.y - vp1.y)
                         );
 
@@ -916,7 +922,7 @@
                         c.fillRect(
                             vp2.x,
                             vp2.y,
-                            e.size.x * zoom,
+                            e.size.x ,
                             (vp3.y - vp2.y),
                         );
 
@@ -1112,13 +1118,13 @@
         }
 
         onPressHandlers.switch = () => {
-            if(player.current == charB) return
+            if (player.current == charB) return
             player.current = charB
             GM.addCounter({
                 endTime: 100,
                 processCall: function () {
+                    camera.tilt = -10 * Math.abs(Math.sin(this.time / this.endTime * Math.PI))
                     camera.zoom = 1 + Math.abs(Math.sin(this.time / this.endTime * Math.PI))
-
                 },
                 endCall: () => {
                     console.log('counter')
@@ -1127,14 +1133,14 @@
         }
 
         onPressHandlers.switch2 = () => {
-            if(player.current == charA) return
+            if (player.current == charA) return
 
             player.current = charA
             GM.addCounter({
                 endTime: 100,
                 processCall: function () {
                     camera.zoom = 1 + Math.abs(Math.sin(this.time / this.endTime * Math.PI))
-
+                    camera.tilt = -10 * Math.abs(Math.sin(this.time / this.endTime * Math.PI))
                 },
                 endCall: () => {
                     console.log('counter')
