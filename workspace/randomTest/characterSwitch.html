@@ -744,7 +744,7 @@
         constructor(target, world) {
             this.target = target
             this.world = world
-            this.radius = 800
+            this.radius = 600
             this.rotation = 30
             this.zoom = 1
             this.renderQueue = []
@@ -752,7 +752,7 @@
         projection(position) {
             const cp = this.target.position
             const rad = this.rotation / 180 * Math.PI // angle in radius
-            const radius = this.radius + position.z
+            const radius = this.radius
             // my canvas XYZ to Maya XYZ
             // the origin is left-top
             const v1 = {
@@ -761,11 +761,9 @@
                 z: position.z - cp.z
             }
 
-            if (v1.y < 0) {// project to cylinder like Animal-Crossing
                 const theta = v1.y / radius;
-                v1.y = radius * Math.sin(theta);
-                v1.z -= radius * (1 - Math.cos(theta));
-            }
+                v1.y = (radius + position.z) * Math.sin(theta);
+                v1.z -= (radius + position.z) * (1 - Math.cos(theta));
 
             const v2 = {
                 x: v1.x,
@@ -1009,7 +1007,7 @@
 
 
     // get the world, player, camera
-    const world = new BlockWorld(20,10)
+    const world = new BlockWorld(20, 20)
     world.block_size = 60
     const charA = {
         color: 'red',
@@ -1073,7 +1071,7 @@
 
     const camera = new Camera2_5(player, world)
 
-    function movieAxis(axis, delta,_player=player,_world=world) {
+    function movieAxis(axis, delta, _player = player, _world = world) {
         return _world.moveAxisCheck_BottomType(_player.position, axis, delta, _player.size)
     }
 
@@ -1106,7 +1104,7 @@
         }
         onPressHandlers.shot = () => {
             player.vz = movieAxis('z', 8)
-            
+
         }
 
         onPressHandlers.switch = () => {
@@ -1156,6 +1154,7 @@
         c.clearRect(0, 0, w, h)
         camera.draw()
         showHTML(`Q,E to switch current player`)
+        showHTML(`WASD to move`)
 
     }
 </script>
