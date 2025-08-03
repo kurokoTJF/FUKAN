@@ -834,14 +834,14 @@
                     // draw height
                     this.renderQueue.push({
                         depth: x + y + z + 1,
-                        color: `hsl(${z * 40 / worldSize.z + 200}, 50%, ${z * 100 / worldSize.z}%)`,
+                        color: `hsl(${z / worldSize.z* 20+y /worldSize.y* 20  + 200}, 50%, ${z /worldSize.z * 50 +y /worldSize.y * 50 }%)`,
                         draw: function () {
                             c.fillStyle = this.color;
                             c.fillRect(
                                 v2_p.x,
                                 v2_p.y,
                                 block_size * zoom,
-                                (h2 - h1)
+                                Math.ceil(h2 - h1)+1
                             );
 
                         }
@@ -872,7 +872,7 @@
                                     vt_p.x,
                                     vt_p.y,
                                     block_size * zoom,
-                                    (h2 - h1)
+                                    Math.ceil(h2 - h1)+1
                                 );
 
                             }
@@ -1031,7 +1031,7 @@
     }
 
     const charB = {
-        color: 'green',
+        color: 'yellow',
         position: {
             x: 299,
             y: 20,
@@ -1112,6 +1112,7 @@
         }
 
         onPressHandlers.switch = () => {
+            if(player.current == charB) return
             player.current = charB
             GM.addCounter({
                 endTime: 100,
@@ -1126,6 +1127,8 @@
         }
 
         onPressHandlers.switch2 = () => {
+            if(player.current == charA) return
+
             player.current = charA
             GM.addCounter({
                 endTime: 100,
