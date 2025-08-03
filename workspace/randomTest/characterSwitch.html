@@ -744,8 +744,8 @@
         constructor(target, world) {
             this.target = target
             this.world = world
-            this.radius = 600
-            this.rotation = 30
+            this.radius = 400
+            this.rotation = 45
             this.zoom = 1
             this.renderQueue = []
         }
@@ -761,9 +761,13 @@
                 z: position.z - cp.z
             }
 
-                const theta = v1.y / radius;
-                v1.y = (radius + position.z) * Math.sin(theta);
-                v1.z -= (radius + position.z) * (1 - Math.cos(theta));
+
+            //const k = Math.min(Math.abs(v1.y) / this.world.block_size/2, 1)
+            const k=1
+            const theta = v1.y / radius
+            v1.y = v1.y * (1 - k) + k * (radius + position.z) * Math.sin(theta)
+            v1.z = v1.z * (1 - k) + k * (v1.z - (radius + position.z) * (1 - Math.cos(theta)))
+
 
             const v2 = {
                 x: v1.x,
