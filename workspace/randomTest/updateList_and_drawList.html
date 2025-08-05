@@ -865,8 +865,10 @@
             this.zoom = 1
             this.drawList = GM.drawList
             this.renderQueue = []
+            this.updateList =[]
+
         }
-        update() {
+        update_self() {
             if (this.target) {
                 const deltaX = this.target.position.x - this.position.x
                 const deltaY = this.target.position.y - this.position.y
@@ -879,6 +881,15 @@
                 else
                     this.position.y = this.target.position.y
             }
+        }
+        update() {
+            if (this.updatePause === true) true
+            this.update_self()
+            this.updateList.forEach(e => {
+                //console.log('a update')
+                e.update()
+            })
+            
         }
         projection(position) {
             const cp = this.position
@@ -1186,6 +1197,7 @@
 
     player_proxy.current = charB
 
+    
     //
     GM.updateList.push(player_proxy)
     GM.updateList.push(ccamera)
