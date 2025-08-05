@@ -1,0 +1,1205 @@
+<body>2.5D MineCraft Test</body>
+<canvas width="512" height="512"></canvas>
+
+<p>
+    <button onmousedown="keyPress('test')"> test </button>
+    <button onmousedown="keyPress('story')"> story current stage</button>
+    <button onmousedown="keyPress('battle')"> battle current stage </button>
+    <button onmousedown="keyPress('force')"> add force </button>
+</p>
+
+<script>
+    const canvas = document.querySelector("canvas")
+    const c = canvas.getContext("2d", { willReadFrequently: true })
+    w = canvas.width
+    h = canvas.height
+
+
+
+    function drawSimpleBG(color) {
+        c.fillStyle = color
+        c.fillRect(0, 0, w, h)
+    }
+
+    function drawGrid(cellSize = 50) {
+        const cols = Math.floor(w / cellSize); // 横方向のマス数
+        const rows = Math.floor(h / cellSize); // 縦方向のマス数
+
+        c.strokeStyle = 'rgba(0,0,0,0.2)';
+        c.lineWidth = 2
+        c.fillStyle = 'black'
+        c.font = '10px sans-serif' // フォント指定も忘れずに
+
+        for (let i = 0; i <= cols; i++) {
+            c.beginPath();
+            c.moveTo(i * cellSize, 0);
+            c.lineTo(i * cellSize, h);
+            c.stroke();
+            c.fillText(i * cellSize, i * cellSize, 10)
+        }
+
+        for (let j = 0; j <= rows; j++) {
+            c.beginPath();
+            c.moveTo(0, j * cellSize);
+            c.lineTo(w, j * cellSize);
+            c.stroke();
+            c.fillText(j * cellSize, 0, j * cellSize)
+        }
+    }
+</script>
+
+<script id="equipment & engine & utilities">
+
+    document.addEventListener("keyup", (e) => {
+        const action = keyMap[e.key.toLowerCase()]
+        if (action) {
+            keys[action].pressed = false
+            if (onReleasehandlers[action]) {
+                if (keys[action].press) {
+                    onReleasehandlers[action]()
+                    keys[action].press = false
+                }
+            } else {
+                keys[action].press = false
+
+            }
+            e.preventDefault()
+        }
+    })
+
+    document.addEventListener("keydown", (e) => {
+        const action = keyMap[e.key.toLowerCase()]
+        if (action) {
+            keys[action].pressed = true
+            if (onPressHandlers[action]) {
+                if (!keys[action].press) {
+                    onPressHandlers[action]()
+                    keys[action].press = true
+                }
+            } else {
+                keys[action].press = true
+
+            }
+            e.preventDefault()  // ページスクロールなどを防止
+        }
+    })
+
+
+
+    // html button interface
+    keyPress = function (key) {
+        keys[key].pressed = true
+        keys[key].source = 'button'
+    }
+
+    // for (let _key in keys) keys[_key].pressed = false
+
+    // key container
+    const keys = new Proxy({}, {
+        get(target, prop) {
+            if (!(prop in target)) {
+                target[prop] = { press: false, pressed: false };
+            }
+            return target[prop];
+        }
+    });
+
+    // 画面になにか
+    function showHTML(MSG, ID = 0) {
+        let el = document.getElementById(ID);
+
+        if (!el) {
+            el = document.createElement('div');
+            el.id = ID;
+
+            const body = document.body;
+            if (body.firstChild) {
+                body.insertBefore(el, body.firstChild); // ← 先頭に挿入
+            } else {
+                body.appendChild(el); // ← 最悪何もないときは普通に追加
+            }
+        }
+
+        el.innerText = MSG;
+    }
+
+    // 正式なState machine Component
+    // 外部データが必要なので
+    function getStateMachine(target) {
+        // 初期化
+        const initialState = target.data.state[target.data.initialState]
+        target.state = new ImportedState(target.data.initialState, initialState)
+        target.state.enter(target)
+
+        target.cst = function (stateName) {
+            this.state = new ImportedState(stateName, this.data.state[stateName])
+
+            this.counter.setEnd()
+            this.state.enter(this)
+        }
+
+        // update state to target's update()
+        const _func = target.update
+        target.update = function () {
+            this.state.update(this)
+            _func()
+        }
+
+    }
+
+    // render queueと一緒に使う、一気に変換
+    function cameraProjection(target, camera) {
+        //target.drawPosition.x = target.position.x
+        //target.drawPosition.y = target.position.y
+        c.save()
+
+        target.drawPosition.x = target.position.x - camera.position.x + w / 2
+        target.drawPosition.y = target.position.y - camera.position.y + h / 2
+
+        const scale = 1.5
+        c.scale(scale, scale)
+        // 左上がスケールの原点
+        // 真ん中の点を真ん中に戻せばいい
+        //　拡大したら、点の調整もスケールかけるので、最後に/scaleが必要
+        target.drawPosition.x -= ((scale - 1) * w / 2) / scale
+        target.drawPosition.y -= ((scale - 1) * h / 2) / scale
+
+        target.draw()
+
+        c.restore()
+
+
+    }
+
+    // 四角い判定ボックスと　予測型コリジョン判定用のやつ
+    // updateしないと、drawPositionも更新されない
+    function getCollision(target, draw = true, ctx = c) {
+        target.position = { x: 0, y: 0 }
+        target.deltaPosition = { x: 0, y: 0 }
+        target.drawPosition = { x: 0, y: 0 }
+        target.accelaration = { x: 0, y: 0 }
+        target.width = 32
+        target.height = 32
+        target.gravity = 1
+        target.direction = 1
+        target.maxSpeed = { x: 3, y: 10 }
+
+        target.checkSpeed = function () {
+            const vx = target.deltaPosition.x;
+            const vy = target.deltaPosition.y;
+            if (Math.abs(vx) > target.maxSpeed.x) {
+                target.deltaPosition.x = Math.sign(vx) * target.maxSpeed.x
+            }
+            if (Math.abs(vy) > target.maxSpeed.y) {
+                target.deltaPosition.y = Math.sign(vy) * target.maxSpeed.y
+            }
+        }
+
+        const _update = target.update.bind(target)
+        target.update = function () {
+            _update()
+            target.drawPosition.x = target.position.x
+            target.drawPosition.y = target.position.y
+        }
+
+        target.moveTo = function (x, y) {
+            target.position.x = x
+            target.position.y = y
+        }
+        target.updateDir = function () {
+            if (target.deltaPosition.x > 0) target.direction = 1
+            else if (target.deltaPosition.x < 0) target.direction = -1
+        }
+
+        target.drawRect = function (ctx = c) {
+            ctx.fillStyle = 'grey'
+            ctx.fillRect(target.drawPosition.x, target.drawPosition.y, this.width, this.height)
+        }
+        addMethodLast(target, 'draw', target, 'drawRect')
+
+
+        target.initialize = function (x, y, w, h) {
+            this.position = { x: x, y: y }
+            this.width = w
+            this.height = h
+        }
+
+        target.swapPosition = function () {
+            target.position.x += target.deltaPosition.x
+            target.position.y += target.deltaPosition.y
+        }
+
+        target.updateGravity = function () {
+            target.deltaPosition.y += target.gravity
+        }
+        target.applyFriction = function () {
+            const friction = 0.1;
+            const vx = target.deltaPosition.x;
+
+            if (Math.abs(vx) <= friction) {
+                target.deltaPosition.x = 0;
+            } else {
+                target.deltaPosition.x -= Math.sign(vx) * friction;
+            }
+        }
+
+        target.Ytop = function () {
+            return { now: this.position.y, next: this.position.y + this.deltaPosition.y }
+        }
+        target.Ybottom = function () {
+            return { now: this.position.y + this.height, next: this.position.y + this.height + this.deltaPosition.y }
+
+        }
+        target.Xleft = function () {
+            return { now: this.position.x, next: this.position.x + this.deltaPosition.x }
+
+        }
+        target.Xright = function () {
+            return { now: this.position.x + this.width, next: this.position.x + this.width + this.deltaPosition.x }
+
+        }
+
+        target.YLandOn = function (_ground) {
+            target.position.y = _ground - target.height
+            target.deltaPosition.y = 0
+        }
+        target.centerPosition = function () {
+            return { x: this.position.x + this.width / 2, y: this.position.y + this.height / 2 }
+        }
+
+
+
+    }
+
+    function getHitTester(_target) {
+        _target.hitTest = function (target) {
+            if (
+                target.Ybottom().next > this.Ytop().now &&
+                target.Ytop().next < this.Ybottom().now &&
+                target.Xright().next > this.Xleft().now &&
+                target.Xleft().next < this.Xright().now
+            ) {
+
+                const fromAbove = target.Ybottom().now <= this.Ytop().now
+                const fromBelow = target.Ytop().now >= this.Ybottom().now
+                const fromRight = target.Xleft().now >= this.Xright().now
+                const fromLeft = target.Xright().now <= this.Xleft().now
+                if (fromAbove) {
+                    target.position.y = this.position.y - target.height
+                    target.deltaPosition.y = 0
+                    if (target.eventQueue) target.pushEvent('land')
+                } else if (fromBelow) {
+                    target.position.y = this.position.y + this.height + 1
+                    target.deltaPosition.y = 0
+
+                } else if (fromRight) {
+                    target.position.x = this.position.x + this.width
+                    target.deltaPosition.x = 0
+
+                } else if (fromLeft) {
+                    target.position.x = this.position.x - target.width
+                    target.deltaPosition.x = 0
+                } else {
+                    console.log('?!')
+                    const centerfromAbove = target.centerPosition().y <= this.position.y + this.height / 2;
+                    const centerfromBelow = target.centerPosition().y >= this.position.y + this.height / 2;
+                    const centerfromRight = target.centerPosition().x >= this.position.x + this.width / 2;
+                    const centerfromLeft = target.centerPosition().x <= this.position.x + this.width / 2;
+                    if (centerfromAbove) {
+
+                        target.position.y = this.position.y - target.height
+                        target.deltaPosition.y = 0
+                        if (target.eventQueue) target.pushEvent('land')
+                    } else if (centerfromBelow) {
+                        target.position.y = this.position.y + this.height + 1
+                        target.deltaPosition.y = 0
+
+                    } else if (centerfromRight) {
+                        target.position.x = this.position.x + this.width
+                        target.deltaPosition.x = 0
+
+                    } else if (centerfromLeft) {
+                        target.position.x = this.position.x - target.width
+                        target.deltaPosition.x = 0
+                    } else {
+                        conosle.log('bakana!')
+                    }
+                }
+            }
+        }
+    }
+
+    // 2種類のProxyを実装する
+    // でも、正直Tagは使いたくないけどね
+    function getProxy(target) {
+        target.request = new Proxy({}, {
+            get: (target, prop) => {
+                const value = target[prop];
+                target[prop] = false; // 読んだら自動で false にする
+                return value ?? false;
+            }
+        });
+
+        // 未定義状態。自由に書き込める。デフォルト状態はfalse
+        target.Tag = new Proxy({}, {
+            get(target, prop) {
+                return prop in target ? target[prop] : false;
+            }
+        })
+    }
+
+    function getActiveTags(tagObj, separator = " ") {
+        return Object.entries(tagObj)
+            .filter(([_, v]) => v === true)
+            .map(([k]) => k)
+            .join(separator);
+    }
+
+    //　疎結合のためのEvent対応ようComponent
+    function getEventHandler(target) {
+        target.handlers = {}
+        target.on = function (event, handler) {
+            this.handlers[event] = handler
+        }
+
+        target.onRequest = function (eventName, target, ...args) {
+            const handler = this.handlers[eventName]
+            if (handler) handler(target, ...args)
+        }
+
+        target.resetHandlers = function () {
+            target.handlers = []
+        }
+    }
+
+    function getEventManager(target) {
+        target.state = target
+        // Stateはイベントの処理する対象。
+        // わざと別で定義するのは、StateMachineの導入用のInterfaceとしてです
+        target.eventQueue = []
+        // かの有名なEventQueue
+        target.pushEvent = function (eName, ...args) {
+            this.eventQueue.push([eName, ...args])
+        }
+        target.dealEvent = function (logic_object = target.state) {
+            for (const [ev, ...args] of this.eventQueue)
+                logic_object.onRequest(ev, this, ...args)
+            this.eventQueue = []
+        }
+        target.resetEvent = function () {
+            this.eventQueue = []
+        }
+        target.showEventQueue = function () {
+            let str = ''
+            for (const [ev, ...args] of this.eventQueue) {
+                str += ev + ' '
+            }
+            return str
+        }
+    }
+
+    function getEventHubManager(target) {
+        target.observers = []
+        target.notifyEvent = function (Event) {
+            for (const ob of target.observers) {
+                ob.pushEvent(Event)
+            }
+        }
+    }
+
+    // Methodを結合する。returnのスコープを注意
+    function addMethodFirst(target, target_method, comp, method) {
+        const t = target[target_method].bind(target)
+        const c = comp[method].bind(comp)
+        target[target_method] = function (...args) {
+            c(...args)
+            t(...args)
+        }
+    }
+
+    function addMethodLast(target, target_method, comp, method = target_method) {
+        const t = target[target_method].bind(target)
+        const c = comp[method].bind(comp)
+        target[target_method] = function () {
+            t()
+            c()
+        }
+    }
+
+    // 独自のupdateとDrawを持ったcomponentを内部に埋め込む
+    function joinComponent(cmpnt, trgt) {
+
+        addMethodLast(trgt, 'update', cmpnt)
+        addMethodLast(trgt, 'draw', cmpnt)
+
+        if (cmpnt.dealEvent && trgt.dealEvent) {
+            addMethodLast(trgt, 'dealEvent', cmpnt)
+        }
+
+        return cmpnt
+
+    }
+    // state Machine の初期化。これのDecoupleは…
+    // 外部データが必要
+    function getStateMachine(target) {
+        const initialState = target.data.state[target.data.initialState]
+        target.state = new ImportedState(target.data.initialState, initialState)
+        target.state.enter(target)
+
+        target.cst = function (stateName) {
+            target.state = new ImportedState(stateName, target.data.state[stateName])
+
+            target.counter.setEnd()// じゃないと前のカウンターの処理が裏で走ってしまう
+            target.state.enter(target)
+        }
+
+        const update_ = target.update.bind(target)
+        console.log('state machine joined ')
+
+        target.update = function () {
+            update_()
+            target.state.update(target)
+
+        }
+
+    }
+
+    class GameObject {
+        update() { }
+        draw() { }
+    }
+
+
+    class ImageLoader {
+        constructor(url) {
+            this.loaded = false
+            this.img = new Image()
+            this.img.src = url
+            this.img.onload = () => {
+                this.loaded = true
+            }
+        }
+        load(url) {
+            this.loaded = false
+            this.img.src = url
+            this.img.onload = () => {
+                this.loaded = true
+            }
+        }
+    }
+
+    class Counter {
+        constructor({
+            endTime = 100,
+            pause = false,
+            end = false,
+            target = null,
+            msg = "__",
+            processCall = null,
+            endCall = () => { },
+        } = {}) {
+            this.time = 0
+            this.endTime = endTime
+            this.pause = pause
+            this.end = end
+            this.target = target
+            this.processCall = processCall
+            this.endCall = endCall
+            this.msg = msg
+        }
+        progress() {
+            return this.time / this.endTime
+        }
+        start() {
+            this.pause = false
+        }
+        stop() {
+            this.pause = true
+        }
+
+        setEnd() {
+            this.end = true
+        }
+        isEnd() {
+            return this.end
+        }
+
+        #endMethod() {
+            this.end = true
+            this.endCall()
+        }
+
+
+        update() {
+            if (this.time < this.endTime) {
+                if (this.processCall) this.processCall()
+                this.time++
+            } else this.#endMethod()
+        }
+    }
+
+    // 対象がCounterを持つようになる
+    // Counterを描画するための関数が追加される
+    function getCounterComponent(t, gm = GM) {
+        t.counter = GM.addCounter({
+            endTime: 100,
+            target: t,
+            processCall: function () {
+                if (this.time == this.endTime - 1) {
+                    this.time = 0
+                }
+            },
+            endCall: () => {
+                console.log('no chance to end')
+            }
+        })
+
+        t.drawCounter = function () {
+            c.fillStyle = 'red'
+            c.fillRect(t.drawPosition.x, t.drawPosition.y, 32 * t.counter.progress(), 10)
+        }
+
+        addMethodLast(t, 'draw', t, 'drawCounter')
+    }
+
+
+    // test 用のGameManagerObject
+    // cameraを入れたら、drawがcamera経由になる
+    const GM = {
+
+        counters: [],
+        updateList: [],
+        drawList: [],
+        camera: null,
+        update_self: function () {
+            this.update_counters()
+            this.gameLoop_input()
+            this.gameLoop_check()
+            this.gameLoop_update()
+        },
+        update_counters: function () {
+            // 
+            for (let _c of this.counters)
+                if (_c.pause === false)
+                    _c.update()
+            this.counters = this.counters.filter((_c) => _c.end == false)
+        },
+        showUpdateList: function () { // 途中…
+            const result = ''
+            this.updateList.forEach(e => {
+                result += `${e.constructor.name}\n   `
+                result += e.showUpdateList()
+            })
+        },
+        showCounters: function () {
+            let _table = ""
+            for (let _c of this.counters) {
+                _table += _c.msg + ":" + _c.time + "/" + _c.endTime + "\n"
+            }
+            return _table
+        },
+        addCounter: function ({
+            msg = "[untitled]",
+            target = undefined,
+            endTime = 10,
+            processCall = null,
+            endCall = () => {
+                this.end = true
+            },
+
+        } = {}) {
+            let _temp = new Counter({
+                endTime: endTime,
+                target: target,
+                msg: msg,
+                processCall: processCall,
+                endCall: endCall,
+            })
+            this.counters.push(_temp)
+            return _temp
+        },
+        // counterはEventになる、そしてEventとInputと同様
+        gameLoop_input: function () {
+
+        },
+        //　予測型コリジョン判定用
+        gameLoop_check: function () {
+
+        },
+        // 数値の適応と更新
+        gameLoop_update: function () {
+
+        },
+        update: function () {
+
+            if (this.updatePause === true) return
+            this.update_self()
+            this.updateList.forEach(e => {
+                e.update()
+            })
+
+        },
+
+        draw: function () {
+            c.clearRect(0, 0, w, h)
+            if (this.camera) {
+                this.camera.draw()
+            } else {
+                this.drawList.forEach(e => {
+                    e.draw()
+                })
+
+            }
+
+
+        },
+
+        update_sandbox: function () {
+
+        },
+        draw_sandbox: function () {
+
+        }
+
+    }
+
+    // 本当は配列に入れたほうが、あとから消すことができるけどね
+    function joinGameLoop(target, gm = GM) {
+
+        if (target.dealEvent)
+            addMethodLast(gm, 'gameLoop_input', target, 'dealEvent')
+        if (target.check)
+            addMethodLast(gm, 'gameLoop_check', target, 'check')
+        if (target.update)
+            addMethodLast(gm, 'gameLoop_update', target, 'update')
+        if (target.draw)
+            addMethodLast(gm, 'draw', target, 'draw')
+    }
+
+    // ここに入れれば、繰り返し呼び出される
+    function gameLoop() {
+        console.log('1st frame, game start')
+    }
+
+    function update() {
+        gameLoop()
+        requestAnimationFrame(update)
+    }
+    update()
+</script>
+
+<script id="3D accessable world engine">
+    // マイクラ世界の醍醐味の一つ
+    // positionとwidth, height, blockSizeの定義も必須
+    // アクセスできる世界の情報で、好きなタイミングで checkができる。
+
+    function moveAxis(axis, delta, _player = player, _world = _player.world) {
+        return _world.moveAxisCheck_BottomType(_player.position, axis, delta, _player.size)
+    }
+    class BlockWorld {
+        constructor(x = 10, y = 10, z = 5, block_size = 32) {
+            this.block_size = 32
+            this.world = []
+            this.worldSize = {
+                x: x,
+                y: y,
+                z: z
+            }
+
+            this.initialize()
+        }
+        update() { }
+        draw() { }
+
+        initialize() {
+            for (let x = 0; x < this.worldSize.x; x++) {
+                this.world[x] = []
+                for (let y = 0; y < this.worldSize.y; y++) {
+                    this.world[x][y] = []
+                    const height = Math.floor(Math.random() * (this.worldSize.z - 1)) + 1
+                    for (let z = 0; z < height; z++) {
+                        this.world[x][y][z] = 1
+
+                        if (x > 1 && x < this.worldSize.x - 2 && y > 1 && y < this.worldSize.y - 2 && z > 0) {
+                            this.world[x][y][z] = 0
+
+                        }
+                    }
+                }
+            }
+
+
+
+        }
+
+        moveAxisCheck_BottomType(pp, axis, delta, size) {
+            const block = this.block_size
+            const pw = size.x
+            const pd = size.y
+            const ph = size.z
+            const np = { x: pp.x, y: pp.y, z: pp.z }
+            np[axis] += delta
+            // この計算…一回だけでいいよね？
+            // いやだめだ、軸ごとにPositionの更新が入るので、引っかかるBlockも更新されるべき
+            const eps = 0.001// Math.floorは[0,1)なので、max側にくっつけた状態が良くない
+            const minX = Math.floor((np.x - pw / 2) / block)
+            const maxX = Math.floor((np.x + pw / 2 - eps) / block)
+            const minY = Math.floor((np.y - pd / 2) / block)
+            const maxY = Math.floor((np.y + pd / 2 - eps) / block)
+            const minZ = Math.floor((np.z) / block)
+            const maxZ = Math.floor((np.z + ph - eps) / block)
+
+            for (let bx = minX; bx <= maxX; bx++) {
+                for (let by = minY; by <= maxY; by++) {
+                    for (let bz = minZ; bz <= maxZ; bz++) {
+                        if (this.world[bx]?.[by]?.[bz]) {
+                            // 衝突補正: 進行方向に応じて位置をブロックの端に揃える
+                            if (axis === 'x') {
+                                if (delta > 0) pp[axis] = bx * block - pw / 2;
+                                if (delta < 0) pp[axis] = (bx + 1) * block + pw / 2
+                            } else if (axis === 'y') {
+                                if (delta > 0) pp[axis] = by * block - pd / 2;
+                                if (delta < 0) pp[axis] = (by + 1) * block + pd / 2
+                            } else if (axis === 'z') {
+                                if (delta > 0) pp[axis] = bz * block - ph;       // top
+                                if (delta < 0) pp[axis] = (bz + 1) * block;   // landing
+
+                            }
+                            return 0; // 衝突したら移動終了
+                        }
+                    }
+                }
+            }
+
+            return delta
+        }
+
+
+        exportRenderQueue(camera) {
+            const worldSize = this.worldSize
+            const block_size = this.block_size
+            const world = this.world
+            const camera_angle = camera.rotation / 180 * Math.PI
+
+            for (let x = 0; x < worldSize.x; x++) for (let y = 0; y < worldSize.y; y++) for (let z = 0; z < worldSize.z; z++) if (world[x][y][z]) {
+                const v_p = camera.projection({
+                    x: x * block_size,
+                    y: (y + 1) * block_size,
+                    z: z * block_size
+                })
+                const v2_p = camera.projection({
+                    x: x * block_size,
+                    y: (y + 1) * block_size,
+                    z: (z + 1) * block_size
+                })
+                const h1 = v2_p.y // top
+                const h2 = v_p.y // bottom
+
+                if (h1 < h && h2 > 0) if (h2 - h1 > 0)
+                    // draw height
+                    camera.renderQueue.push({
+                        depth: x + y + z + 1,
+                        color: `hsl(${z / worldSize.z * 20 + y / worldSize.y * 20 + 200}, 50%, ${z / worldSize.z * 50 + y / worldSize.y * 50}%)`,
+                        draw: function () {
+                            c.fillStyle = this.color;
+                            c.fillRect(
+                                v2_p.x,
+                                v2_p.y,
+                                block_size,
+                                Math.ceil(h2 - h1) + 1
+                            );
+
+                        }
+                    })
+
+                // draw top!
+                if (!world[x][y][z + 1]) {
+                    const vt_p = camera.projection({
+                        x: x * block_size,
+                        y: y * block_size,
+                        z: (z + 1) * block_size
+                    })
+                    const vt2_p = camera.projection({
+                        x: x * block_size,
+                        y: (y + 1) * block_size,
+                        z: (z + 1) * block_size
+                    })
+                    const h1 = vt_p.y // top
+                    const h2 = vt2_p.y // bottom
+
+                    if (h1 < h && h2 > 0) if (h2 - h1 > 0)
+                        camera.renderQueue.push({
+                            depth: x + y + z + 1,
+                            color: `hsl(${(z + 1) * 40 / worldSize.z}, 80%, ${(z + 1) * 100 / worldSize.z}%)`,
+                            draw: function () {
+                                c.fillStyle = this.color;
+                                c.fillRect(
+                                    vt_p.x,
+                                    vt_p.y,
+                                    block_size,
+                                    Math.ceil(h2 - h1) + 1
+                                );
+
+                            }
+                        })
+                }
+
+
+
+            }
+        }
+    }
+
+    class Camera2_5 {
+        constructor(target) {
+            this.position = {
+                x: 0,
+                y: 0,
+                z: 0,
+
+            }
+            this.target = target
+            this.radius = 400 // cylinder effect
+            this.tilt = 0 // z axis rotation
+            this.rotation = 45 // x axis rotation
+            this.zoom = 1
+            this.drawList = GM.drawList
+            this.renderQueue = []
+        }
+        update() {
+            if (this.target) {
+                const deltaX = this.target.position.x - this.position.x
+                const deltaY = this.target.position.y - this.position.y
+                if (Math.abs(deltaX) > 1)
+                    this.position.x += (deltaX) * 0.1
+                else
+                    this.position.x = this.target.position.x
+                if (Math.abs(deltaY) > 1)
+                    this.position.y += (deltaY) * 0.1
+                else
+                    this.position.y = this.target.position.y
+            }
+        }
+        projection(position) {
+            const cp = this.position
+            const rad = this.rotation / 180 * Math.PI // angle in radius
+            const radius = this.radius
+            // my canvas XYZ to Maya XYZ
+            // the origin is left-top
+            const v1 = {
+                x: position.x - cp.x,
+                y: position.y - cp.y,
+                z: position.z - cp.z
+            }
+
+
+            //const k = Math.min(Math.abs(v1.y) / this.world.block_size/2, 1)
+            const k = 1
+            const theta = v1.y / radius
+            v1.y = v1.y * (1 - k) + k * (radius + position.z) * Math.sin(theta)
+            v1.z = v1.z * (1 - k) + k * (v1.z - (radius + position.z) * (1 - Math.cos(theta)))
+
+
+            const v2 = {
+                x: v1.x,
+                y: h - v1.y,
+                z: v1.z
+            }
+            // world to camera(in Maya XYZ)
+            // the dot production, to get the coords in new coordination
+            const v3 = {
+                x: v2.x,
+                y: v2.y * Math.cos(rad) + v2.z * Math.sin(rad),
+                z: v2.y * Math.sin(rad) - v2.z * Math.cos(rad)
+            }
+            // camera(Maya XYZ) to screen(invert the y)
+            // camera center! (x, h * Math.cos(rad))
+            const v4 = {
+                x: (v3.x) + w / 2,
+                y: (h * Math.cos(rad) - v3.y) + h / 2,
+                z: v3.z
+            }
+
+            //v.update_drawPosition(v4)
+            return v4
+        }
+
+        getDepth() { }
+
+        draw() {
+            this.getRenderQueue()
+            c.save(); // 現在の状態を保存
+            // 中心を回転の基準点に移動
+            c.translate(w / 2, h / 2);
+            c.rotate(this.tilt * Math.PI / 180);
+            c.scale(1 + (this.zoom - 1) * 2, this.zoom)
+            c.translate(-w / 2, -h / 2);
+            this.renderQueue.forEach(e => {
+                e.draw()
+            })
+            c.restore(); // 状態を元に戻す
+
+            this.renderQueue = []
+        }
+
+        getRenderQueue() {
+            // for loop the world, push something into renderqueue
+
+            // draw player!
+            this.drawList.forEach(e => {
+                if (!e.exportRenderQueue) return console.log('some object need the exportRenderQueue Method')
+                e.exportRenderQueue(this)
+            })
+
+
+
+            this.renderQueue.sort((a, b) => a.depth - b.depth)
+
+        }
+    }
+
+
+    // player.current を設定するだけ。
+    // and the player needs position, size, vx,vy,vz
+    const player_proxy = new Proxy(
+        {
+            current: null
+        },
+        {
+            get(target, prop) {
+                if (prop in target) return target[prop];
+                return target.current?.[prop]; // currentがnullでも安全
+            },
+            set(target, prop, value) {
+                if (prop in target) {
+                    target[prop] = value;
+                } else if (target.current) {
+                    target.current[prop] = value;
+                }
+                return true;
+            }
+        }
+    )
+
+
+    class Controller3D {
+        constructor(target = null) {
+            this.id = 'controller3D'
+            this.target = target
+        }
+        update() {
+            if (keys.down.pressed) {
+                this.target.vy = moveAxis('y', 2, this.target)
+            } else if (keys.up.pressed) {
+                this.target.vy = moveAxis('y', -2, this.target)
+            }
+
+            if (keys.left.pressed) {
+                this.target.vx = moveAxis('x', -2, this.target)
+            } else if (keys.right.pressed) {
+                this.target.vx = moveAxis('x', 2, this.target)
+            }
+            onPressHandlers.shot = () => {
+                this.target.vz = moveAxis('z', 8, this.target)
+
+            }
+        }
+    }
+
+    // the player is defined by the world
+    class Player3D {
+        constructor(_world) {
+            this.world = _world
+            this.color = 'yellow'
+            this.position = {
+                x: 300,
+                y: 100,
+                z: 300,
+            }
+            this.size = {
+                x: 20,
+                y: 20,
+                z: 20,
+            }
+            this.vx = 0
+            this.vy = 0
+            this.vz = 0
+            this.updateList = []
+        }
+
+        updateList_filter(ID) {
+            console.log('try to delete ' + ID)
+            this.updateList = this.updateList.filter((c) => c.id != ID)
+        }
+        update_self() {
+            // get and chect the next, in just one code!
+            this.vz = moveAxis('z', this.vz - 0.5, this)
+
+            this.position.x += this.vx
+            this.position.y += this.vy
+            this.position.z += this.vz
+
+            this.vx = 0
+            this.vy = 0
+        }
+        update() {
+            if (this.updatePause === true) true
+            this.update_self()
+            this.updateList.forEach(e => {
+                //console.log('a update')
+                e.update()
+            })
+        }
+
+        draw() { }
+        exportRenderQueue(camera) {
+            const vp1 = camera.projection({
+                x: this.position.x - this.size.x / 2,
+                y: this.position.y - this.size.y / 2,
+                z: this.position.z + this.size.z
+            });
+            const vp2 = camera.projection({
+                x: this.position.x - this.size.x / 2,
+                y: this.position.y + this.size.y / 2,
+                z: this.position.z + this.size.z
+            });
+            const vp3 = camera.projection({
+                x: this.position.x - this.size.x / 2,
+                y: this.position.y + this.size.y / 2,
+                z: this.position.z
+            });
+            camera.renderQueue.push({
+                depth: (this.position.x + this.position.y + this.position.z) / this.world.block_size,
+                draw: () => {
+                    c.fillStyle = this.color;
+                    c.fillRect(
+                        vp1.x,
+                        vp1.y,
+                        this.size.x,
+                        (vp2.y - vp1.y)
+                    );
+
+                    c.fillStyle = 'rgba(160,0,100,1)';
+                    c.fillRect(
+                        vp2.x,
+                        vp2.y,
+                        this.size.x,
+                        (vp3.y - vp2.y),
+                    );
+
+                }
+
+            });
+        }
+
+    }
+
+
+</script>
+
+
+<script id="key mapping">
+    // EventID好きなだけ追加
+    const eventID = new Proxy({}, (() => {
+        let currentID = 0;
+        const map = new Map();
+        return {
+            get(target, prop) {
+                if (typeof prop === "symbol") return undefined;
+
+                if (!map.has(prop)) {
+                    map.set(prop, currentID++);
+                }
+                return map.get(prop);
+            },
+            ownKeys() {
+                return Array.from(map.keys());
+            },
+        };
+    })());
+
+    // if(keys.xxx.pressed)これをGameLoopに入れたら連続発火
+
+    const keyMap = {
+        'a': 'left',
+        'd': 'right',
+        'w': 'up',
+        's': 'down',
+        'i': 'camera_up',
+        'j': 'camera_radius_up',
+        'k': 'camera_down',
+        'l': 'camera_radius_down',
+        ' ': 'shot',
+        'q': 'switch',
+        'e': 'switch2'
+    }
+
+    // 必要なキーだけ登録すればOK
+    const onPressHandlers = {
+        up: () => {
+
+        },
+        down: () => {
+        },
+        left: () => {
+        },
+        right: () => {
+        },
+        shot: () => {
+
+        }
+    }
+
+    const onReleasehandlers = {
+        left: () => {
+        },
+        right: () => {
+        },
+        shot: () => {
+        }
+    }
+
+    // the event list
+
+
+</script>
+
+<script>
+    // 基本gameLoopに入れればいい
+    // GameObject用意してある、KeyListenerも入ってる
+    // dealEventする必要があれば、それをgameLoopにいれる
+    // Objectが増えたら、GMに管理してもらう
+    // join Game Loop で、ゲーム世界に参入。GMの管理化に入れて動かして、描画してもらう
+    // 2.5D テストは、blockworld+camera2_5+player(position,size)
+    // updateList, drawList online!
+
+    const wworld = new BlockWorld()
+    wworld.block_size = 60
+
+    const charA = new Player3D(wworld)
+    const charB = new Player3D(wworld)
+    charB.color = 'blue'
+
+    const ccamera = new Camera2_5(player_proxy)
+
+    GM.camera = ccamera
+
+    player_proxy.current = charB
+
+    //
+    GM.updateList.push(player_proxy)
+    GM.updateList.push(ccamera)
+    charB.updateList.push(new Controller3D(charB))
+
+    GM.drawList.push(charA)
+    GM.drawList.push(charB)
+    GM.drawList.push(wworld)
+
+    gameLoop = function () {
+        showHTML('shit')
+
+        GM.update()
+        GM.draw()
+
+    }
+</script>
