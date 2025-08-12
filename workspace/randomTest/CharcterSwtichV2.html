@@ -1,0 +1,2936 @@
+<body>
+    2.5D MineCraft Test
+    <div ID="sideBar"></div>
+</body>
+<canvas width="512" height="512"></canvas>
+
+<p>
+    <button onmousedown="keyPress('testEvent')"> test Event </button>
+</p>
+
+<script>
+    const canvas = document.querySelector("canvas")
+    const c = canvas.getContext("2d", { willReadFrequently: true })
+    w = canvas.width
+    h = canvas.height
+
+
+
+    function drawSimpleBG(color) {
+        c.fillStyle = color
+        c.fillRect(0, 0, w, h)
+    }
+
+    function drawGrid(cellSize = 50) {
+        const cols = Math.floor(w / cellSize); // 横方向のマス数
+        const rows = Math.floor(h / cellSize); // 縦方向のマス数
+
+        c.strokeStyle = 'rgba(0,0,0,0.2)';
+        c.lineWidth = 2
+        c.fillStyle = 'black'
+        c.font = '10px sans-serif' // フォント指定も忘れずに
+
+        for (let i = 0; i <= cols; i++) {
+            c.beginPath();
+            c.moveTo(i * cellSize, 0);
+            c.lineTo(i * cellSize, h);
+            c.stroke();
+            c.fillText(i * cellSize, i * cellSize, 10)
+        }
+
+        for (let j = 0; j <= rows; j++) {
+            c.beginPath();
+            c.moveTo(0, j * cellSize);
+            c.lineTo(w, j * cellSize);
+            c.stroke();
+            c.fillText(j * cellSize, 0, j * cellSize)
+        }
+    }
+</script>
+
+<script id="equipment & engine & utilities">
+
+    document.addEventListener("keyup", (e) => {
+        const action = keyMap[e.key.toLowerCase()]
+        if (action) {
+            keys[action].pressed = false
+            if (onReleasehandlers[action]) {
+                if (keys[action].press) {
+                    onReleasehandlers[action]()
+                    keys[action].press = false
+                }
+            } else {
+                keys[action].press = false
+
+            }
+            e.preventDefault()
+        }
+    })
+
+    document.addEventListener("keydown", (e) => {
+        const action = keyMap[e.key.toLowerCase()]
+        if (action) {
+            keys[action].pressed = true
+            if (onPressHandlers[action]) {
+                if (!keys[action].press) {
+                    onPressHandlers[action]()
+                    keys[action].press = true
+                }
+            } else {
+                keys[action].press = true
+
+            }
+            e.preventDefault()  // ページスクロールなどを防止
+        }
+    })
+
+
+
+    // html button interface
+    keyPress = function (key) {
+        keys[key].pressed = true
+        keys[key].source = 'button'
+    }
+
+    // for (let _key in keys) keys[_key].pressed = false
+
+    // key container
+    const keys = new Proxy({}, {
+        get(target, prop) {
+            if (!(prop in target)) {
+                target[prop] = { press: false, pressed: false };
+            }
+            return target[prop];
+        }
+    });
+
+    // 画面になにか
+    function showHTML(MSG, ID = 0) {
+        let el = document.getElementById(ID);
+
+        if (!el) {
+            el = document.createElement('div');
+            el.id = ID;
+
+            const body = document.body;
+            if (body.firstChild) {
+                body.insertBefore(el, body.firstChild); // ← 先頭に挿入
+            } else {
+                body.appendChild(el); // ← 最悪何もないときは普通に追加
+            }
+        }
+
+        el.innerText = MSG;
+    }
+
+    // 正式なState machine Component
+    // 外部データが必要なので
+    function getStateMachine(target) {
+        // 初期化
+        const initialState = target.data.state[target.data.initialState]
+        target.state = new ImportedState(target.data.initialState, initialState)
+        target.state.enter(target)
+
+        target.cst = function (stateName) {
+            this.state = new ImportedState(stateName, this.data.state[stateName])
+
+            this.counter.setEnd()
+            this.state.enter(this)
+        }
+
+        // update state to target's update()
+        const _func = target.update
+        target.update = function () {
+            this.state.update(this)
+            _func()
+        }
+
+    }
+
+    // render queueと一緒に使う、一気に変換
+    function cameraProjection(target, camera) {
+        //target.drawPosition.x = target.position.x
+        //target.drawPosition.y = target.position.y
+        c.save()
+
+        target.drawPosition.x = target.position.x - camera.position.x + w / 2
+        target.drawPosition.y = target.position.y - camera.position.y + h / 2
+
+        const scale = 1.5
+        c.scale(scale, scale)
+        // 左上がスケールの原点
+        // 真ん中の点を真ん中に戻せばいい
+        //　拡大したら、点の調整もスケールかけるので、最後に/scaleが必要
+        target.drawPosition.x -= ((scale - 1) * w / 2) / scale
+        target.drawPosition.y -= ((scale - 1) * h / 2) / scale
+
+        target.draw()
+
+        c.restore()
+
+
+    }
+
+    // 四角い判定ボックスと　予測型コリジョン判定用のやつ
+    // updateしないと、drawPositionも更新されない
+    function getCollision(target, draw = true, ctx = c) {
+        target.position = { x: 0, y: 0 }
+        target.deltaPosition = { x: 0, y: 0 }
+        target.drawPosition = { x: 0, y: 0 }
+        target.accelaration = { x: 0, y: 0 }
+        target.width = 32
+        target.height = 32
+        target.gravity = 1
+        target.direction = 1
+        target.maxSpeed = { x: 3, y: 10 }
+
+        target.checkSpeed = function () {
+            const vx = target.deltaPosition.x;
+            const vy = target.deltaPosition.y;
+            if (Math.abs(vx) > target.maxSpeed.x) {
+                target.deltaPosition.x = Math.sign(vx) * target.maxSpeed.x
+            }
+            if (Math.abs(vy) > target.maxSpeed.y) {
+                target.deltaPosition.y = Math.sign(vy) * target.maxSpeed.y
+            }
+        }
+
+        const _update = target.update.bind(target)
+        target.update = function () {
+            _update()
+            target.drawPosition.x = target.position.x
+            target.drawPosition.y = target.position.y
+        }
+
+        target.moveTo = function (x, y) {
+            target.position.x = x
+            target.position.y = y
+        }
+        target.updateDir = function () {
+            if (target.deltaPosition.x > 0) target.direction = 1
+            else if (target.deltaPosition.x < 0) target.direction = -1
+        }
+
+        target.drawRect = function (ctx = c) {
+            ctx.fillStyle = 'grey'
+            ctx.fillRect(target.drawPosition.x, target.drawPosition.y, this.width, this.height)
+        }
+        addMethodLast(target, 'draw', target, 'drawRect')
+
+
+        target.initialize = function (x, y, w, h) {
+            this.position = { x: x, y: y }
+            this.width = w
+            this.height = h
+        }
+
+        target.swapPosition = function () {
+            target.position.x += target.deltaPosition.x
+            target.position.y += target.deltaPosition.y
+        }
+
+        target.updateGravity = function () {
+            target.deltaPosition.y += target.gravity
+        }
+        target.applyFriction = function () {
+            const friction = 0.1;
+            const vx = target.deltaPosition.x;
+
+            if (Math.abs(vx) <= friction) {
+                target.deltaPosition.x = 0;
+            } else {
+                target.deltaPosition.x -= Math.sign(vx) * friction;
+            }
+        }
+
+        target.Ytop = function () {
+            return { now: this.position.y, next: this.position.y + this.deltaPosition.y }
+        }
+        target.Ybottom = function () {
+            return { now: this.position.y + this.height, next: this.position.y + this.height + this.deltaPosition.y }
+
+        }
+        target.Xleft = function () {
+            return { now: this.position.x, next: this.position.x + this.deltaPosition.x }
+
+        }
+        target.Xright = function () {
+            return { now: this.position.x + this.width, next: this.position.x + this.width + this.deltaPosition.x }
+
+        }
+
+        target.YLandOn = function (_ground) {
+            target.position.y = _ground - target.height
+            target.deltaPosition.y = 0
+        }
+        target.centerPosition = function () {
+            return { x: this.position.x + this.width / 2, y: this.position.y + this.height / 2 }
+        }
+
+
+
+    }
+
+    function getHitTester(_target) {
+        _target.hitTest = function (target) {
+            if (
+                target.Ybottom().next > this.Ytop().now &&
+                target.Ytop().next < this.Ybottom().now &&
+                target.Xright().next > this.Xleft().now &&
+                target.Xleft().next < this.Xright().now
+            ) {
+
+                const fromAbove = target.Ybottom().now <= this.Ytop().now
+                const fromBelow = target.Ytop().now >= this.Ybottom().now
+                const fromRight = target.Xleft().now >= this.Xright().now
+                const fromLeft = target.Xright().now <= this.Xleft().now
+                if (fromAbove) {
+                    target.position.y = this.position.y - target.height
+                    target.deltaPosition.y = 0
+                    if (target.eventQueue) target.pushEvent('land')
+                } else if (fromBelow) {
+                    target.position.y = this.position.y + this.height + 1
+                    target.deltaPosition.y = 0
+
+                } else if (fromRight) {
+                    target.position.x = this.position.x + this.width
+                    target.deltaPosition.x = 0
+
+                } else if (fromLeft) {
+                    target.position.x = this.position.x - target.width
+                    target.deltaPosition.x = 0
+                } else {
+                    console.log('?!')
+                    const centerfromAbove = target.centerPosition().y <= this.position.y + this.height / 2;
+                    const centerfromBelow = target.centerPosition().y >= this.position.y + this.height / 2;
+                    const centerfromRight = target.centerPosition().x >= this.position.x + this.width / 2;
+                    const centerfromLeft = target.centerPosition().x <= this.position.x + this.width / 2;
+                    if (centerfromAbove) {
+
+                        target.position.y = this.position.y - target.height
+                        target.deltaPosition.y = 0
+                        if (target.eventQueue) target.pushEvent('land')
+                    } else if (centerfromBelow) {
+                        target.position.y = this.position.y + this.height + 1
+                        target.deltaPosition.y = 0
+
+                    } else if (centerfromRight) {
+                        target.position.x = this.position.x + this.width
+                        target.deltaPosition.x = 0
+
+                    } else if (centerfromLeft) {
+                        target.position.x = this.position.x - target.width
+                        target.deltaPosition.x = 0
+                    } else {
+                        console.log('bakana!')
+                    }
+                }
+            }
+        }
+    }
+
+    // 2種類のProxyを実装する
+    // でも、正直Tagは使いたくないけどね
+    function getProxy(target) {
+        target.request = new Proxy({}, {
+            get: (target, prop) => {
+                const value = target[prop];
+                target[prop] = false; // 読んだら自動で false にする
+                return value ?? false;
+            }
+        });
+
+        // 未定義状態。自由に書き込める。デフォルト状態はfalse
+        target.Tag = new Proxy({}, {
+            get(target, prop) {
+                return prop in target ? target[prop] : false;
+            }
+        })
+    }
+
+    function getActiveTags(tagObj, separator = " ") {
+        return Object.entries(tagObj)
+            .filter(([_, v]) => v === true)
+            .map(([k]) => k)
+            .join(separator);
+    }
+
+    //　疎結合のためのEvent対応ようComponent
+    function getEventHandler(target) {
+        target.handlers = {}
+        target.on = function (event, handler) {
+            this.handlers[event] = handler
+        }
+
+        // Manager側で、自分の参照をtargetで送って来る
+        target.onRequest = function (eventName, target, ...args) {
+            const handler = this.handlers[eventName]
+            if (handler) {
+                handler(target, ...args)
+                return true
+            } else {
+                return false
+            }
+
+        }
+
+        target.resetHandlers = function () {
+            target.handlers = {}
+        }
+    }
+
+    function getEventManager(target) {
+        // Stateはイベントの処理する対象。
+        // わざと別で定義するのは、StateMachineの導入用のInterfaceとしてです
+        target.state = target
+        // かの有名なEventQueue
+        target.eventQueue = []
+        target.pushEvent = function (eName, ...args) {
+            this.eventQueue.push([eName, ...args])
+        }
+
+        // 一回きりでhandleする
+        target.dealEvent = function (logic_object = target.state) {
+            for (const [ev, ...args] of this.eventQueue)
+                logic_object.onRequest(ev, this, ...args)
+            this.eventQueue = []
+        }
+        // masterのイベントを、ChildrenにHandleしてもらう
+        // Eventは一回対応されると消える
+        target.notifyEventToChildren = function () {
+            this.updateList.forEach(child => {
+                if (child.onRequest)
+                    for (const [ev, ...args] of this.eventQueue) {
+                        if (ev == 'keydown') console.log(111)
+
+                        let consumed = false
+                        if (!consumed && child.onRequest(ev, this, ...args)) {
+                            consumed = true
+                            //console.log(`${child.constructor.name} handle the event ${ev}`)
+                        }
+                    }
+            })
+            this.eventQueue = []
+
+            // traverseの問題じゃないな
+            return
+            this.traverse(this.updateList, (child) => {
+                if (child.onRequest)
+                    for (const [ev, ...args] of this.eventQueue) {
+                        let consumed = false
+                        if (!consumed && child.onRequest(ev, this, ...args)) {
+                            consumed = true
+                            //console.log(`${child.constructor.name} handle the event ${ev}`)
+                        }
+                    }
+            })
+
+        }
+        target.resetEvent = function () {
+            this.eventQueue = []
+        }
+        target.showEventQueue = function () {
+            let str = ''
+            for (const [ev, ...args] of this.eventQueue) {
+                str += ev + ' '
+            }
+            return str
+        }
+    }
+
+    function getEventHubManager(target) {
+        target.observers = []
+        target.notifyEvent = function (Event) {
+            for (const ob of target.observers) {
+                ob.pushEvent(Event)
+            }
+        }
+    }
+
+    // Methodを結合する。returnのスコープを注意
+    function addMethodFirst(target, target_method, comp, method) {
+        const t = target[target_method].bind(target)
+        const c = comp[method].bind(comp)
+        target[target_method] = function (...args) {
+            c(...args)
+            t(...args)
+        }
+    }
+
+    function addMethodLast(target, target_method, comp, method = target_method) {
+        const t = target[target_method].bind(target)
+        const c = comp[method].bind(comp)
+        target[target_method] = function () {
+            t()
+            c()
+        }
+    }
+
+    // 独自のupdateとDrawを持ったcomponentを内部に埋め込む
+    function joinComponent(cmpnt, trgt) {
+
+        addMethodLast(trgt, 'update', cmpnt)
+        addMethodLast(trgt, 'draw', cmpnt)
+
+        if (cmpnt.dealEvent && trgt.dealEvent) {
+            addMethodLast(trgt, 'dealEvent', cmpnt)
+        }
+
+        return cmpnt
+
+    }
+    // state Machine の初期化。これのDecoupleは…
+    // 外部データが必要
+    function getStateMachine(target) {
+        const initialState = target.data.state[target.data.initialState]
+        target.state = new ImportedState(target.data.initialState, initialState)
+        target.state.enter(target)
+
+        target.cst = function (stateName) {
+            target.state = new ImportedState(stateName, target.data.state[stateName])
+
+            target.counter.setEnd()// じゃないと前のカウンターの処理が裏で走ってしまう
+            target.state.enter(target)
+        }
+
+        const update_ = target.update.bind(target)
+        console.log('state machine joined ')
+
+        target.update = function () {
+            update_()
+            target.state.update(target)
+
+        }
+
+    }
+
+
+
+
+
+    class ImageLoader {
+        constructor(url) {
+            this.loaded = false
+            this.img = new Image()
+            this.img.src = url
+            this.img.onload = () => {
+                this.loaded = true
+            }
+        }
+        load(url) {
+            this.loaded = false
+            this.img.src = url
+            this.img.onload = () => {
+                this.loaded = true
+            }
+        }
+    }
+
+    class Counter {
+        constructor({
+            endTime = 100,
+            pause = false,
+            end = false,
+            target = null,
+            msg = "__",
+            processCall = null,
+            endCall = () => { },
+            loop = false,
+        } = {}) {
+            this.time = 0
+            this.endTime = endTime
+            this.loop = loop
+            this.pause = pause
+            this.end = end
+            this.target = target
+            this.processCall = processCall
+            this.endCall = endCall
+            this.msg = msg
+        }
+        progress() {
+            return this.time / this.endTime
+        }
+        start() {
+            this.pause = false
+        }
+        stop() {
+            this.pause = true
+        }
+
+        setEnd() {
+            this.end = true
+        }
+        isEnd() {
+            return this.end
+        }
+
+        #endMethod() {
+            if (this.loop) {
+                this.time = 0
+                return
+            }
+            this.end = true
+            this.endCall?.()
+        }
+
+
+        update() {
+            if (this.time < this.endTime) {
+                this.processCall?.()
+                this.time++
+            } else this.#endMethod()
+        }
+    }
+
+    // 対象がCounterを持つようになる
+    // Counterを描画するための関数が追加される
+    function getCounterComponent(t, gm = GM) {
+        t.counter = GM.addCounter({
+            endTime: 100,
+            target: t,
+            processCall: function () {
+                if (this.time == this.endTime - 1) {
+                    this.time = 0
+                }
+            },
+            endCall: () => {
+                console.log('no chance to end')
+            }
+        })
+
+        t.drawCounter = function () {
+            c.fillStyle = 'red'
+            c.fillRect(t.drawPosition.x, t.drawPosition.y, 32 * t.counter.progress(), 10)
+        }
+
+        addMethodLast(t, 'draw', t, 'drawCounter')
+    }
+
+
+    // test 用のGameManagerObject
+    // cameraを入れたら、drawがcamera経由になる
+    const GM = {
+        registry: new Map(),
+        counters: [],
+        updateList: [],
+        drawList: [],//廃棄予定
+        camera: {
+            update: () => { },
+            draw: () => {
+                GM.traverse(GM.updateList, (e) => {
+                    if (!e.drawPause) e.draw()
+                })
+            },
+        },
+        update_self: function () {
+            this.update_counters()
+            this.camera.update()
+            this.dealEvent?.()
+            this.gameLoop_input()
+            this.gameLoop_check()
+            this.gameLoop_update()
+        },
+        update_counters: function () {
+            // 
+            for (let _c of this.counters)
+                if (_c.pause === false)
+                    _c.update()
+            this.counters = this.counters.filter((_c) => _c.end == false)
+        },
+        showList: function (List, level = 0) {
+            let result = '';
+            if (!level) result = 'GM Root\n'
+            List.forEach(e => {
+                // インデント作成
+                let indent = '__'.repeat(level);
+                if (e.updatePause) indent += 'x '
+                else indent += 'o '
+                if (e.drawPause) indent += 'x '
+                else indent += 'o '
+                indent += ' '
+                let tags = ''
+                if (e.tags)
+                    tags = Array.from(e.tags).join(" ")
+
+
+                // 自分を出力
+                result += `${indent}${e.name?e.name:e.constructor.name}: (${tags})\n`;
+
+                // 子リストがあれば再帰
+                if (e.updateList) {
+                    result += this.showList(e.updateList, level + 1);
+                }
+            });
+            return result;
+        },
+        showCounters: function () {
+            let _table = ""
+            for (let _c of this.counters) {
+                _table += _c.msg + ":" + _c.time + "/" + _c.endTime + "\n"
+            }
+            return _table
+        },
+        addCounter: function ({
+            msg = "[untitled]",
+            target = undefined,
+            endTime = 10,
+            loop = false,
+            processCall = null,
+            endCall = () => {
+                this.end = true
+            },
+
+        } = {}) {
+            let _temp = new Counter({
+                endTime: endTime,
+                target: target,
+                loop: loop,
+                msg: msg,
+                processCall: processCall,
+                endCall: endCall,
+            })
+            this.counters.push(_temp)
+            return _temp
+        },
+        // counterはEventになる、そしてEventとInputと同様
+        gameLoop_input: function () {
+
+        },
+        //　予測型コリジョン判定用
+        gameLoop_check: function () {
+
+        },
+        // 数値の適応と更新
+        gameLoop_update: function () {
+
+        },
+        traverse: function (list, callback) {
+            for (const obj of list) {
+                callback(obj)
+                if (obj.updateList) {
+                    GM.traverse(obj.updateList, callback)
+                }
+            }
+        },
+        updateAll: function (List) {
+            List.forEach(e => {
+                if (!e.updatePause) {
+                    e.update?.()
+                    if (e.updateList)
+                        this.updateAll(e.updateList)
+                }
+            })
+        },
+        flattenUpdateList: function (list) {
+            const result = []
+            for (const obj of list) {
+                result.push(obj)
+                if (obj.updateList)
+                    result.push(...GM.flattenUpdateList(obj.updateList))
+            }
+            return result
+        },
+        drawAll: function (List) {
+            List.forEach(e => {
+                e.draw()
+                if (e.updateList)
+                    this.drawAll(e.updateList)
+            })
+        },
+        setTagPause: function (tag, pause, List) {
+            GM.traverse(List, (e) => {
+                if (e.tags?.has(tag))
+                    e.updatePause = pause
+            })
+        },
+
+        removeByTag: function (tag, list = this.updateList) {
+            for (let i = list.length - 1; i >= 0; i--) { // 逆順で安全に削除
+                const obj = list[i];
+                if (!obj.tags) continue
+                if (obj.tags.has(tag)) {
+                    obj.destroy?.()
+                    list.splice(i, 1); // 該当オブジェクトを削除
+                }
+                else if (obj.updateList) {
+                    // 子リストがある場合は再帰
+                    GM.removeByTag(tag, obj.updateList);
+                }
+            }
+        },
+        reset: function () {
+            this.registry = new Map()
+            this.updateList = []
+            this.drawList = []
+
+        },
+        addChild: function (e, draw = true) {
+            this.updateList.push(e)
+            if (e.onAttach)
+                e.onAttach(this)
+            else
+                e.master = this
+            e.updatePause = false
+            if (e.drawPause == true) return
+            if (draw) e.drawPause = false
+            else e.drawPause = true
+        },
+        update: function () {
+
+            if (this.updatePause === true) return
+            this.update_self()
+            this.updateAll(this.updateList)
+
+        },
+
+        draw: function () {
+            c.clearRect(0, 0, w, h)
+
+            this.camera.draw()
+
+
+        },
+
+        update_sandbox: function () {
+
+        },
+        draw_sandbox: function () {
+
+        }
+
+    }
+
+    // 本当は配列に入れたほうが、あとから消すことができるけどね
+    function joinGameLoop(target, gm = GM) {
+
+        if (target.dealEvent)
+            addMethodLast(gm, 'gameLoop_input', target, 'dealEvent')
+        if (target.check)
+            addMethodLast(gm, 'gameLoop_check', target, 'check')
+        if (target.update)
+            addMethodLast(gm, 'gameLoop_update', target, 'update')
+        if (target.draw)
+            addMethodLast(gm, 'draw', target, 'draw')
+    }
+
+    // ここに入れれば、繰り返し呼び出される
+    function gameLoop() {
+        console.log('1st frame, game start')
+    }
+
+    function update() {
+        gameLoop()
+        requestAnimationFrame(update)
+    }
+    update()
+</script>
+
+<script id="3D accessable world engine">
+    // マイクラ世界の醍醐味の一つ
+    // positionとwidth, height, blockSizeの定義も必須
+    // アクセスできる世界の情報で、好きなタイミングで checkができる。
+
+
+    function moveAxis(axis, delta, _player = player, _world = _player.world) {
+        _player[`v` + axis] = _world.moveAxisCheck_BottomType(_player.position, axis, delta, _player.size, _player)
+    }
+
+    // player.current を設定するだけ。
+    // and the player needs position, size, vx,vy,vz
+    // 完全透明。空のupdateとupdateListを入れることで、this.currentのupdateなどに二回アクセスするのを防ぐ
+    class PlayerProxy {
+        constructor(initial = null) {
+            this.current = initial;
+            this.updateList = []
+            return new Proxy(this, {
+                get: (target, prop, receiver) => {
+                    if (prop in target) return Reflect.get(target, prop, receiver);
+                    return target.current?.[prop];
+                },
+                set: (target, prop, value, receiver) => {
+                    if (prop in target) return Reflect.set(target, prop, value, receiver);
+                    if (target.current) target.current[prop] = value;
+                    return true;
+                }
+            });
+        }
+
+        update(){}
+
+        setCurrent(obj) {
+            this.current = obj;
+        }
+        getCurrent() {
+            return this.current;
+        }
+    }
+
+
+
+    class EmptyObject {
+        constructor() {
+        }
+        //これは上書きしない
+        update() {
+            if (this.updatePause === true) return
+            this.update_self()
+        }
+        traverse(list, callback) {
+            for (const obj of list) {
+                callback(obj)
+                if (obj.updateList) {
+                    GM.traverse(obj.updateList, callback)
+                }
+            }
+        }
+
+        updateList_filter(ID) {
+            this.updateList = this.updateList.filter((c) => c.id != ID)
+        }
+        addChild(e, draw = true) {
+            this.updateList.push(e)
+            e.master = this
+            e.updatePause = false
+            if (draw) e.drawPause = false
+            else e.drawPause = true
+        }
+        update_self() {
+        }
+        destroy() {
+            console.log(`${this.constructor.name} destroyed`);
+        }
+
+        draw() {
+            console.log('Empty object draw')
+        }
+    }
+
+    class GameObject {
+        constructor() {
+            this.updateList = []
+            this.drawList = []
+            this.tags = new Set()
+            this.drawPause = false
+            this.updatePause = false
+        }
+        //これは上書きしない
+        update() {
+            if (this.updatePause === true) return
+            this.update_self()
+        }
+
+        onAttach(master) {
+            this.master = master;
+        }
+        traverse(list, callback) {
+            for (const obj of list) {
+                callback(obj)
+                if (obj.updateList) {
+                    this.traverse(obj.updateList, callback)
+                }
+            }
+        }
+
+        updateList_filter(ID) {
+            this.updateList = this.updateList.filter((c) => c.id != ID)
+        }
+        addChild(e, draw = true) {
+            this.updateList.push(e)
+            e.master = this
+            if (e.onAttach)
+                e.onAttach(this)
+            else
+                e.master = this
+            e.updatePause = false
+            if (e.drawPause == true) return
+            if (draw) e.drawPause = false
+            else e.drawPause = true
+        }
+        update_self() {
+        }
+        destroy() {
+            console.log(`${this.constructor.name} destroyed`);
+        }
+
+        draw() {
+            console.log('gameobject draw')
+        }
+    }
+
+    class BlockWorld extends GameObject {
+        constructor(x = 10, y = 10, z = 5, block_size = 32) {
+            super()
+            this.block_size = 50
+            this.world = []
+            this.worldSize = {
+                x: x,
+                y: y,
+                z: z
+            }
+
+            this.initialize()
+
+            this.blockImage = new ImageLoader('https://raw.githubusercontent.com/kurokoTJF/FUKAN/refs/heads/main/Sprites/Char/map/MCblock.png')
+
+        }
+
+        initialize() {
+            for (let x = 0; x < this.worldSize.x; x++) {
+                this.world[x] = []
+                for (let y = 0; y < this.worldSize.y; y++) {
+                    this.world[x][y] = []
+                    const height = Math.floor(Math.random() * (this.worldSize.z - 1)) + 1
+                    for (let z = 0; z < height; z++) {
+                        this.world[x][y][z] = 1
+
+                        if (x > 1 && x < this.worldSize.x - 2 && y > 1 && y < this.worldSize.y - 2 && z > 0) {
+                            this.world[x][y][z] = 0
+
+                        }
+                    }
+                }
+            }
+
+        }
+
+        moveAxisCheck_BottomType(pp, axis, delta, size, target = null) {
+            const block = this.block_size
+            const pw = size.x
+            const pd = size.y
+            const ph = size.z
+            const np = { x: pp.x, y: pp.y, z: pp.z }
+            np[axis] += delta
+            // この計算…一回だけでいいよね？
+            // いやだめだ、軸ごとにPositionの更新が入るので、引っかかるBlockも更新されるべき
+            const eps = 0.001// Math.floorは[0,1)なので、max側にくっつけた状態が良くない
+            const minX = Math.floor((np.x - pw / 2) / block)
+            const maxX = Math.floor((np.x + pw / 2 - eps) / block)
+            const minY = Math.floor((np.y - pd / 2) / block)
+            const maxY = Math.floor((np.y + pd / 2 - eps) / block)
+            const minZ = Math.floor((np.z) / block)
+            const maxZ = Math.floor((np.z + ph - eps) / block)
+
+            for (let bx = minX; bx <= maxX; bx++) {
+                for (let by = minY; by <= maxY; by++) {
+                    for (let bz = minZ; bz <= maxZ; bz++) {
+                        if (this.world[bx]?.[by]?.[bz]) {
+                            // 衝突補正: 進行方向に応じて位置をブロックの端に揃える
+                            if (axis === 'x') {
+                                if (delta > 0) pp[axis] = bx * block - pw / 2;
+                                if (delta < 0) pp[axis] = (bx + 1) * block + pw / 2
+                            } else if (axis === 'y') {
+                                if (delta > 0) pp[axis] = by * block - pd / 2;
+                                if (delta < 0) pp[axis] = (by + 1) * block + pd / 2
+                            } else if (axis === 'z') {
+                                if (delta > 0) pp[axis] = bz * block - ph;       // top
+                                if (delta < 0) {
+                                    pp[axis] = (bz + 1) * block;
+                                    target.pushEvent('land')
+
+
+                                }  // landing
+
+                            }
+                            return 0; // 衝突したら移動終了
+                        }
+                    }
+                }
+            }
+
+            return delta
+        }
+
+
+        exportRenderQueue(camera) {
+            const worldSize = this.worldSize
+            const block_size = this.block_size
+            const world = this.world
+            const camera_angle = camera.rotation / 180 * Math.PI
+            const blockImage = this.blockImage
+
+            for (let x = 0; x < worldSize.x; x++) for (let y = 0; y < worldSize.y; y++) for (let z = 0; z < worldSize.z; z++) if (world[x][y][z]) {
+                const v_p = camera.projection({
+                    x: x * block_size,
+                    y: (y + 1) * block_size,
+                    z: z * block_size
+                })
+                const v2_p = camera.projection({
+                    x: x * block_size,
+                    y: (y + 1) * block_size,
+                    z: (z + 1) * block_size
+                })
+                const h1 = v2_p.y // top
+                const h2 = v_p.y // bottom
+
+                if (h1 < h && h2 > 0) if (h2 - h1 > 0)
+                    // draw front height
+                    camera.renderQueue.push({
+                        depth: x + y + z + 1,
+                        color: `hsla(${z / worldSize.z * 20 + y / worldSize.y * 20 + 200}, 50%, ${z / worldSize.z * 50 + y / worldSize.y * 50}%,
+                                0.2)`,
+                        draw: function () {
+                            let coord = null
+                            if (!world[x][y][z + 1]) {
+
+                                coord = { x: 3, y: 0 }
+                            }
+                            else {
+                                coord = { x: 2, y: 0 }
+
+                            }
+
+                            if (blockImage.loaded) {
+                                c.drawImage(
+                                    blockImage.img,
+                                    coord.x * 48,
+                                    coord.y * 48,
+                                    48,
+                                    48,
+                                    v2_p.x,
+                                    v2_p.y,
+                                    block_size,
+                                    Math.ceil(h2 - h1) + 1)
+                            }
+
+                            c.fillStyle = this.color;
+                            c.fillRect(
+                                v2_p.x,
+                                v2_p.y,
+                                block_size,
+                                Math.ceil(h2 - h1) + 1
+                            );
+
+                        }
+                    })
+
+                // draw top!
+                if (!world[x][y][z + 1]) {
+                    const vt_p = camera.projection({
+                        x: x * block_size,
+                        y: y * block_size,
+                        z: (z + 1) * block_size
+                    })
+                    const vt2_p = camera.projection({
+                        x: x * block_size,
+                        y: (y + 1) * block_size,
+                        z: (z + 1) * block_size
+                    })
+                    const h1 = vt_p.y // top
+                    const h2 = vt2_p.y // bottom
+
+                    if (h1 < h && h2 > 0) if (h2 - h1 > 0)
+
+                        camera.renderQueue.push({
+                            depth: x + y + z + 1,
+                            color: `hsla(
+                                ${(z + 1) * 40 / worldSize.z}, 
+                                80%, 
+                                ${(z + 1) * 100 / worldSize.z}%,
+                                0.3)`,
+                            draw: function () {
+
+
+                                if (blockImage.loaded) {
+                                    const coord = { x: 12, y: 12 }
+                                    c.drawImage(
+                                        blockImage.img,
+                                        coord.x * 48,
+                                        coord.y * 48,
+                                        48,
+                                        48,
+                                        vt_p.x,
+                                        vt_p.y,
+                                        block_size,
+                                        Math.ceil(h2 - h1) + 1)
+                                }
+
+                                c.fillStyle = this.color;
+                                c.fillRect(
+                                    vt_p.x,
+                                    vt_p.y,
+                                    block_size,
+                                    Math.ceil(h2 - h1) + 1
+                                )
+
+
+                            }
+                        })
+                }
+
+
+
+            }
+        }
+    }
+
+    class Camera2_5 extends GameObject {
+        constructor(target) {
+            super()
+            this.position = {
+                x: 0,
+                y: 0,
+                z: 0,
+
+            }
+            this.target = target
+            this.radius = 400 // cylinder effect
+            this.tilt = 0 // z axis rotation
+            this.rotation = 45 // x axis rotation
+            this.zoom = 1
+            this.speed = 0.04
+            this.drawList = []
+            this.drawListUI = []
+            this.renderQueue = []
+            this.updateList = []
+
+        }
+        update_self() {
+            if (this.target) {
+                const deltaX = this.target.position.x - this.position.x
+                const deltaY = this.target.position.y - this.position.y
+                if (Math.abs(deltaX) > 1)
+                    this.position.x += (deltaX) * this.speed
+                else
+                    this.position.x = this.target.position.x
+                if (Math.abs(deltaY) > 1)
+                    this.position.y += (deltaY) * this.speed
+                else
+                    this.position.y = this.target.position.y
+            }
+        }
+
+        projection(position) {
+            const cp = this.position
+            const rad = this.rotation / 180 * Math.PI // angle in radius
+            const radius = this.radius
+            // my canvas XYZ to Maya XYZ
+            // the origin is left-top
+            const v1 = {
+                x: position.x - cp.x,
+                y: position.y - cp.y,
+                z: position.z - cp.z
+            }
+
+
+            //const k = Math.min(Math.abs(v1.y) / this.world.block_size/2, 1)
+            const k = 1
+            const theta = v1.y / radius
+            v1.y = v1.y * (1 - k) + k * (radius + position.z) * Math.sin(theta)
+            v1.z = v1.z * (1 - k) + k * (v1.z - (radius + position.z) * (1 - Math.cos(theta)))
+
+
+            const v2 = {
+                x: v1.x,
+                y: h - v1.y,
+                z: v1.z
+            }
+            // world to camera(in Maya XYZ)
+            // the dot production, to get the coords in new coordination
+            const v3 = {
+                x: v2.x,
+                y: v2.y * Math.cos(rad) + v2.z * Math.sin(rad),
+                z: v2.y * Math.sin(rad) - v2.z * Math.cos(rad)
+            }
+            // camera(Maya XYZ) to screen(invert the y)
+            // camera center! (x, h * Math.cos(rad))
+            const v4 = {
+                x: (v3.x) + w / 2,
+                y: (h * Math.cos(rad) - v3.y) + h / 2,
+                z: v3.z
+            }
+
+            //v.update_drawPosition(v4)
+            return v4
+        }
+
+        getDepth() { }
+
+        draw() {
+            this.getGMRenderQueue()
+
+            c.save(); // 現在の状態を保存
+            // 中心を回転の基準点に移動
+            c.translate(w / 2, h / 2);
+            c.rotate(this.tilt * Math.PI / 180);
+            c.scale(1 + (this.zoom - 1) * 2, this.zoom)
+            c.translate(-w / 2, -h / 2);
+            this.renderQueue.forEach(e => {
+                e.draw?.()
+            })
+            c.restore(); // 状態を元に戻す
+
+            this.renderQueue = []
+
+            this.drawListUI.forEach(e => {
+                e.draw?.()
+            })
+            this.drawListUI = []
+        }
+        getGMRenderQueue() {
+            GM.traverse(GM.updateList, (e) => {
+                if (!e.drawPause)
+                    if (e.exportRenderQueue)
+                        e.exportRenderQueue(GM.camera)
+                    else
+                        this.drawListUI.push(e)
+
+
+            })
+            this.renderQueue.sort((a, b) => a.depth - b.depth)
+        }
+
+        getRenderQueue() {
+            // for loop the world, push something into renderqueue
+
+            // draw player!
+            this.drawList.forEach(e => {
+                if (!e.exportRenderQueue) return console.log('some object need the exportRenderQueue Method')
+                e.exportRenderQueue(this)
+            })
+            this.renderQueue.sort((a, b) => a.depth - b.depth)
+
+        }
+    }
+
+
+
+    // the player is defined by the world
+
+    class Collision3D extends GameObject {
+        constructor() {
+            super()
+            this.drawPause = false
+            getEventHandler(this)
+            this.on('keydown', (target) => {
+                target.vy = 2
+            })
+            this.on('keyup', (target) => {
+                target.vy = -2
+            })
+            this.on('keyright', (target) => {
+                target.vx = 2
+            })
+            this.on('keyleft', (target) => {
+                target.vx = -2
+            })
+        }
+        update_self() {
+            const m = this.master
+            // get and chect the next, in just one code!
+
+            // self-check the delta 
+            m.vx = m.worldMove('x', m.vx)
+            m.vy = m.worldMove('y', m.vy)
+            m.vz = m.worldMove('z', m.vz)
+
+
+            m.position.x += m.vx
+            m.position.y += m.vy
+            m.position.z += m.vz
+
+            if (m.vx > 0) m.direction.x = 1
+            else if (m.vx < 0) m.direction.x = -1
+
+            if (m.vx != 0 || m.vy != 0) m.pushEvent('onMove')
+            else if (m.vx == 0 && m.vy == 0) m.pushEvent('onStop')
+
+            if (m.vz < 0) m.pushEvent('fall')
+
+            // 摩擦力未実装なのでとりあえず止める
+            m.vx = this.applyFriction(m.vx)
+            m.vy = this.applyFriction(m.vy)
+            m.vz -= 0.5
+
+        }
+
+        applyFriction(v) {
+            const friction = this.master.friction || 0.1;
+
+            if (Math.abs(v) <= friction) {
+                return 0;
+            } else {
+                return v - Math.sign(v) * friction;
+            }
+        }
+        applyGravity(v) {
+            const friction = this.master.friction || 0.1;
+            return v - 0.5
+        }
+
+        exportRenderQueue(camera) {
+            const m = this.master
+            const vp1 = camera.projection({
+                x: m.position.x - m.size.x / 2,
+                y: m.position.y - m.size.y / 2,
+                z: m.position.z + m.size.z
+            });
+            const vp2 = camera.projection({
+                x: m.position.x - m.size.x / 2,
+                y: m.position.y + m.size.y / 2,
+                z: m.position.z + m.size.z
+            });
+            const vp3 = camera.projection({
+                x: m.position.x - m.size.x / 2,
+                y: m.position.y + m.size.y / 2,
+                z: m.position.z
+            });
+            camera.renderQueue.push({
+                depth: (m.position.x + m.position.y + m.position.z) / m.world.block_size,
+                draw: () => {
+                    c.fillStyle = 'yellow';
+                    c.fillRect(
+                        vp1.x,
+                        vp1.y,
+                        m.size.x,
+                        (vp2.y - vp1.y)
+                    );
+
+                    c.fillStyle = 'red';
+                    c.fillRect(
+                        vp2.x,
+                        vp2.y,
+                        m.size.x,
+                        (vp3.y - vp2.y),
+                    );
+
+                }
+
+            });
+        }
+    }
+
+    class Player3D extends GameObject {
+        constructor(_world) {
+            super()
+            this.world = _world
+            this.color = 'yellow'
+            this.position = {
+                x: 300,
+                y: 100,
+                z: 300,
+            }
+            this.size = {
+                x: 20,
+                y: 20,
+                z: 20,
+            }
+            this.direction = {
+                x: 0,
+                y: 1,
+                z: 1,
+            }
+            this.vx = 0
+            this.vy = 0
+            this.vz = 0
+            this.updateList = []
+            this.drawPause = true
+            // to spread the event
+            getEventManager(this)
+        }
+
+        moveTo(x, y, z) {
+            this.position.x = x
+            this.position.y = y
+            this.position.z = z
+        }
+
+        worldMove(Axis, delta) {
+            const d = this.world.moveAxisCheck_BottomType(this.position, Axis, delta, this.size, this)
+            return d
+        }
+
+        update_self() {
+            this.notifyEventToChildren()
+
+        }
+
+
+        exportRenderQueue(camera) {
+            const vp1 = camera.projection({
+                x: this.position.x - this.size.x / 2,
+                y: this.position.y - this.size.y / 2,
+                z: this.position.z + this.size.z
+            });
+            const vp2 = camera.projection({
+                x: this.position.x - this.size.x / 2,
+                y: this.position.y + this.size.y / 2,
+                z: this.position.z + this.size.z
+            });
+            const vp3 = camera.projection({
+                x: this.position.x - this.size.x / 2,
+                y: this.position.y + this.size.y / 2,
+                z: this.position.z
+            });
+            camera.renderQueue.push({
+                depth: (this.position.x + this.position.y + this.position.z) / this.world.block_size,
+                draw: () => {
+                    c.fillStyle = this.color;
+                    c.fillRect(
+                        vp1.x,
+                        vp1.y,
+                        this.size.x,
+                        (vp2.y - vp1.y)
+                    );
+
+                    c.fillStyle = 'rgba(160,0,100,1)';
+                    c.fillRect(
+                        vp2.x,
+                        vp2.y,
+                        this.size.x,
+                        (vp3.y - vp2.y),
+                    );
+
+                }
+
+            });
+        }
+
+    }
+
+
+    class Controller3D extends GameObject {
+        constructor() {
+            super()
+            this.id = 'controller3D'
+
+        }
+        update_self() {
+
+            if (!this.master) return
+            const m = this.master
+            if (keys.down.pressed) {
+                m.pushEvent('keydown')
+            } else if (keys.up.pressed) {
+                m.pushEvent('keyup')
+            }
+
+            if (keys.left.pressed) {
+                m.pushEvent('keyleft')
+
+            } else if (keys.right.pressed) {
+                m.pushEvent('keyright')
+            }
+
+            onPressHandlers.attack = () => {
+                m.pushEvent('atk')
+            }
+            onPressHandlers.jump = () => {
+                //moveAxis('z', 8, this.target)
+                m.pushEvent('jump')
+
+            }
+            onPressHandlers.parry = () => {
+                //moveAxis('z', 8, this.target)
+                m.pushEvent('parry')
+
+            }
+
+
+        }
+    }
+
+    class ListShower {
+        constructor() {
+        }
+        update() {
+        }
+        draw() {
+            if (!this.master) return
+            const text = GM.showList(this.master.updateList)
+            const lines = text.split('\n')
+            const startY = 0
+            const lineHeight = 20 // 行間。お好みで調整
+
+            c.fillStyle = 'rgba(0,0,0,0.5)'
+            c.fillRect(0, 0, w / 3, lineHeight * lines.length)
+
+            c.fillStyle = 'white'
+            c.font = '12px sans-serif' // フォント指定も忘れずに
+
+            lines.forEach((line, i) => {
+                c.fillText(line, 30, startY + 20 + i * lineHeight)
+            })
+        }
+    }
+
+
+    class stateRenderer2_5 extends GameObject {
+        constructor(master) {
+            super()
+            this.master = master
+            this.spriteImage = null
+            this.currentFrame = 0
+
+        }
+
+        checkSprite() {
+            const n = this.master.activeState.name
+            const s = this.master.data.state[n]?.sprite
+            if (!s) return false
+            if (this.spriteName === n) return true
+
+            const path = this.master.data.spriteFolder + s.path
+
+            if (!this.spriteImage)
+                this.spriteImage = new ImageLoader(path)
+            else if (this.spriteImage.img.src != path)
+                this.spriteImage.load(path)
+
+            return true
+        }
+
+        update() {
+            if (!this.checkSprite()) {
+                this.spriteImage = null
+                return
+            }
+
+            const n = this.master.activeState.name
+            const s = this.master.data.state[n]?.sprite
+            const mc = this.master.counter
+            let FrameBuffer = mc.endTime / s.length
+            this.currentFrame = Math.floor(mc.time / FrameBuffer)
+            this.currentFrame = Math.min(this.currentFrame, s.length - 1)
+
+        }
+
+        exportSpriteDraw(camera) {
+            if (!this.spriteImage?.loaded) return false
+            const n = this.master.activeState.name
+            const s = this.master.data.state[n]?.sprite
+
+            const sw = this.spriteImage.img.width / s.length
+            const sh = this.spriteImage.img.height
+
+            const cropbox = {
+                position: {
+                    x: sw * this.currentFrame,
+                    y: 0,
+                },
+                width: sw,
+                height: sh,
+            }
+
+            if (this.offset) {
+                this.drawPosition.x += this.offset.x
+                this.drawPosition.y += this.offset.y
+            }
+
+            const target = this.master.master
+            const sizex = target.size.x * 2
+            const sizey = target.size.y * 2
+            const vp1 = camera.projection({
+                x: target.position.x,
+                y: target.position.y,
+                z: target.position.z + target.size.z / 2
+            });
+
+            let flip = 1
+            let flipX = vp1.x - sw / 2
+            if (target.direction.x <= 0) flip *= -1
+            if (s.flip) flip *= -1
+            if (flip <= 0) flipX = -(vp1.x + sw / 2)
+
+            const offsetx = s.offset ? s.offset.x : 0
+            const offsety = s.offset ? s.offset.y : 0
+
+            const drawObject = {
+                depth: (target.position.x + target.position.y + target.position.z) / target.world.block_size,
+
+                draw: () => {
+                    c.save()
+                    c.scale(flip, 1);
+                    c.drawImage(
+                        this.spriteImage.img,
+                        cropbox.position.x,
+                        cropbox.position.y,
+                        cropbox.width,
+                        cropbox.height,
+
+                        flipX + offsetx,
+                        vp1.y - sh / 2 + offsety,
+                        sw,
+                        sh,
+                    )
+
+                    c.restore()
+
+
+                    showHTML(`${this.master.activeState.name}: ${Math.floor(this.master.counter?.progress() * 10) / 10},currentFrame:${this.currentFrame}`, 11)
+                }
+            }
+
+            return drawObject
+
+
+
+
+        }
+
+        draw() {
+            if (!this.spriteImage?.loaded) return
+            const n = this.master.activeState.name
+            const s = this.master.data.state[n]?.sprite
+
+            const sw = this.spriteImage.img.width / s.length
+            const sh = this.spriteImage.img.height
+
+            const cropbox = {
+                position: {
+                    x: sw * this.currentFrame,
+                    y: 0,
+                },
+                width: sw,
+                height: sh,
+            }
+
+            if (this.offset) {
+                this.drawPosition.x += this.offset.x
+                this.drawPosition.y += this.offset.y
+            }
+
+            c.drawImage(
+                this.spriteImage,
+                cropbox.position.x,
+                cropbox.position.y,
+                cropbox.width,
+                cropbox.height,
+
+                this.drawPosition.x,
+                this.drawPosition.y,
+                sw,
+                sh,
+            )
+        }
+
+
+        exportRenderQueue(camera) {
+            const ex = this.exportSpriteDraw(camera)
+            if (!ex) return
+            camera.renderQueue.push(ex);
+        }
+
+
+    }
+
+    class Player3DState {
+        constructor(master) {
+            this.name = ''
+            this.data = master.data
+            this.master = master
+            this.target = master.master
+            getEventHandler(this)
+
+        }
+
+        update() { }
+        draw() { }
+        enter() {
+            console.log(`${this.name} state is created`)
+        }
+    }
+
+    class Player3DImportedState extends Player3DState {
+        constructor(sname, master) {
+            super(master)
+            this.name = sname
+            console.log(`${this.name} state created`)
+            this.data = master.data.state[sname]
+            if (this.data.baseState) {
+                const n = this.data.baseState
+                this.data = master.data.state[n]
+            }
+            for (const [eventName, action] of Object.entries(this.data.on || {})) {
+
+                this.on(eventName, (target, EventData) => {
+                    if (action.move) {
+                        for (const m in action.move) {
+                            if (action.move[m]) {
+                                moveAxis(m, action.move[m], this.target)
+                            }
+                        }
+                    }
+                    if (action.log) console.log(action.log)
+                    if (action.event) GM.pushEvent(action.event)
+                    if (action.nextState)
+                        this.master.cst2(action.nextState)
+                })
+            }
+
+            this.enter()
+        }
+
+        enter() {
+            const _counter = GM.addCounter({
+                msg: '[' + this.name + ']',
+                target: this.master,
+                endTime: this.data.duration,
+                endCall: () => {
+                    this.target.pushEvent('onEnd')
+
+                }
+            })
+
+            const _counter0 = new Counter({
+                msg: '[' + this.name + ']',
+                target: this.master,
+                endTime: this.data.duration,
+                endCall: () => {
+                    this.target.pushEvent('onEnd')
+
+                }
+            })
+
+            const loop = this.data.sprite.loop
+            const length = this.data.sprite.length
+            const duration = this.data.duration
+            if (loop) {
+                _counter.processCall = () => {
+                    for (const step of this.data.steps || [])
+                        if (_counter.time === step.time)
+                            step.action(this.target)
+                    if (_counter.time === duration - 1)
+                        if (loop < length && duration > 0) {
+                            _counter.time = Math.floor(loop / length * duration)
+                        }
+                }
+            } else {
+                _counter.processCall = () => {
+                    for (const step of this.data.steps || [])
+                        if (_counter.time === step.time)
+                            step.action(this.target)
+                }
+            }
+
+            // counter must be end
+            this.master.counter?.setEnd()
+            this.master.counter = _counter
+        }
+    }
+
+
+
+    class StateMachine extends GameObject {
+        constructor(data = Rock, master = null) {
+            super()
+            this.drawPause = true
+            this.data = data
+            this.counter = null
+
+        }
+
+        onAttach(master) {
+            console.log('onAttach')
+            this.master = master;
+            this.activeState = new Player3DImportedState(this.data.initialState, this);
+            this.addChild(new stateRenderer2_5(this))
+
+        }
+
+        // just interface
+        onRequest(eventName, target, ...args) {
+            return this.activeState.onRequest(eventName, target, ...args)
+        }
+
+        cst2(stateName) {
+            this.activeState = new Player3DImportedState(stateName, this)
+        }
+
+        update_self() {
+            this.activeState.update()
+        }
+
+        draw() {
+            if (this.drawPause) return
+            c.fillStyle = 'red'
+            c.fillRect(0, 0, w, h)
+        }
+
+        exportRenderQueue(camera) {
+            const sizex = this.master.size.x / 2
+            const sizey = this.master.size.y / 2
+            const vp1 = camera.projection({
+                x: this.master.position.x,
+                y: this.master.position.y + this.master.size.y / 2,
+                z: this.master.position.z + this.master.size.z / 2
+            });
+            camera.renderQueue.push({
+                depth: (this.master.position.x + this.master.position.y + this.master.position.z) / this.master.world.block_size,
+                draw: () => {
+                    c.fillStyle = 'red';
+                    c.fillRect(
+                        vp1.x - sizex / 2,
+                        vp1.y - sizey / 2,
+                        sizex,
+                        sizey
+                    );
+                }
+
+            });
+        }
+    }
+
+
+    // SoundManager
+    // register and play
+    class SoundManager {
+        constructor() {
+            this.registry = new Map(); // name → path
+        }
+
+        // 音を登録
+        register(name, path) {
+            this.registry.set(name, path);
+        }
+
+        // 再生
+        play(name, volume = 1.0) {
+            const path = this.registry.get(name);
+            if (!path) {
+                console.warn(`Sound "${name}" is not registered.`);
+                return;
+            }
+            const audio = new Audio(path);
+            audio.volume = Math.max(0, Math.min(1, volume));
+            audio.play();
+        }
+    }
+
+
+
+    // ちいさいユーティリティ
+    const lerp = (a, b, t) => a + (b - a) * t;
+    const clamp01 = (t) => Math.max(0, Math.min(1, t));
+    // 代表的なEasing（必要な分だけ）
+    const ease = {
+        linear: t => t,
+        inQuad: t => t * t,
+        outQuad: t => t * (2 - t),
+        inOutQuad: t => (t < .5) ? 2 * t * t : -1 + (4 - 2 * t) * t,
+    };
+
+    // ========= Timeline2（内部クロック + 複数Track）=========
+    class Timeline {
+        constructor({ length = 120, loop = false } = {}) {
+            this.length = length;     // 総フレーム（or tick）
+            this.loop = loop;
+            this.time = 0;
+            this.paused = false;
+            this.tracks = [];
+            this.tags = new Set(["eventStopper"]); // 必要なら既存タグ運用に合わせる
+        }
+        onAttach(master) {        // GM.addChild が呼んでくれる
+            this.master = master;
+        }
+        addTrack(track) { this.tracks.push(track); return this; }
+        reset() {
+            this.time = 0;
+            this.finished = false
+            this.tracks.forEach(e => {
+                e.reset()
+            })
+        }
+        update() {
+            if (this.paused) return;
+            this.time++;
+            if (this.time > this.length) {
+                if (this.loop) { this.time = 0; this.onLoop?.(); }
+                else {
+                    this.time = this.length; this.onComplete?.();
+                    this.destroy(); return
+                }
+            }
+
+            const t = this.time;
+            for (const tr of this.tracks) tr.update(t);
+        }
+        process() {
+            return this.time / this.length
+        }
+        draw() {
+            // draw time line process bar
+            const thickness = 14
+            const pos = Math.min(1, Math.sin(this.process() * Math.PI) * 8) * thickness
+            c.fillStyle = 'black'
+            c.fillRect(0, h - pos, w, thickness)
+            c.fillStyle = 'rgba(0,128,255,1)'
+            c.fillRect(0, h - pos, this.process() * w, thickness)
+        }
+        destroy() {
+            console.log('destroying')
+            if (this.finished) return;
+            this.finished = true;
+            // 親の updateList から自分を除去
+            const parent = this.master;
+            parent.removeByTag('eventStopper')
+            /* sss */
+        }
+    }
+
+    // ========= KeyframeTrack（keys/steps対応）=========
+    // keys: [{t:0, v:100, ease:ease.outQuad}, {t:60, v:250}, {t:90, v:250, interpolation:'hold'}]
+    class KeyframeTrack {
+        // getter/setter か、target & path（"position.x"みたいな）を渡す
+        constructor({
+            getter, setter,
+            target = null, path = null,
+            keys = [],                 // 時間はtimeline基準のフレーム/カウント
+            defaultEase = ease.linear, // 未指定キーの補間
+        }) {
+            // アクセス方法を用意
+            if (!getter || !setter) {
+                if (!target || !path) throw new Error("KeyframeTrack: getter/setter か target+path を渡してね");
+                const parts = path.split(".");
+                getter = () => parts.reduce((o, k) => o[k], target);
+                setter = (val) => {
+                    const last = parts.slice(0, -1).reduce((o, k) => o[k], target);
+                    last[parts[parts.length - 1]] = val;
+                };
+            }
+            this.getter = getter;
+            this.setter = setter;
+            // キーを t 昇順に
+            this.keys = keys.slice().sort((a, b) => a.t - b.t);
+            this.defaultEase = defaultEase;
+            this._lastIndex = -1; // step/hook用で必要なら使う
+        }
+        reset() {
+            this._lastIndex = -1
+        }
+
+        update(t) {
+            if (this.keys.length === 0) return;
+
+            // 範囲外（前/後）
+            if (t <= this.keys[0].t) {
+                this.setter(this.keys[0].v, this.getter());
+                return;
+            }
+            const K = this.keys;
+            const last = K[K.length - 1];
+            if (t >= last.t) {
+                this.setter(last.v, this.getter());
+                return;
+            }
+
+            // 区間を探す（t_i <= t < t_{i+1}）
+            let i = (this._lastIndex >= 0 && this._lastIndex < K.length - 1) ? this._lastIndex : 0;
+
+            // 前フレームからの継続探索をするなら _lastIndex を使って微最適化も可
+            for (; i < K.length - 1; i++) {
+                if (t >= K[i].t && t < K[i + 1].t) break;
+            }
+
+            this._lastIndex = i
+
+            const key0 = K[i], key1 = K[i + 1];
+
+            // ステップ（hold）指定があれば v = k0.v で維持
+            if (key0.interpolation === "hold") {
+                this.setter(key0.v, this.getter());
+                return;
+            }
+
+            // 線形 or イージング補間
+            const ease = key0.ease || this.defaultEase;
+            const span = Math.max(1, (key1.t - key0.t))　// 0で割ることを防ぐ
+            let process = clamp01((t - key0.t) / span);
+            process = ease(process);
+
+            const v = lerp(key0.v, key1.v, process);
+            this.setter(v, this.getter());
+        }
+    }
+
+
+    scene = {
+        1: {
+            init: () => {
+                GM.reset()
+                console.log('scene 1 init')
+
+                const testEvent = {
+                    update: function () {
+                        console.log('now playing test event, all player should be stopped')
+                    },
+
+
+                }
+
+                GM.registry.set("testWorld", new BlockWorld());
+
+                GM.registry.set("charA", new Player3D(GM.registry.get('testWorld')));
+                GM.registry.set("testControl", new Controller3D(GM.registry.get('charA')));
+
+                GM.registry.get('testControl').tags.add('eventStop')
+                GM.registry.get('charA').updateList.push(GM.registry.get('testControl'))
+
+                GM.registry.set('ccamera', new Camera2_5(GM.registry.get('charA')))
+                GM.registry.get('ccamera').drawList.push(GM.registry.get('testWorld'))
+                GM.registry.get('ccamera').drawList.push(GM.registry.get('charA'))
+
+                GM.updateList.push(GM.registry.get('testWorld'))
+                GM.updateList.push(GM.registry.get('ccamera'))
+                GM.updateList.push(GM.registry.get('charA'))
+
+                GM.drawList.push(GM.registry.get('ccamera'))
+
+
+
+
+            }
+        }
+    }
+
+</script>
+
+
+<script id="key mapping">
+    // EventID好きなだけ追加
+    const eventID = new Proxy({}, (() => {
+        let currentID = 0;
+        const map = new Map();
+        return {
+            get(target, prop) {
+
+                if (typeof prop === "symbol") return undefined;
+                if (!map.has(prop)) {
+                    map.set(prop, currentID++);
+                }
+                return map.get(prop);
+            },
+            ownKeys() {
+                return Array.from(map.keys());
+            },
+        };
+    })());
+
+    // if(keys.xxx.pressed)これをGameLoopに入れたら連続発火
+
+    const keyMap = {
+        'a': 'left',
+        'd': 'right',
+        'w': 'up',
+        's': 'down',
+        'i': 'parry',
+        'j': 'attack',
+        'k': 'jump',
+        'l': 'camera_radius_down',
+        ' ': 'shot',
+        'q': 'switch',
+        'e': 'switch2'
+    }
+
+    // 必要なキーだけ登録すればOK
+    const onPressHandlers = {
+        up: () => {
+
+        },
+        down: () => {
+        },
+        left: () => {
+        },
+        right: () => {
+        },
+        shot: () => {
+
+        }
+    }
+
+    const onReleasehandlers = {
+        left: () => {
+        },
+        right: () => {
+        },
+        shot: () => {
+        }
+    }
+
+    // the event list
+
+
+</script>
+
+<script id="data">
+    const Rock =
+    {
+        name: "Hue Williams",
+        hp: 100,
+        initialState: 'idle',
+
+        state: {
+            idle: {
+                duration: 202,
+                sprite: {
+                    path: 'IMG_4913.png',
+                    length: 2,
+                },
+                on: {
+                    onMove: {
+                        nextState: 'move'
+                    },
+                    fall: {
+                        nextState: 'fall'
+                    },
+                    jump: {
+                        move: { x: 0, y: 0, z: 8 },
+                        nextState: 'jump'
+                    },
+                    onEnd: {
+                        nextState: 'idle'
+                    },
+                    atk: {
+                        nextState: 'attack1'
+                    },
+
+                },
+            },
+            idle_shoot: {
+                sprite: {
+                    path: 'IMG_4920.png',
+                    length: 1,
+                    offset: { x: -4, y: -1 }
+                },
+            },
+            jump: {
+                duration: 15,
+
+                sprite: {
+                    loop: 0,
+                    path: 'IMG_4914.png',
+                    length: 1,
+                },
+                on: {
+                    land: {
+                        event: 'land',
+                        nextState: 'idle'
+                    },
+                    fall: {
+                        nextState: 'fall'
+                    }
+                },
+            },
+            jump_shoot: {
+                sprite: {
+                    loop: 0,
+                    path: 'IMG_4911.png',
+                    length: 1,
+                },
+            },
+
+            fall: {
+                duration: 15,
+                sprite: {
+                    loop: 0,
+                    path: 'IMG_4914.png',
+                    length: 1,
+                },
+                on: {
+                    onMove: {},
+
+                    land: {
+                        event: 'land',
+                        nextState: 'idle'
+                    },
+                    jump: {
+                        nextState: 'jump'
+                    }
+                },
+            },
+            fall_shoot: {
+                sprite: {
+                    loop: 0,
+                    path: 'IMG_4911.png',
+                    length: 1,
+                },
+
+            },
+
+            land: {
+                duration: 0,
+                sprite: {
+
+                    path: 'IMG_4908.png',
+                    length: 2,
+                    flip: true,
+                },
+                on: {
+                    onMove: {
+                        nextState: 'move'
+                    },
+                    fall: {
+                        nextState: 'fall'
+                    },
+                    jump: {
+                        nextState: 'jump'
+                    },
+                    onEnd: {
+                        nextState: 'idle'
+                    },
+                    atk: {
+                        nextState: 'attack1'
+                    },
+                },
+            },
+
+            move: {
+                duration: 100,
+                sprite: {
+                    loop: 1,
+                    path: 'IMG_4922.png',
+                    length: 5,
+                    offset: { x: 0, y: -1 }
+                },
+                on: {
+                    movable: true,
+                    onMove: {},
+                    onStop: { nextState: 'idle' },
+                    jump: {
+                        move: { x: 0, y: 0, z: 8 },
+                        nextState: 'jump'
+                    },
+
+                    fall: {
+                        nextState: 'fall'
+                    }
+
+                },
+
+            },
+            move_shoot: {
+                sprite: {
+                    loop: 1,
+                    path: 'IMG_4921.png',
+                    length: 5,
+                    offset: { x: -5, y: -2 }
+
+                },
+
+
+            },
+
+            inStage: {
+                duration: 30,
+
+                sprite: {
+                    path: 'IMG_4866.png',
+                    length: 12,
+                    flip: true,
+                },
+                on: {
+                    onEnd: {
+                        nextState: 'idle'
+                    },
+
+                },
+            },
+            outStage: {
+                duration: 30,
+
+                sprite: {
+                    path: 'IMG_4901.png',
+                    length: 8,
+                    offset: { x: -20, y: 0 }
+                },
+                on: {
+                    onEnd: {
+                        nextState: 'idle'
+                    },
+
+                },
+            },
+            attack1: {
+                duration: 40,
+
+                sprite: {
+                    path: 'IMG_4903.png',
+                    length: 11,
+                    flip: true,
+                    offset: { x: 7, y: 1 }
+                },
+                on: {
+                    onEnd: {
+                        nextState: 'idle'
+                    },
+                    atk: {
+                        nextState: 'attack2'
+                    },
+
+                },
+            },
+            attack2: {
+                duration: 80,
+                sprite: {
+                    path: 'IMG_4866.png',
+                    length: 12,
+                    flip: true,
+                    offset: { x: 1, y: 0 }
+
+                },
+                on: {
+                    onEnd: {
+                        nextState: 'idle'
+                    },
+
+                },
+            },
+
+            injured: {
+                duration: 30,
+                transition: {
+                    onEnd: 'idle',
+                    atk: 'attack1'
+                },
+
+                sprite: {
+                    path: 'IMG_4873.png'
+                    ,
+                    length: 5,
+                    flip: true,
+                },
+                invisible: true,
+                on: {
+                    onEnd: {
+                        nextState: 'idle'
+                    },
+
+                },
+            },
+
+
+        },
+        spriteFolder: 'https://raw.githubusercontent.com/kurokoTJF/FUKAN/refs/heads/main/Sprites/Char/',
+    }
+    const ModelH =
+    {
+        name: "Hue Model",
+        hp: 100,
+        initialState: 'idle',
+
+        state: {
+            idle: {
+                duration: 202,
+                sprite: {
+                    path: 'IMG_4904.png',
+                    length: 4,
+                    flip: true,
+                    offset: { x: -1, y: -9 }
+                },
+                on: {
+                    onMove: {
+                        nextState: 'move'
+                    },
+                    fall: {
+                        nextState: 'fall'
+                    },
+                    jump: {
+                        move: { x: 0, y: 0, z: 12 },
+                        nextState: 'jump'
+                    },
+                    onEnd: {
+                        nextState: 'idle'
+                    },
+                    atk: {
+                        nextState: 'attack1'
+                    },
+                    parry: {
+                        nextState: 'parryReady'
+                    }
+
+                },
+            },
+            parryReady: {
+                duration: 202,
+                sprite: {
+                    path: 'IMG_4943.png',
+                    length: 1,
+                    flip: true,
+                    offset: { x: -1, y: -9 }
+                },
+                on: {
+
+                    jump: {
+                        event: 'parryLight',
+                        nextState: 'parryLight'
+                    },
+                    onEnd: {
+                        nextState: 'parryMiss'
+                    },
+
+                },
+            },
+            parryLight: {
+                duration: 100,
+
+                sprite: {
+                    path: 'IMG_4944.png',
+                    length: 15,
+                    flip: true,
+                    offset: { x: -1, y: -9 }
+                },
+                on: {
+                    onEnd: {
+                        nextState: 'idle'
+                    }
+
+
+                },
+            },
+            parryMiss: {
+                duration: 100,
+                sprite: {
+                    path: 'IMG_4873.png',
+                    length: 5,
+                    flip: true,
+                },
+                on: {
+                    onEnd: {
+                        nextState: 'attack1'
+                    },
+
+                },
+            },
+
+            idle_shoot: {
+                sprite: {
+                    path: 'IMG_4920.png',
+                    length: 1,
+                    offset: { x: -4, y: -1 }
+                },
+            },
+            jump: {
+                duration: 60,
+
+                sprite: {
+                    loop: 2,
+                    path: 'IMG_4906.png',
+                    flip: true,
+                    length: 3,
+                    offset: { x: -4, y: -9 }
+                },
+                on: {
+                    land: {
+                        event: 'land',
+                        nextState: 'idle'
+                    },
+                    fall: {
+                        nextState: 'fall'
+                    },
+                    atk: {
+                        nextState: 'jump_atk'
+                    }
+                },
+            },
+            jump_shoot: {
+                sprite: {
+                    loop: 0,
+                    path: 'IMG_4911.png',
+                    length: 1,
+                },
+            },
+            jump_atk: {
+                duration: 100,
+                sprite: {
+                    path: 'IMG_4942.png',
+                    flip: true,
+                    length: 11,
+                    offset: { x: -4, y: -9 }
+
+                },
+                on: {
+                    onEnd: {
+                        nextState: 'fall'
+                    },
+                    land: {
+                        nextState: 'idle'
+                    }
+                }
+
+            },
+
+            fall: {
+                duration: 40,
+                sprite: {
+                    loop: 2,
+                    path: 'IMG_4907.png',
+                    flip: true,
+                    length: 3,
+                },
+                on: {
+                    onMove: {},
+
+                    land: {
+                        event: 'land',
+                        nextState: 'idle'
+                    },
+                    jump: {
+                        move: { x: 0, y: 0, z: 8 },
+                        log: '11213jumpss',
+                        nextState: 'jump'
+                    },
+                    atk: {
+                        nextState: 'jump_atk'
+                    }
+                },
+            },
+            fall_shoot: {
+                sprite: {
+                    loop: 0,
+                    path: 'IMG_4911.png',
+                    length: 1,
+                },
+
+            },
+
+            land: {
+                duration: 40,
+                sprite: {
+
+                    path: 'IMG_4908.png',
+                    length: 2,
+                    flip: true,
+                },
+                on: {
+                    onMove: {
+                        nextState: 'move'
+                    },
+                    fall: {
+                        nextState: 'fall'
+                    },
+                    jump: {
+                        nextState: 'jump'
+                    },
+                    onEnd: {
+                        nextState: 'idle'
+                    },
+                    atk: {
+                        nextState: 'attack1'
+                    },
+                },
+            },
+
+            move: {
+                duration: 100,
+                sprite: {
+                    loop: 1,
+                    path: 'ModelHRun.png',
+                    length: 11,
+                    flip: true,
+                    offset: { x: 0, y: -9 }
+                },
+                on: {
+                    movable: true,
+                    onMove: {},
+                    onStop: { nextState: 'idle' },
+                    jump: {
+                        move: { x: 0, y: 0, z: 12 },
+                        nextState: 'jump'
+                    },
+
+                    fall: {
+                        nextState: 'fall'
+                    },
+                    atk: {
+                        nextState: 'attack1'
+                    }
+
+
+                },
+
+            },
+            move_shoot: {
+                sprite: {
+                    loop: 1,
+                    path: 'IMG_4921.png',
+                    length: 5,
+                    offset: { x: -5, y: -2 }
+
+                },
+
+
+            },
+            attack1: {
+                duration: 40,
+                steps:
+                    [
+                        { time: 40, action: (target) => target.showMSG('count 200') },
+                        { time: 70, action: (target) => target.showMSG('count 300') },
+                    ],
+                sprite: {
+                    path: 'IMG_4903.png',
+                    length: 11,
+                    flip: true,
+                    offset: { x: -9, y: -9 }
+                },
+                on: {
+                    onEnd: {
+                        nextState: 'idle'
+                    },
+                    atk: {
+                        nextState: 'attack2'
+                    },
+
+                },
+            },
+            attack2: {
+                duration: 80,
+                sprite: {
+                    path: 'IMG_4866.png',
+                    length: 12,
+                    flip: true,
+                    offset: { x: 0, y: -18 }
+                },
+                steps:
+                    [
+                        { time: 20, action: (target) => { GM.pushEvent('hitStop', target, 30, 'just a test, you dont actually hit anyone'); } },
+                        { time: 40, action: (target) => { GM.pushEvent('hitStop', target, 20, 'just a test, you dont actually hit anyone'); } },
+                    ],
+                on: {
+                    onEnd: {
+                        nextState: 'idle'
+                    },
+
+                },
+            },
+
+            injured: {
+                duration: 30,
+                invisible: true,
+                sprite: {
+                    path: 'IMG_4873.png',
+                    length: 5,
+                    flip: true,
+                },
+                on: {
+                    onEnd: {
+                        nextState: 'idle'
+                    },
+
+                },
+            },
+
+
+            inStage: {
+                duration: 30,
+
+                sprite: {
+                    path: 'IMG_4866.png',
+                    length: 12,
+                    flip: true,
+                },
+                on: {
+                    onEnd: {
+                        nextState: 'idle'
+                    },
+
+                },
+            },
+            outStage: {
+                duration: 30,
+
+                sprite: {
+                    path: 'IMG_4901.png',
+                    length: 8,
+                    offset: { x: -20, y: 0 }
+                },
+                on: {
+                    onEnd: {
+                        nextState: 'idle'
+                    },
+
+                },
+            },
+
+
+        },
+        spriteFolder: 'https://raw.githubusercontent.com/kurokoTJF/FUKAN/refs/heads/main/Sprites/Char/',
+    }
+
+</script>
+
+<button onmousedown="keyPress('force')"> add force </button>
+
+<script>
+    // 基本gameLoopに入れればいい
+    // GameObject用意してある、KeyListenerも入ってる
+    // dealEventする必要があれば、それをgameLoopにいれる
+    // Objectが増えたら、GMに管理してもらう
+    // join Game Loop で、ゲーム世界に参入。GMの管理化に入れて動かして、描画してもらう
+    // 2.5D テストは、blockworld+camera2_5+player(position,size)
+    // updateList, drawList online!
+
+
+
+    // ===== 使用例 =====
+    const SM = new SoundManager();
+
+    // 音を登録
+    SM.register('parry', 'https://github.com/kurokoTJF/FUKAN/raw/refs/heads/main/SE/%E5%89%A3%E3%81%A7%E6%89%93%E3%81%A1%E5%90%88%E3%81%863.mp3');
+    SM.register('land', 'https://github.com/kurokoTJF/FUKAN/raw/refs/heads/main/SE/06%20-%20MegamanLand.wav');
+    // DOM生成＆イベント登録
+    ['parry', 'hit'].forEach(name => {
+        const btn = document.createElement('button');
+        btn.textContent = name;
+        btn.addEventListener('click', () => SM.play(name, 0.8));
+        document.body.appendChild(btn);
+    });
+
+
+
+    const testWorld = new BlockWorld()
+    const charA = new Player3D(testWorld)
+    charA.name = 'Model H'
+    charA.tags.add('eventStop')
+    charA.addChild(new Collision3D())
+    charA.addChild(new StateMachine(ModelH))
+    const charB = new Player3D(testWorld)
+    charB.tags.add('eventStop')
+    charB.addChild(new Collision3D())
+    charB.addChild(new StateMachine(Rock))
+
+    const party = [charA, charB]
+    let active_index = 0
+
+    const proxy = new PlayerProxy()
+    proxy.current = party[active_index]
+
+    const ccamera = new Camera2_5(proxy)
+    GM.camera = ccamera
+
+    GM.addChild(new ListShower())
+    GM.addChild(SM, false)
+    GM.addChild(testWorld)
+    GM.addChild(proxy, false)
+
+    GM.addChild(charA)
+    GM.addChild(charB)
+
+    proxy.addChild(new Controller3D(),false)
+
+
+
+
+
+    GM.registry.set('charA', proxy)
+    GM.registry.set('ccamera', ccamera)
+    //
+
+    // time line test
+    const tl2 = new Timeline({ length: 180, loop: false });
+    tl2
+        .addTrack(new KeyframeTrack({
+            target: GM.registry.get('charA'), path: "vx",
+            keys: [
+                { t: 0, v: 0 },                    // 開始値
+                { t: 60, v: -2, interpolation: "hold" },      // 0~60f で滑らかに
+                { t: 120, v: 0, ease: ease.inOutQuad },     // 60~120f は維持（ステップ）
+                { t: 180, v: 0 },                             // 120~180f で線形に +50
+            ],
+        }))
+        .addTrack(new KeyframeTrack({
+            target: GM.registry.get('charA'), path: "direction.x",
+            keys: [
+                { t: 0, v: 1 },                    // 開始値
+                { t: 60, v: 1, interpolation: "hold" },      // 0~60f で滑らかに
+                { t: 120, v: 1, ease: ease.inOutQuad },     // 60~120f は維持（ステップ）
+                { t: 180, v: 1 },                             // 120~180f で線形に +50
+            ],
+        }))
+        .addTrack(new KeyframeTrack({
+            // ついでにカメラの tilt をふわっと
+            target: GM.registry.get('ccamera'), path: "tilt",
+            keys: [
+                { t: 0, v: 0 },
+                { t: 10, v: -10, ease: ease.outQuad },
+                { t: 180, v: 0, ease: ease.inQuad },
+            ],
+        }))
+        .addTrack(new KeyframeTrack({
+            // ついでにカメラの tilt をふわっと
+            target: GM.registry.get('ccamera'), path: "zoom",
+            keys: [
+                { t: 0, v: 1 },
+                { t: 10, v: 2, ease: ease.outQuad },
+                { t: 120, v: 2, ease: ease.inQuad },
+                { t: 180, v: 1 },
+            ],
+        }));
+
+    ///
+    // 適当なタイミングイベント対応
+    getEventManager(GM) // dealEvent
+    getEventHandler(GM) //
+    GM.on('land', () => {
+        SM.play('land', 0.3)
+    })
+
+
+    GM.on('pause', () => {
+        GM.setTagPause('eventStop', true, GM.updateList)
+        const starthint = new GameObject()
+        starthint.name='hint'
+        starthint.draw = function () {
+            c.fillStyle = 'white'
+            c.font = '10px sans-serif'
+            c.fillText('press [start] to start', w / 2, h / 2)
+        }
+
+        starthint.tags.add('pause')
+
+        GM.addChild(starthint)
+    })
+
+    GM.on('start', () => {
+        GM.setTagPause('eventStop', false, GM.updateList)
+        GM.removeByTag('pause')
+    })
+
+    GM.on('parryLight', () => {
+        tl2.reset()
+        GM.addChild(tl2)
+        SM.play('parry', 0.3)
+    })
+
+    GM.on('switch', () => {
+        active_index++
+        active_index %= party.length
+        proxy.current = party[active_index]
+    })
+
+
+
+
+
+
+
+    const buttons = ['pause', 'start', 'parryLight', 'switch']
+    buttons.forEach(name => {
+        const btn = document.createElement('button');
+        btn.textContent = name;
+        btn.addEventListener('click', () => {
+            GM.pushEvent(name)
+        });
+        document.body.appendChild(btn);
+    });
+
+
+
+
+    //asGM.pushEvent('pause')
+
+    let tick = 0
+
+    gameLoop = function () {
+        //charA.pushEvent('keydown')
+        showHTML(charA.showEventQueue(), 111)
+
+
+        GM.update()
+        GM.draw()
+
+
+
+
+
+    }
+</script>
