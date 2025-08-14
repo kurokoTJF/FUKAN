@@ -1198,6 +1198,7 @@
             if (this.target) {
                 const deltaX = this.target.position.x - this.position.x
                 const deltaY = this.target.position.y - this.position.y
+                const deltaZ = this.target.position.z - this.position.z
                 if (Math.abs(deltaX) > 1)
                     this.position.x += (deltaX) * this.speed
                 else
@@ -1206,6 +1207,10 @@
                     this.position.y += (deltaY) * this.speed
                 else
                     this.position.y = this.target.position.y
+                if (Math.abs(deltaZ) > 1)
+                    this.position.z += (deltaZ) * this.speed
+                else
+                    this.position.z = this.target.position.z
             }
         }
 
@@ -2958,4 +2963,5 @@
 
 
     }
+
 </script>
