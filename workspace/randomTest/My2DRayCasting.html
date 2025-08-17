@@ -7,7 +7,7 @@
   <style>
     body {
       margin: 0;
-      background: #4c4d53;
+      background: #bdbdc2;
       display: grid;
       place-items: center;
       height: 80vh;
@@ -22,7 +22,9 @@
 </head>
 
 <body>
+  <p>strip rendering</p>
   <canvas id="c" width="480" height="320"></canvas>
+  <p>2D preview in canvas coordination</p>
   <canvas id="c0" width="240" height="240"></canvas>
 
 </body>
@@ -146,7 +148,7 @@
     sample_height: 2,
     eyeZ: 0.4,                // 目線高さ（床=0 からの相対）
     projScale: function () {
-      return (H) / Math.tan(this.FOV / 2)  // 投影スケール
+      return (H/2) / Math.tan(this.FOV / 2) *(W/H)  // 投影スケール
     },
     speed: 0.04,
     update: function () {
@@ -202,7 +204,7 @@
 
       ctx.fillRect(0, 0, 100, 10)
       if (v3.x < 0 || v3.x > W || v3.y < 0 || v3.y > H)
-        return console.log('out of Range')
+        return false
 
       const screenSize = 0.2 / depth * FocalLength
 
