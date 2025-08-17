@@ -1,0 +1,563 @@
+<!doctype html>
+<html>
+
+<head>
+  <meta charset="utf-8">
+  <title>2D Ray Casting with Variable Heights (Fixed)</title>
+  <style>
+    body {
+      margin: 0;
+      background: #4c4d53;
+      display: grid;
+      place-items: center;
+      height: 80vh;
+    }
+
+    canvas {
+
+      image-rendering: pixelated;
+      background: #8b8b8b;
+    }
+  </style>
+</head>
+
+<body>
+  <canvas id="c" width="480" height="320"></canvas>
+  <canvas id="c0" width="240" height="240"></canvas>
+
+</body>
+
+<script id="data">
+  // ===== Map (16x16) =====
+  const MAP_W = 16, MAP_H = 16;
+  const map = [
+    1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+    1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2, 0, 0, 0, 0, 1,
+    1, 0, 0, 0, 0, 3, 3, 3, 0, 0, 2, 0, 0, 0, 0, 1,
+    1, 0, 3, 3, 0, 0, 0, 3, 3, 0, 2, 0, 0, 0, 0, 1,
+    1, 0, 3, 0, 0, 0, 0, 0, 3, 0, 2, 0, 0, 0, 0, 1,
+    1, 0, 3, 0, 3, 3, 0, 0, 3, 0, 2, 0, 0, 0, 0, 0,
+    1, 0, 0, 0, 0, 0, 0, 0, 3, 0, 2, 0, 0, 0, 0, 0,
+    1, 0, 0, 0, 0, 3, 3, 3, 3, 0, 2, 0, 0, 0, 0, 1,
+    1, 0, 0, 0, 0, 0, 0, 0, 3, 0, 2, 0, 0, 0, 0, 1,
+    1, 0, 0, 0, 0, 0, 0, 0, 3, 0, 2, 0, 0, 0, 0, 1,
+    1, 0, 0, 0, 0, 0, 0, 0, 4, 0, 4, 0, 0, 0, 0, 1,
+    1, 0, 0, 0, 0, 0, 0, 0, 2, 0, 4, 0, 0, 0, 0, 1,
+    1, 0, 0, 0, 0, 0, 0, 0, 4, 0, 4, 0, 0, 0, 0, 1,
+    1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1,
+    1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1,
+    1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+  ];
+  const floor = [
+    1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+    1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1,
+    1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1,
+    1, 0, 1, 1, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1,
+    1, 0, 1, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1,
+    1, 0, 0, 0, 0, 1, 1, 0, 0, 0, 1, 0, 0, 0, 0, 1,
+    1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1,
+    1, 0, 0, 0, 0, 0, 0, 1, 0, 0, 1, 0, 0, 0, 0, 1,
+    1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1,
+    1, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1,
+    1, 0, 0, 0, 0, 0, 0, 0, 4, 4, 4, 0, 0, 0, 0, 1,
+    1, 0, 0, 0, 0, 0, 1, 0, 1, 0, 4, 0, 0, 1, 0, 1,
+    1, 0, 0, 0, 0, 0, 0, 0, 4, 0, 4, 0, 0, 0, 0, 1,
+    1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1,
+    1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1,
+    1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+  ];
+  const at = (x, y) => (x < 0 || y < 0 || x >= MAP_W || y >= MAP_H) ? 0 : map[y * MAP_W + x] | 0;
+
+  const checkerTex = [
+    0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1,
+    0, 0, 0, 0, 0, 1, 1, 0, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1,
+    0, 0, 0, 1, 1, 1, 1, 0, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1,
+    1, 1, 1, 1, 1, 1, 1, 0, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1,
+    0, 0, 0, 1, 1, 1, 1, 0, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1,
+    0, 0, 0, 0, 0, 1, 1, 0, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1,
+    0, 0, 0, 0, 0, 1, 1, 0, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1,
+    0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1,
+
+    1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0,
+    1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0,
+    1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0,
+    1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0,
+    1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0,
+    1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0,
+    1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0,
+    1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0,
+
+    0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1,
+    0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1,
+    0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1,
+    0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1,
+    0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1,
+    0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1,
+    0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1,
+    0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1,
+
+    1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0,
+    1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0,
+    1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0,
+    1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0,
+    1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0,
+    1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0,
+    1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0,
+    1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0,
+
+
+  ]
+
+</script>
+
+<script>
+  // ===== Canvas =====
+  const cv = document.getElementById('c');
+  const ctx = cv.getContext('2d', { alpha: false });
+  const W = cv.width, H = cv.height;
+
+  const cv0 = document.getElementById('c0');
+  const ctx0 = cv0.getContext('2d', { alpha: false });
+  const W0 = cv0.width, H0 = cv0.height;
+
+
+  // all in canvas coordination, unit 1 meter
+  // block size 1 meter
+  // ===== Player =====
+  const player = {
+    angle: -Math.PI / 2,
+    px: 3.5,
+    py: 10.5,
+    sizex: 10,
+    sizey: 10,
+    moveSpeed: 3.0,
+    rotSpeed: 1
+  }
+  const sprite = {
+    px: 7.5,
+    py: 6.5
+  }
+
+  const camera2_6 = {
+    px: 0,
+    py: 0,
+    FOV: Math.PI / 3,// angle of view
+    sample_width: 6,
+    sample_height: 2,
+    eyeZ: 0.4,                // 目線高さ（床=0 からの相対）
+    projScale: function () {
+      return (H) / Math.tan(this.FOV / 2)  // 投影スケール
+    },
+    speed: 0.04,
+    update: function () {
+      const deltaX = player.px - this.px
+      const deltaY = player.py - this.py
+      if (Math.abs(deltaX) > 0.01)
+        this.px += (deltaX) * this.speed
+      else
+        this.px = player.px
+      if (Math.abs(deltaY) > 0.01)
+        this.py += (deltaY) * this.speed
+      else
+        this.py = player.py
+    },
+    lerp(k, v1, v2) {
+      return (1 - k) * v1 + k * v2
+    },
+    draw_sprite: function () {
+      const sw = W0 / MAP_W
+      const sh = H0 / MAP_H
+      drawLine(ctx0, this.px * sw, this.py * sh, sprite.px * sw, sprite.py * sh, 'blue', 1)
+      //projection
+      const v0 = {
+        x: sprite.px - this.px,
+        y: sprite.py - this.py,
+        z: 0
+      }
+
+      // angleの回転方向。。。。30分かかったかも
+      const v1 = {
+        x: v0.x * Math.cos(player.angle) + v0.y * Math.sin(player.angle),
+        y: -v0.x * Math.sin(player.angle) + v0.y * Math.cos(player.angle),
+        z: v0.z
+      }
+
+      if (v1.x > 0)
+        ctx.fillStyle = 'yellow'
+      else
+        return false
+
+      // camera space
+      const depth = v1.x
+      const side = v1.y
+      const vertical = -v1.z
+
+      const FocalLength = this.projScale()
+      const v3 = {
+        x: (side / Math.max(1e-4, depth)) * FocalLength + W / 2,
+        y: (vertical / Math.max(1e-4, depth)) * FocalLength + H / 2,
+        z: -depth
+      }
+
+
+      ctx.fillRect(0, 0, 100, 10)
+      if (v3.x < 0 || v3.x > W || v3.y < 0 || v3.y > H)
+        return console.log('out of Range')
+
+      const screenSize = 0.2 / depth * FocalLength
+
+      // クリップ
+
+      let x0 = Math.floor(v3.x - screenSize / 2);
+      let x1 = Math.floor(v3.x + screenSize / 2);
+      const y0 = Math.max(0, Math.floor(v3.y - screenSize / 2));
+      const y1 = Math.min(H, Math.floor(v3.y + screenSize / 2));
+      if (x1 <= 0 || x0 >= W || y1 <= 0 || y0 >= H) return;
+      x0 = Math.max(0, x0); x1 = Math.min(W, x1);
+
+      // 遮蔽比較：列ごとに depth(=d⊥) と zbuf[x] を比較して前にある時だけ描く
+      ctx.fillStyle = sprite.color || 'orange';
+      for (let x = x0; x < x1; x++) {
+        if (depth < this.zbuf[x]) {
+          // 本格はここでテクスチャ縦スライス描画（u = (x - (sx - screenSize/2))/screenSize）
+          ctx.fillRect(x, y0, 1, y1 - y0);
+        }else{
+          ctx.save()
+          ctx.fillStyle = '#87a7ff'
+          ctx.fillRect(x, y0, 1, y1 - y0);
+          ctx.restore()
+        }
+      }
+    },
+    draw: function () {
+      if (!this.zbuf || this.zbuf.length !== W) this.zbuf = new Float32Array(W);
+      this.zbuf.fill(Infinity);
+
+      const F = this.projScale(); // 1フレーム1回だけ
+
+      this.Render2DView()
+      // --- draw background ---
+      ctx.fillStyle = '#87a7ff'; ctx.fillRect(0, 0, W, H / 2);
+
+      ctx.fillStyle = '#4a8050'; ctx.fillRect(0, H / 2, W, H / 2);
+
+      for (let x = 0; x < W; x += this.sample_width) {
+        const ray_angle = (x / W - 0.5) * this.FOV; // (-0.5~0.5) *FOV
+        const ra = player.angle + ray_angle;
+        const
+          dx = Math.cos(ra),
+          dy = Math.sin(ra);
+
+        // DDA（原点オフセットで自己衝突回避）
+        const hit = this.raycast2D(this.px + dx * 1e-4, this.py + dy * 1e-4, dx, dy);
+
+        const sw = W0 / MAP_W
+        const sh = H0 / MAP_H
+
+        drawLine(ctx0,
+          sw * (this.px + dx * 1e-4),
+          sw * (this.py + dy * 1e-4),
+          sw * (this.px + dx * hit.dist),
+          sw * (this.py + dy * hit.dist),
+          'white', 1
+        )
+
+
+        if (!hit.hit) continue;
+
+
+
+        // 魚眼補正 Ver
+        let d_perp = Math.max(1e-6, hit.dist * Math.cos(ray_angle));
+        //let perp_d = Math.max(1e-6, hit.dist);
+        //
+
+        // 列が sample_width ピッチなので、該当する画面xに深度を入れておく
+        for (let xi = x; xi < Math.min(W, x + this.sample_width); xi++) {
+          // 近いもの優先で最小を保持
+          if (d_perp < this.zbuf[xi]) this.zbuf[xi] = d_perp;
+        }
+
+        // セルの floorZ/ceilZ（今回は floorZ=0, ceilZ=height）
+        const _floorZ = 0.0;
+        const _ceilZ = _floorZ + 1;
+
+        // ★ 正しい投影：上端/下端を別々に計算
+        const FocalLength = this.projScale()
+        const yTop = (H / 2) - ((_ceilZ - this.eyeZ) * FocalLength) / d_perp;
+        const yBot = (H / 2) + ((this.eyeZ - _floorZ) * FocalLength) / d_perp;
+
+        // クリップ
+        const y0 = Math.max(0, Math.min(H - 1, yTop | 0));
+        const y1 = Math.max(0, Math.min(H, yBot | 0));
+        //const y0 = yTop
+        //const y1 = yBot
+        const lineH = y1 - y0
+        if (lineH <= 0) continue;
+
+        // 色（マテリアル）＋ 面向きで陰
+        let col = [200, 200, 200];
+        if (hit.id === 1) col = [200, 200, 200];
+        if (hit.id === 2) col = [230, 210, 30];
+        if (hit.id === 3) col = [40, 160, 255];
+        if (hit.id === 4) col = [80, 80, 120];
+
+        const fog = Math.min(1, hit.dist / 16)
+        const fog_color = [122, 200, 255]
+        const shade = hit.side ? 0.45 : 1.0;
+
+
+        ctx.fillStyle = `rgb(
+        ${(this.lerp(fog, col[0] * shade, fog_color[0])) | 0},
+        ${(this.lerp(fog, col[1] * shade, fog_color[1])) | 0},
+        ${(this.lerp(fog, col[2] * shade, fog_color[2])) | 0})`;
+        ctx.fillRect(x, y0, this.sample_width, y1 - y0);
+
+        const wx = this.px + dx * hit.dist; // ヒット世界座標
+        const wy = this.py + dy * hit.dist;
+        const u =
+          hit.side ?
+            (hit.dir.y < 0 ? wx - Math.floor(wx) : 1 - wx + Math.floor(wx)) :
+            (hit.dir.x > 0 ? wy - Math.floor(wy) : 1 - wy + Math.floor(wy))
+
+        if (yBot - yTop < 0) return
+        for (let v = 0; v < lineH; v += this.sample_height) {
+          const startV = (y0 + v - yTop) / (yBot - yTop) // FIX!!!
+          const checkerU = Math.floor(u * 32)
+          const checkerV = Math.floor(startV * 32)
+          ctx.save()
+          if (checkerTex[checkerV * 32 + checkerU])
+            ctx.fillStyle = `rgb(
+          ${this.lerp(fog, 0, fog_color[0])},
+          ${this.lerp(fog, 0, fog_color[1])},
+          ${this.lerp(fog, 0, fog_color[2])})`
+
+          ctx.fillRect(x, y0 + v, this.sample_width, this.sample_height)
+          ctx.restore()
+        }
+
+        // ====== ★ FLOOR CAST: 壁の下の床をサンプリング ======
+        // 逆投影の定数（列ごとに一定）
+        const Kfloor = (this.eyeZ - _floorZ) * FocalLength; // eyeZから床までのスケール
+
+        // 床は y1(=壁下端) から画面下端まで
+        for (let y = y1; y < H; y += this.sample_height) {
+          // 画面行 y → 垂直距離 d_perp
+          const denom = (y) - H / 2;             // ピクセル中心 (+0.5 推奨)
+          if (denom <= 0) continue;
+          const dPerpFloor = Kfloor / denom; // Key: dist = (eyeZ-floorZ)*Focallength/(y-H/2)
+          const dRay = dPerpFloor / Math.cos(ray_angle) // 魚眼補正逆変換
+          //const dRay = dPerpFloor;          
+
+
+          // 世界座標（同じレイ方向）
+          const fx = this.px + dx * dRay;
+          const fy = this.py + dy * dRay;
+          // タイル繰り返しUV（0..1）
+          const u = fx - Math.floor(fx);
+          const v = fy - Math.floor(fy);
+          // 例：32x32のチェッカーからサンプル
+          const iu = (u * 32) | 0;
+          const iv = (v * 32) | 0;
+          const on = checkerTex[(iv & 31) * 32 + (iu & 31)];
+
+          // 簡単なフォグ（距離で空色へ寄せる）
+          const fog = Math.min(1, dPerpFloor / 16);
+          const fogCol = [122, 200, 255]; // 空色
+          let r = on ? 0 : 200, g = on ? 0 : 80, b = on ? 0 : 80; // 地面のベース色
+          r = ((1 - fog) * r + fog * fogCol[0]) | 0;
+          g = ((1 - fog) * g + fog * fogCol[1]) | 0;
+          b = ((1 - fog) * b + fog * fogCol[2]) | 0;
+
+          ctx.fillStyle = `rgb(${r},${g},${b})`;
+          ctx.fillRect(x, y, this.sample_width, this.sample_height);
+        }
+
+
+
+
+
+      }
+
+      this.draw_sprite()
+    },
+    raycast2D: function (ox, oy, dx, dy, maxDist = 32) {
+      // start position in grid system
+      let mapX = Math.floor(ox), mapY = Math.floor(oy);
+      const
+        searchDirX = dx > 0 ? 1 : -1, // right or left
+        searchDirY = dy > 0 ? 1 : -1; // down or up
+      const
+        _nextBlockX = mapX + (searchDirX > 0 ? 1 : 0), // 0 for the right side
+        _nextBlockY = mapY + (searchDirY > 0 ? 1 : 0); // 0 for the bottom side
+
+      const eps = 1e-9,
+        invDx = 1 / (Math.abs(dx) < eps ? eps : dx),
+        invDy = 1 / (Math.abs(dy) < eps ? eps : dy);
+      const
+        tDeltaX = Math.abs(invDx),// 常に一定
+        tDeltaY = Math.abs(invDy);
+      let
+        nextBlockDistByX = (_nextBlockX - ox) * invDx, // tMaxX * Math.cos(ra) = (N-O)
+        nextBlockDistByY = (_nextBlockY - oy) * invDy;
+
+      // check if inside
+      const id0 = at(mapX, mapY)
+      if (id0) return {
+        hit: true, dist: 0, id: id0,
+        side: 0, dir: { x: searchDirX, y: searchDirY },
+        cellX: mapX, cellY: mapY
+      };
+
+      let side = 0, dist = 0, hitId = 0;
+      for (let i = 0; i < 128; i++) {
+        // youtubeのは、XとY方向で全部終わってから比較する、こっちは交互でやる
+        // move the check block position, update the dist
+        if (nextBlockDistByX <= nextBlockDistByY) {
+          mapX += searchDirX;
+          dist = nextBlockDistByX;
+          nextBlockDistByX += tDeltaX;
+          side = 0;
+        }
+        else {
+          mapY += searchDirY;
+          dist = nextBlockDistByY;
+          nextBlockDistByY += tDeltaY;
+          side = 1;
+        }
+
+        if (dist > maxDist) break;
+
+        hitId = at(mapX, mapY)
+        if (hitId)
+          return {
+            hit: true, dist, id: hitId,
+            side, dir: { x: searchDirX, y: searchDirY },
+            cellX: mapX, cellY: mapY
+          };
+      }
+
+      // no hit
+      return {
+        hit: false, dist: maxDist, id: 0,
+        side: 0, dir: { x: searchDirX, y: searchDirY },
+        cellX: -1, cellY: -1
+      };
+
+    },
+    Render2DView: function () {
+
+      ctx0.fillStyle = 'grey'
+      ctx0.fillRect(0, 0, W0, H0)
+      const sw = W0 / MAP_W
+      const sh = H0 / MAP_H
+      for (let y = 0; y < MAP_H; y++) for (let x = 0; x < MAP_W; x++)
+        if (map[x + y * MAP_W] > 0) {
+          ctx0.fillStyle = 'black'
+          ctx0.fillRect(x * sw + 1, y * sh + 1, sw - 1, sh - 1)
+        }
+
+
+      const arraylength = 20
+
+      ctx0.beginPath();
+      ctx0.arc(player.px * sw, player.py * sh, player.sizex / 2, 0, 2 * Math.PI)
+      ctx0.fillStyle = "red"
+      ctx0.fill()
+
+      ctx0.beginPath();
+      ctx0.arc(camera2_6.px * sw, camera2_6.py * sh, player.sizex / 2, 0, 2 * Math.PI)
+      ctx0.fillStyle = "yellow"
+      ctx0.fill()
+
+      ctx0.beginPath();
+      ctx0.arc(sprite.px * sw, sprite.py * sh, player.sizex / 2, 0, 2 * Math.PI)
+      ctx0.fillStyle = "blue"
+      ctx0.fill()
+
+
+      drawLine(ctx0,
+        player.px * sw,
+        player.py * sh,
+        player.px * sw + arraylength * Math.cos(player.angle),
+        player.py * sh + arraylength * Math.sin(player.angle)
+      )
+
+    }
+
+  }
+
+  // ===== Input =====
+  const keys = {};
+  addEventListener('keydown', e => keys[e.code] = true);
+  addEventListener('keyup', e => keys[e.code] = false);
+
+  // ===== 2D DDA（セル座標とside返却）=====
+  /*     
+  ox, oy: レイの開始座標（プレイヤーの位置など）
+  dx, dy: normalized ray vector (cosA,sinA)
+  maxDist: 最大探索距離（安全のために打ち切る）
+   */
+
+
+  function drawLine(ctx, x0, y0, x1, y1, color = 'red', thickness = 4) {
+    ctx.strokeStyle = color;
+    ctx.lineWidth = thickness
+    ctx.beginPath()
+    ctx.moveTo(x0, y0)
+    ctx.lineTo(x1, y1)
+    ctx.stroke()
+  }
+
+
+
+  // ===== Render =====
+  let last = performance.now();
+  function loop(now) {
+
+
+
+
+    const dt = Math.min(0.033, (now - last) * 0.001); last = now;
+
+    // --- update ---
+    const
+      _fwdx = Math.cos(player.angle),
+      _fwdy = Math.sin(player.angle);
+    const
+      _rightx = Math.cos(player.angle + Math.PI / 2),
+      _righty = Math.sin(player.angle + Math.PI / 2);
+
+    let mx = 0, my = 0;
+    if (keys['KeyW']) { mx += _fwdx; my += _fwdy; }
+    if (keys['KeyS']) { mx -= _fwdx; my -= _fwdy; }
+    if (keys['KeyA']) { mx -= _rightx; my -= _righty; }
+    if (keys['KeyD']) { mx += _rightx; my += _righty; }
+
+    const mag = Math.hypot(mx, my) || 1;
+    mx /= mag;
+    my /= mag;
+
+    const step = player.moveSpeed * (keys['AltLeft'] ? 1.7 : 1.0) * dt;
+
+    const npx = player.px + mx * step, npy = player.py + my * step;
+    if (!at(Math.floor(npx), Math.floor(player.py))) player.px = npx;
+    if (!at(Math.floor(player.px), Math.floor(npy))) player.py = npy;
+
+    if (keys['KeyJ']) player.angle -= player.rotSpeed * dt;
+    if (keys['KeyL']) player.angle += player.rotSpeed * dt;
+
+
+    camera2_6.update()
+
+    camera2_6.draw()
+
+
+
+    requestAnimationFrame(loop);
+  }
+
+  requestAnimationFrame(loop);
+</script>
+
+</html>
