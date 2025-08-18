@@ -196,6 +196,11 @@
         lerp(k, v1, v2) {
             return (1 - k) * v1 + k * v2
         },
+        UVSampling: function (tex, u, v, texSizeX, texSizeY = texSizeX) {
+            const U = Math.floor(u * texSizeX)
+            const V = Math.floor(v * texSizeY)
+            return tex[V*texSizeX+U]
+        },
         draw_sprite: function () {
             const sw = W0 / MAP_W
             const sh = H0 / MAP_H
@@ -355,10 +360,10 @@
                 if (yBot - yTop < 0) return
                 for (let v = 0; v < lineH; v += this.sample_height) {
                     const startV = (y0 + v - yTop) / (yBot - yTop) // FIX!!!
-                    const checkerU = Math.floor(u * 32)
-                    const checkerV = Math.floor(startV * 32)
+                    //const checkerU = Math.floor(u * 32)
+                    //const checkerV = Math.floor(startV * 32)
                     ctx.save()
-                    if (checkerTex[checkerV * 32 + checkerU])
+                    if (this.UVSampling(checkerTex,u,startV,32))
                         ctx.fillStyle = `rgb(
           ${this.lerp(fog, 0, fog_color[0])},
           ${this.lerp(fog, 0, fog_color[1])},
@@ -389,9 +394,10 @@
                     const u = fx - Math.floor(fx);
                     const v = fy - Math.floor(fy);
                     // 例：32x32のチェッカーからサンプル
-                    const iu = (u * 32) | 0;
-                    const iv = (v * 32) | 0;
-                    const on = checkerTex[(iv & 31) * 32 + (iu & 31)];
+                    //const iu = (u * 32) | 0;
+                    //const iv = (v * 32) | 0;
+                    //const on = checkerTex[(iv & 31) * 32 + (iu & 31)];
+                    const on = this.UVSampling(checkerTex,u,v,32)
 
                     // 簡単なフォグ（距離で空色へ寄せる）
                     const fog = Math.min(1, dPerpFloor / 16);
