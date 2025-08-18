@@ -1,157 +1,97 @@
 <!doctype html>
 <html lang="ja">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>マスクスプライトエディタ（-1/0/1 配列・白黒＋アルファ・可変サイズ）</title>
+    <style>
+      :root { --scale: 16; }
+      body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, "Noto Sans JP", sans-serif; line-height: 1.45; padding: 16px; }
+      h1 { font-size: 18px; margin: 0 0 8px; }
+      .bar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 8px; }
+      button { padding: 6px 10px; border-radius: 10px; border: 1px solid #ccc; background: #fff; box-shadow: 0 1px 0 rgba(0,0,0,.06); cursor: pointer; }
+      button.primary { background: #111; color: #fff; border-color: #111; }
+      label { font-size: 12px; opacity: .9; }
+      input[type="text"], select { padding: 6px 8px; border-radius: 8px; border: 1px solid #ccc; }
+      canvas { image-rendering: pixelated; border: 1px solid #ccc; border-radius: 12px; touch-action: none; }
+      textarea { width: 100%; height: 160px; padding: 8px; border: 1px solid #ccc; border-radius: 8px; margin-top: 6px; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; font-size: 12px; }
+      .muted { opacity: .75; font-size: 12px; margin: 0 0 8px; }
+      details { margin-top: 10px; }
+      pre { background: #f5f5f5; padding: 10px; border-radius: 8px; overflow: auto; }
+      .sep { width: 1px; height: 26px; background: #ddd; display: inline-block; }
+    </style>
+  </head>
+  <body>
+    <h1>マスクスプライトエディタ（-1=透明／0=黒／1=白）</h1>
+    <p class="muted">白黒＋アルファ対応。エクスポートは行ごと。サイズは <strong>8×8〜64×64</strong> で切替可能。</p>
 
-<head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>32×32 マスクスプライトエディタ（-1/0/1 配列・白黒＋アルファ）</title>
-  <style>
-    :root {
-      --scale: 16;
-    }
-
-    body {
-      font-family: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, "Noto Sans JP", sans-serif;
-      line-height: 1.45;
-      padding: 16px;
-    }
-
-    h1 {
-      font-size: 18px;
-      margin: 0 0 8px;
-    }
-
-    .bar {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 8px;
-      align-items: center;
-      margin-bottom: 8px;
-    }
-
-    button {
-      padding: 6px 10px;
-      border-radius: 10px;
-      border: 1px solid #ccc;
-      background: #fff;
-      box-shadow: 0 1px 0 rgba(0, 0, 0, .06);
-      cursor: pointer;
-    }
-
-    button.primary {
-      background: #111;
-      color: #fff;
-      border-color: #111;
-    }
-
-    label {
-      font-size: 12px;
-      opacity: .9;
-    }
-
-    canvas {
-      image-rendering: pixelated;
-      border: 1px solid #ccc;
-      border-radius: 12px;
-      touch-action: none;
-    }
-
-    textarea {
-      width: 100%;
-      height: 160px;
-      padding: 8px;
-      border: 1px solid #ccc;
-      border-radius: 8px;
-      margin-top: 6px;
-      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
-      font-size: 12px;
-    }
-
-    .muted {
-      opacity: .75;
-      font-size: 12px;
-      margin: 0 0 8px;
-    }
-
-    details {
-      margin-top: 10px;
-    }
-
-    pre {
-      background: #f5f5f5;
-      padding: 10px;
-      border-radius: 8px;
-      overflow: auto;
-    }
-
-    .sep {
-      width: 1px;
-      height: 26px;
-      background: #ddd;
-      display: inline-block;
-    }
-  </style>
-</head>
-
-<body>
-  <h1>32×32 マスクスプライトエディタ（-1=透明／0=黒／1=白）</h1>
-  <p class="muted">Wolfenstein
-    風スプライト用。<strong>アルファ対応（-1）</strong>、<strong>白黒のみ</strong>。エクスポートは<strong>行ごとに32</strong>で改行。</p>
-
-  <div class="bar">
-    <span>
+    <div class="bar">
+      <span>
         <label><input type="radio" name="ink" id="inkWhite" checked> Ink: 白(1)</label>
         <label style="margin-left:8px"><input type="radio" name="ink" id="inkBlack"> 黒(0)</label>
       </span>
-    <span class="sep"></span>
-    <button id="toolPixel" class="primary">ドット</button>
-    <button id="toolLine">直線</button>
-    <button id="toolCircle">丸</button>
-    <button id="toolErase">消しゴム (-1)</button>
-    <label style="margin-left:8px"><input type="checkbox" id="grid" checked> グリッド</label>
-  </div>
-
-  <div class="bar">
-    <button id="exp2d">Export JSON 32×32（-1/0/1）</button>
-    <button id="expflat">Export Flat JS（32ごと改行）</button>
-    <button id="imp">Import</button>
-    <button id="png">Download PNG</button>
-    <button id="clear">Clear (-1)</button>
-    <button id="tests">Run Tests</button>
-  </div>
-
-  <canvas id="cv" width="512" height="512"></canvas>
-
-  <div style="margin-top:8px">
-    <label class="muted">Export Output</label>
-    <textarea id="out" placeholder="Export結果がここに出ます（クリップボードにもコピーされます）"></textarea>
-  </div>
-
-  <details>
-    <summary>Export 仕様</summary>
-    <div class="muted">
-      <p><strong>JSON 32×32</strong>：<code>[[-1,0,1,... 32要素], ... 32行]</code></p>
-      <pre>[
-  [1,0,-1, ... 32 要素],
-  [... 32 行 ...]
-]</pre>
-      <p><strong>Flat JS</strong>：1次元配列だが、可読性のため<strong>32ごとに改行</strong>。</p>
-      <pre>const SPRITE32 = [
-  -1,0,0, ... 32要素,
-  ... 32 行 ...
-];</pre>
+      <span class="sep"></span>
+      <button id="toolPixel" class="primary">ドット</button>
+      <button id="toolLine">直線</button>
+      <button id="toolCircle">丸</button>
+      <button id="toolErase">消しゴム (-1)</button>
+      <label style="margin-left:8px"><input type="checkbox" id="grid" checked> グリッド</label>
     </div>
-  </details>
 
-  <script>
-    // ====== Config ======
-      const SIZE = 32;
+    <div class="bar">
+      <label>サイズ: 
+        <select id="sizeSel">
+          <option>8</option>
+          <option>16</option>
+          <option selected>32</option>
+          <option>48</option>
+          <option>64</option>
+        </select>
+      </label>
+      <button id="applySize">サイズを適用</button>
+      <span class="sep"></span>
+      <label>変数名: <input id="varName" type="text" value="SPRITE32" size="14" /></label>
+      <span class="sep"></span>
+      <button id="exp2d">Export JSON NxN（-1/0/1）</button>
+      <button id="expflat">Export Flat JS（Nごと改行）</button>
+      <button id="imp">Import</button>
+      <button id="png">Download PNG</button>
+      <button id="clear">Clear (-1)</button>
+      <button id="tests">Run Tests</button>
+    </div>
+
+    <canvas id="cv" width="512" height="512"></canvas>
+
+    <div style="margin-top:8px">
+      <label class="muted">Export Output</label>
+      <textarea id="out" placeholder="Export結果がここに出ます（クリップボードにもコピーされます）"></textarea>
+    </div>
+
+    <details>
+      <summary>Export 仕様</summary>
+      <div class="muted">
+        <p><strong>JSON NxN</strong>：<code>[[-1,0,1,... N要素], ... N行]</code></p>
+        <pre>[
+  [1,0,-1, ... N 要素],
+  [... N 行 ...]
+]</pre>
+        <p><strong>Flat JS</strong>：1次元配列だが、可読性のため<strong>Nごとに改行</strong>。</p>
+        <pre>const VARNAME = [
+  -1,0,0, ... N要素,
+  ... N 行 ...
+];</pre>
+      </div>
+    </details>
+
+    <script>
+      // ====== Config ======
+      let SIZE = 32; // 可変
       const SCALE = parseInt(getComputedStyle(document.documentElement).getPropertyValue('--scale')) || 16;
 
       // ====== State ======
       let instrument = 'pixel'; // 'pixel' | 'line' | 'circle' | 'erase'
       let ink = 1; // 1=白, 0=黒 （消しゴムは -1 固定）
-      const buf = new Int8Array(SIZE * SIZE); // -1/0/1
+      let buf = new Int8Array(SIZE * SIZE); // -1/0/1
       buf.fill(-1); // 初期は透明
       const idx = (x, y) => y * SIZE + x;
 
@@ -160,6 +100,9 @@
       const ctx = cv.getContext('2d');
       const out = document.getElementById('out');
       const grid = document.getElementById('grid');
+      const sizeSel = document.getElementById('sizeSel');
+      const applySizeBtn = document.getElementById('applySize');
+      const varNameInput = document.getElementById('varName');
 
       // Toolbar wires
       const inkWhite = document.getElementById('inkWhite');
@@ -178,6 +121,29 @@
         document.getElementById('toolCircle').classList.toggle('primary', name==='circle');
         document.getElementById('toolErase').classList.toggle('primary', name==='erase');
       }
+
+      function sanitizeVarName(s){
+        s = String(s || '').trim();
+        if (!s) return `SPRITE${SIZE}`;
+        // 先頭は英字/_、以降は英数字/_ のみ許可
+        s = s.replace(/[^A-Za-z0-9_]/g, '_');
+        if (!/^[A-Za-z_]/.test(s)) s = '_' + s;
+        return s;
+      }
+
+      function applySize(newSize){
+        newSize = Math.max(8, Math.min(64, (newSize|0)));
+        if (newSize === SIZE) return;
+        if (!confirm(`サイズを ${SIZE}→${newSize} に変更します。現在のドットは消去されます。OK?`)) return;
+        SIZE = newSize;
+        buf = new Int8Array(SIZE * SIZE);
+        buf.fill(-1);
+        cv.width = cv.height = SIZE * SCALE;
+        varNameInput.value = `SPRITE${SIZE}`;
+        redraw();
+      }
+
+      applySizeBtn.onclick = () => applySize(parseInt(sizeSel.value, 10));
 
       // ====== Drawing ======
       function redraw() {
@@ -314,7 +280,7 @@
         ));
       }
 
-      function exportJSON32() {
+      function exportJSONNxN() {
         const s = JSON.stringify(asMatrix());
         try { navigator.clipboard?.writeText(s); } catch {}
         out.value = s;
@@ -327,13 +293,14 @@
           for (let x=0;x<SIZE;x++) row.push(String(buf[idx(x,y)]));
           lines.push('  ' + row.join(','));
         }
-        const s = `const SPRITE32 = [\n${lines.join(',\n')}\n];`;
+        const name = sanitizeVarName(varNameInput.value) || `SPRITE${SIZE}`;
+        const s = `const ${name} = [\n${lines.join(',\n')}\n];`;
         try { navigator.clipboard?.writeText(s); } catch {}
         out.value = s;
       }
 
       function importAny() {
-        const t = prompt('32×32 の JSON 行列か、長さ1024のフラット配列（-1/0/1）を貼り付けてください');
+        const t = prompt(`${SIZE}×${SIZE} の JSON 行列か、長さ ${SIZE*SIZE} のフラット配列（-1/0/1）を貼り付けてください`);
         if (!t) return;
         // Try JSON 2D
         try {
@@ -347,7 +314,7 @@
         try {
           const arr = Function('return ('+t+')')();
           if (Array.isArray(arr) && arr.length === SIZE*SIZE) {
-            for (let i=0;i<1024;i++) buf[i] = (arr[i]|0);
+            for (let i=0;i<arr.length;i++) buf[i] = (arr[i]|0);
             redraw(); return;
           }
         } catch {}
@@ -355,7 +322,7 @@
       }
 
       function downloadPNG() {
-        // 32×32 の実サイズ: -1 は alpha=0、0/1 は alpha=255（0=黒,1=白）
+        // 実サイズで出力: -1 は alpha=0、0/1 は alpha=255（0=黒,1=白）
         const c = document.createElement('canvas'); c.width = SIZE; c.height = SIZE;
         const cx = c.getContext('2d');
         const img = cx.createImageData(SIZE, SIZE);
@@ -367,12 +334,12 @@
           else { img.data[o]=255; img.data[o+1]=255; img.data[o+2]=255; img.data[o+3]=255; }
         }
         cx.putImageData(img,0,0);
-        const a = document.createElement('a'); a.href = c.toDataURL('image/png'); a.download = 'sprite32_mask_alpha.png'; a.click();
+        const a = document.createElement('a'); a.href = c.toDataURL('image/png'); a.download = `sprite${SIZE}_mask_alpha.png`; a.click();
       }
 
       function clearAll(){ buf.fill(-1); redraw(); }
 
-      // ====== Tests ======
+      // ====== Tests (サイズ可変対応) ======
       function runTests() {
         let pass=0, fail=0; const log=[]; const T=(cond,msg)=>{ (cond?pass:fail) && 0; log.push(`${cond?'✅':'❌'} ${msg}`); };
 
@@ -383,32 +350,33 @@
         setPixel(0,0,1); setPixel(1,0,0); setPixel(2,0,-1);
         T(buf[idx(0,0)]===1 && buf[idx(1,0)]===0 && buf[idx(2,0)]===-1, 'pixel set values -1/0/1');
 
-        // 3) 直線：端から端まで1024内に収まる
+        // 3) 直線：端から端まで SIZE に依存
         const before = buf.slice();
-        drawLine(0,0,31,31,1,true);
+        drawLine(0,0,SIZE-1,SIZE-1,1,true);
         T(Array.from(buf).some((v,i)=>v!==before[i]), 'line draw changes buffer');
 
-        // 4) 丸：半径8で描ける
+        // 4) 丸：半径 floor(SIZE/4) で描ける
         const before2 = buf.slice();
-        drawCircle(16,16,8,0,true);
+        drawCircle(Math.floor(SIZE/2),Math.floor(SIZE/2),Math.floor(SIZE/4),0,true);
         T(Array.from(buf).some((v,i)=>v!==before2[i]), 'circle draw changes buffer');
 
-        // 5) Export 2D は 32×32 かつ -1/0/1 のみ
+        // 5) Export 2D は SIZE×SIZE かつ -1/0/1 のみ
         const m = asMatrix();
-        T(m.length===32 && m.every(r=>Array.isArray(r)&&r.length===32), 'matrix is 32×32');
+        T(m.length===SIZE && m.every(r=>Array.isArray(r)&&r.length===SIZE), 'matrix is NxN');
         T(m.every(r=>r.every(v=>v===-1||v===0||v===1)), 'matrix contains only -1/0/1');
 
-        // 6) Flat 出力は 32 行
+        // 6) Flat 出力は SIZE 行
         const lines = [];
         for (let y=0;y<SIZE;y++){ const row=[]; for(let x=0;x<SIZE;x++) row.push(String(buf[idx(x,y)])); lines.push('  '+row.join(',')); }
-        T(lines.length===32, 'flat export has 32 lines');
+        T(lines.length===SIZE, 'flat export has N lines');
 
         alert(`Self-tests: ${pass} passed, ${fail} failed\n\n`+log.join('\n'));
         redraw();
       }
 
       // ====== Wire up ======
-      document.getElementById('exp2d').onclick = exportJSON32;
+      function exportJSONAlias(){ exportJSONNxN(); }
+      document.getElementById('exp2d').onclick = exportJSONAlias;
       document.getElementById('expflat').onclick = exportFlatJS;
       document.getElementById('imp').onclick = importAny;
       document.getElementById('png').onclick = downloadPNG;
@@ -416,11 +384,10 @@
       document.getElementById('tests').onclick = runTests;
       grid.onchange = redraw;
 
-      function getXYFromEvent(e){ const r = cv.getBoundingClientRect(); return { x: Math.floor((e.clientX - r.left) / SCALE), y: Math.floor((e.clientY - r.top) / SCALE) }; }
-
       cv.width = cv.height = SIZE * SCALE;
+      // 初期の変数名
+      varNameInput.value = `SPRITE${SIZE}`;
       redraw();
-  </script>
-</body>
-
+    </script>
+  </body>
 </html>
