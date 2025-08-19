@@ -832,7 +832,7 @@
             update: () => { },
             draw: () => {
                 GM.traverse(GM.updateList, (e) => {
-                    if (!e.drawPause) e.draw()
+                    if (!e.drawPause) e.draw?.()
                 })
             },
         },
@@ -2885,6 +2885,7 @@
     // into GM!
 
     GM.addChild(new ListShower())
+    GM.addChild(player)
 
     function gameLoop() {
 
@@ -2892,7 +2893,6 @@
 
         
 
-        player.update()
         camera2_6.update()
 
         camera2_6.draw()
