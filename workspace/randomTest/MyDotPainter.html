@@ -52,7 +52,6 @@
       <span class="sep"></span>
       <label>変数名: <input id="varName" type="text" value="SPRITE32" size="14" /></label>
       <span class="sep"></span>
-      <button id="exp2d">Export JSON NxN（-1/0/1）</button>
       <button id="expflat">Export Flat JS（Nごと改行）</button>
       <button id="imp">Import</button>
       <button id="png">Download PNG</button>
@@ -294,7 +293,7 @@
           lines.push('  ' + row.join(','));
         }
         const name = sanitizeVarName(varNameInput.value) || `SPRITE${SIZE}`;
-        const s = `const ${name} = [\n${lines.join(',\n')}\n];`;
+        const s = `const ${name} = [\n${lines.join(',\n')}\n]`;
         try { navigator.clipboard?.writeText(s); } catch {}
         out.value = s;
       }
@@ -376,7 +375,6 @@
 
       // ====== Wire up ======
       function exportJSONAlias(){ exportJSONNxN(); }
-      document.getElementById('exp2d').onclick = exportJSONAlias;
       document.getElementById('expflat').onclick = exportFlatJS;
       document.getElementById('imp').onclick = importAny;
       document.getElementById('png').onclick = downloadPNG;
