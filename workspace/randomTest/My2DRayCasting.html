@@ -755,6 +755,10 @@
         this.loaded = true
       }
     }
+    draw() {
+      if (!this.loaded) return
+      c.drawImage(this.img, 0, 0, this.img.width, this.img.height, 0, 0, w, h)
+    }
   }
 
   class Counter {
@@ -2457,8 +2461,8 @@
   // ===== Player =====
   const player = {
     id: 'player',
-    angle: -Math.PI / 3,
-    px: 2.5,
+    angle: -Math.PI / 2,
+    px: 13.5,
     py: 2.5,
     sizex: 10,
     sizey: 10,
@@ -2468,6 +2472,13 @@
     update: function () {
       //const dt = Math.min(0.033, (now - last) * 0.001);
       //last = now;
+      if (this.angle < 0) {
+        this.angle *= -1
+        this.angle %= Math.PI * 2
+        this.angle = Math.PI * 2 - this.angle
+      } else {
+        this.angle %= Math.PI * 2
+      }
       if (!this.world) return console.log('player need world!')
       if (keys == undefined) return console.log('player waiting for key Event')
       const
@@ -3003,10 +3014,70 @@
 
   // ===== Render =====
 
+  // need target to follow the angle
+  class PanoramaBG extends GameObject {
+    constructor(url, target) {
+      super()
+      this.id = 'BG'
+      this.iml = new ImageLoader(url)
+      this.startOffset = 0
+      this.drawLengthPropotion = 0.4
+      this.drawHeightPosition = 0.5
+      this.rotateAngle = 0
+      this.target = target
+      //this.drawPause = true
+    }
+    update() {
+      if (this.target)
+        this.rotateAngle = this.target.angle
+
+    }
+    draw() {
+      if (!this.iml.loaded) return
+      const img = this.iml.img
+      const width = this.iml.img.width
+      const height = this.iml.img.height
+      const rotation_offset = this.rotateAngle * width / (Math.PI * 2)
+      const startPos = this.startOffset % width + rotation_offset
+
+      if (this.drawLengthPropotion < 0 || this.drawLengthPropotion > 1) return
+      const drawLength = width * this.drawLengthPropotion
+      if (startPos + drawLength > width) {
+        const drawLength1 = width - startPos
+        const drawEndPos1 = w * drawLength1 / drawLength
+        c.drawImage(
+          img,
+          startPos, 0,
+          drawLength1, height * this.drawHeightPosition,
+          0, 0,
+          drawEndPos1, h * this.drawHeightPosition)
+        c.drawImage(
+          img,
+          0, 0,
+          drawLength - drawLength1, height * this.drawHeightPosition,
+          drawEndPos1 - 1, 0,
+          w - drawEndPos1 + 1, h * this.drawHeightPosition)
+
+      } else {
+        c.drawImage(
+          img,
+          startPos, 0,
+          drawLength, height * this.drawHeightPosition,
+          0, 0,
+          w, h * this.drawHeightPosition)
+
+      }
+    }
+
+  }
+
+
 
 
   // into GM!
 
+
+  GM.addChild(new PanoramaBG('E:/Games/workspace/assets/BG/panorama_mountain.jpg', player))
   GM.addChild(player)
   player.world = world2_6
   GM.addChild(new Camera2_6(player, world2_6, true))
@@ -3015,7 +3086,7 @@
   GM.addChild(new ListShower())
 
 
-
+  let startx = 0
   function gameLoop() {
 
     // --- update ---
@@ -3023,6 +3094,8 @@
     GM.update()
 
     GM.draw()
+
+
   }
 
 </script>
