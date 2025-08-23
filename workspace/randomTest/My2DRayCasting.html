@@ -43,20 +43,20 @@
   // ===== Map (16x16) =====
   const worldMap = [
     1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
-    1, 0, 0, 0, 0, 0, 0, 1, 0, 0, 2, 0, 0, 0, 0, 1,
-    1, 0, 0, 0, 0, 3, 3, 1, 0, 0, 2, 0, 0, 0, 0, 1,
+    1, 0, 0, 0, 0, 0, 0, 1, 0, 0, 2, 0, 1, 1, 1, 1,
+    1, 0, 0, 0, 0, 3, 3, 1, 0, 0, 2, 0, 1, 1, 1, 1,
     1, 0, 3, 3, 0, 0, 0, 1, 0, 1, 1, 0, 0, 0, 0, 1,
     1, 0, 3, 0, 0, 0, 0, 0, 0, 0, 2, 0, 0, 0, 0, 1,
     1, 0, 3, 0, 3, 3, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1,
     1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2, 0, 0, 0, 0, 1,
-    1, 0, 2, 2, 2, 0, 3, 3, 3, 0, 2, 0, 0, 0, 0, 1,
-    1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1,
-    1, 0, 3, 3, 3, 0, 2, 2, 2, 0, 2, 0, 0, 0, 0, 1,
-    1, 0, 0, 0, 0, 0, 0, 0, 4, 0, 4, 0, 0, 0, 0, 3,
-    1, 0, 3, 3, 3, 0, 2, 2, 2, 0, 4, 0, 0, 0, 0, 3,
-    1, 0, 0, 0, 0, 0, 0, 0, 4, 0, 0, 0, 0, 0, 0, 3,
-    1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 4, 0, 0, 0, 0, 1,
-    1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 4, 0, 0, 0, 0, 1,
+    1, 0, 3, 3, 3, 0, 3, 3, 3, 0, 2, 0, 0, 1, 1, 1,
+    1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1,
+    1, 0, 3, 3, 3, 0, 2, 2, 2, 0, 2, 0, 0, 1, 1, 1,
+    1, 0, 0, 0, 0, 0, 0, 0, 4, 0, 4, 0, 0, 1, 1, 3,
+    1, 0, 3, 3, 3, 0, 2, 2, 2, 0, 4, 0, 0, 1, 1, 3,
+    1, 0, 0, 0, 0, 0, 0, 0, 4, 0, 0, 0, 0, 0, 0, 4,
+    1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 4, 0, 0, 1, 1, 1,
+    1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 4, 0, 0, 1, 1, 1,
     1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
   ];
   const floor = [
@@ -79,22 +79,22 @@
   ];
 
   const ceilMap16 = [
-    1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 1, 0, 0, 0, 0,
-    1, 1, 1, 1, 1, 0, 1, 1, 1, 1, 0, 1, 0, 0, 0, 0,
-    1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 1, 1, 0, 0, 0, 0,
-    1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 1, 1, 0, 0, 0, 0,
-    1, 1, 1, 1, 1, 1, 0, 1, 1, 0, 1, 1, 0, 0, 0, 0,
-    1, 0, 1, 1, 1, 1, 1, 1, 1, 0, 1, 1, 0, 0, 0, 0,
-    1, 1, 0, 0, 1, 1, 1, 1, 0, 1, 1, 1, 0, 0, 0, 0,
-    1, 1, 1, 1, 0, 0, 1, 1, 0, 1, 1, 0, 0, 0, 0, 0,
-    1, 1, 1, 1, 1, 1, 0, 0, 0, 1, 1, 1, 0, 0, 0, 0,
-    1, 1, 1, 1, 1, 0, 1, 0, 0, 0, 1, 1, 0, 0, 0, 0,
-    1, 1, 1, 1, 1, 0, 1, 0, 1, 1, 0, 0, 0, 0, 0, 0,
-    1, 1, 1, 1, 1, 1, 1, 0, 1, 1, 1, 1, 0, 0, 0, 0,
-    1, 0, 1, 1, 1, 1, 1, 0, 1, 1, 1, 1, 0, 0, 0, 0,
-    1, 1, 1, 0, 1, 0, 0, 1, 1, 1, 1, 1, 0, 0, 0, 0,
-    1, 1, 0, 0, 1, 1, 0, 1, 0, 1, 1, 1, 0, 0, 0, 0,
-    1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0
+    1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 1, 1, 1, 1, 0,
+    1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0,
+    1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 1, 1, 1, 1, 1, 0,
+    1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 1, 1, 1, 1, 1, 0,
+    1, 1, 1, 1, 1, 1, 0, 1, 1, 0, 1, 1, 1, 1, 1, 0,
+    1, 0, 1, 1, 1, 1, 1, 1, 1, 0, 1, 1, 1, 1, 1, 0,
+    1, 1, 0, 0, 1, 1, 1, 1, 0, 1, 1, 1, 1, 1, 1, 0,
+    1, 1, 1, 1, 0, 0, 1, 1, 0, 1, 1, 1, 1, 1, 1, 0,
+    1, 1, 1, 1, 1, 1, 0, 0, 0, 1, 1, 1, 1, 1, 1, 0,
+    1, 1, 1, 1, 1, 0, 1, 0, 0, 0, 1, 1, 1, 1, 1, 0,
+    1, 1, 1, 1, 1, 0, 1, 0, 1, 1, 1, 1, 1, 1, 1, 0,
+    1, 1, 1, 1, 1, 1, 1, 0, 1, 1, 1, 1, 1, 1, 1, 0,
+    1, 0, 1, 1, 1, 1, 1, 0, 1, 1, 1, 1, 1, 1, 1, 0,
+    1, 1, 1, 0, 1, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 0,
+    1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0,
+    1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0
   ];
 
   const checkerTex = [
@@ -225,6 +225,28 @@
     -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, 0, 0, 0, -1, -1, 0, 0, 0, 0, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
     -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, 0, 0, 0, -1, -1, 0, 0, 0, 0, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
   ];
+
+  const window8 = [
+    0, 0, 0, 0, 0, 0, 0, 0,
+    0, -1, -1, -1, -1, -1, 0, 0,
+    0, -1, -1, -1, -1, -1, 0, 0,
+    0, 0, -1, -1, -1, -1, -1, 0,
+    0, 0, -1, -1, -1, -1, -1, 0,
+    0, -1, -1, -1, -1, -1, -1, 0,
+    0, -1, -1, -1, -1, -1, -1, 0,
+    0, 0, 0, 0, 0, 0, 0, 0
+  ]
+
+  const ceilLight8 = [
+    -1, -1, 0, 0, 0, 0, -1, -1,
+    -1, 0, 1, 1, 1, 1, 0, -1,
+    0, 1, 1, 1, 1, 1, 1, 0,
+    -1, 0, 1, 1, 1, 1, 0, -1,
+    -1, -1, 1, 1, 1, 1, -1, -1,
+    -1, -1, -1, -1, -1, -1, -1, -1,
+    -1, -1, -1, -1, -1, -1, -1, -1,
+    -1, -1, -1, -1, -1, -1, -1, -1
+  ]
 
 </script>
 
@@ -2461,9 +2483,10 @@
   // ===== Player =====
   const player = {
     id: 'player',
-    angle: -Math.PI / 2,
+    angle: Math.PI / 2,
     px: 13.5,
-    py: 2.5,
+    py: 3.5,
+    pz: 0,
     sizex: 10,
     sizey: 10,
     moveSpeed: 0.04,
@@ -2515,13 +2538,15 @@
 
 
   class SpriteAsset extends GameObject {
-    constructor(sprite = Lily32, px = 3, py = 3, pz = 0) {
+    constructor(sprite = { tex, size, color: 'white' }, px = 3, py = 3, pz = 0, inverted = false, height) {
       super()
       this.id = 'sprite'
       this.px = px
       this.py = py
       this.pz = pz
       this.sprite = sprite
+      this.inverted = inverted
+      this.height = height
     }
     draw() {
 
@@ -2541,7 +2566,7 @@
 
   }
 
-  class Camera2_6 extends GameObject {
+  class RayCasterCamera extends GameObject {
     constructor(target, world, show2D) {
       super()
       this.id = 'camera'
@@ -2551,15 +2576,19 @@
       this.FOV = Math.PI / 3// angle of view
       this.sample_width = 4//2 とかちょっと重たくなる
       this.sample_height = 2
+      this.eyeHeight = 0.4
       this.eyeZ = 0.4
       this.followSpeed = 0.04
       this.target = target                // 目線高さ（床=0 からの相対）
       this.world = world // 参照するworld
       this.show2D = show2D
+      this.hits = []
     }
 
     update() {
       if (!this.target || !this.world) return
+      this.pz = this.target.pz
+      this.eyeZ = this.pz + this.eyeHeight
       const deltaX = this.target.px - this.px
       const deltaY = this.target.py - this.py
       if (Math.abs(deltaX) > 0.01)
@@ -2573,6 +2602,17 @@
     }
     draw() {
 
+
+      // target check
+      // draw BG
+      // z-buffer reset
+      // cast 2D ray for loop 
+      //    check and draw wall, ceil, floor
+      //    check and draw sprites  
+      const dot = (a, b) => a.x * b.x + a.y * b.y;
+      const sub = (a, b) => ({ x: a.x - b.x, y: a.y - b.y });
+      const cross = (a, b) => a.x * b.y - a.y * b.x;
+
       if (!this.target || !this.world) {
         this.drawPause = true
         console.log('camera waiting for target assign')
@@ -2583,30 +2623,31 @@
         this.Render2DView()
 
       // --- draw background ---
-      //c.fillStyle = '#87a7ff'; c.fillRect(0, 0, W, H / 2);
-      //c.fillStyle = '#4a8050'; c.fillRect(0, H / 2, W, H / 2);
 
       // z-buffer reset
       if (!this.zbuf || this.zbuf.length !== w) this.zbuf = new Float32Array(w);
       this.zbuf.fill(Infinity);
-      // focal length pre-compute
-      const F = this.getFocalLength(); // 1フレーム1回だけ
 
-      // draw Wolrd
-      for (let x = 0; x < w; x += this.sample_width) {
-        const ray_angle = (x / w - 0.5) * this.FOV; // (-0.5~0.5) *FOV
-        const ra = this.target.angle + ray_angle;
+      // focal length pre-compute
+      // 1フレーム1回だけ
+      const FocalLength = this.getFocalLength()
+
+      // draw World
+      for (let _x = 0; _x < w; _x += this.sample_width) {
+        const ray_angle = (_x / w - 0.5) * this.FOV; // (-0.5~0.5) *FOV
+        const true_ray_angle = this.target.angle + ray_angle;
         const
-          dx = Math.cos(ra),
-          dy = Math.sin(ra) // all in canvas coordination, inverted y!
+          dx = Math.cos(true_ray_angle),
+          dy = Math.sin(true_ray_angle) // all in canvas coordination, inverted y!
 
         // DDA（原点オフセットで自己衝突回避）
         const hit = this.raycast2D(this.px + dx * 1e-4, this.py + dy * 1e-4, dx, dy);
 
-        const sw = w0 / this.world.width
-        const sh = h0 / this.world.height
+        if (this.show2D) {
 
-        if (this.show2D)
+          const sw = w0 / this.world.width
+          const sh = h0 / this.world.height
+
           drawLine(c2,
             sw * (this.px + dx * 1e-4),
             sw * (this.py + dy * 1e-4),
@@ -2614,7 +2655,11 @@
             sw * (this.py + dy * hit.dist),
             'white', 1
           )
-        if (!hit.hit) continue;
+        }
+
+
+        if (!hit.hit) continue; // 壁に当たらないとレンダリングしないようにしてうる
+        const distWall = Math.max(1e-6, hit.dist * Math.cos(ray_angle))
 
 
 
@@ -2624,9 +2669,9 @@
         //
 
         // 列が sample_width ピッチなので、該当する画面xに深度を入れておく
-        for (let xi = x; xi < Math.min(w, x + this.sample_width); xi++) {
+        for (let _xi = _x; _xi < Math.min(w, _x + this.sample_width); _xi++) {
           // 近いもの優先で最小を保持
-          if (perpDistance < this.zbuf[xi]) this.zbuf[xi] = perpDistance;
+          if (perpDistance < this.zbuf[_xi]) this.zbuf[_xi] = perpDistance;
         }
 
         // セルの floorZ/ceilZ（今回は floorZ=0, ceilZ=height）
@@ -2634,7 +2679,6 @@
         this.world._ceilZ = 1;//これでシーンの高さを変えれる
 
         // ★ 正しい投影：上端/下端を別々に計算
-        const FocalLength = this.getFocalLength()
         const yTop = (h / 2) - ((this.world._ceilZ - this.eyeZ) * FocalLength) / perpDistance;
         const yBot = (h / 2) + ((this.eyeZ - this.world._floorZ) * FocalLength) / perpDistance;
 
@@ -2648,22 +2692,35 @@
 
         // 色（マテリアル）＋ 面向きで陰
         // ここはまあ、Lightingもできればやってみたいけど
-        let col = [200, 200, 200];
-        if (hit.id === 1) col = [200, 200, 200];
-        if (hit.id === 2) col = [230, 210, 30];
-        if (hit.id === 3) col = [40, 160, 255];
-        if (hit.id === 4) col = [80, 80, 120];
-
-        const fog = Math.min(1, hit.dist / 16)
+        const fog_depth = Math.min(1, hit.dist / 16)
         const fog_color = [122, 200, 255]
         const shade = hit.side ? 0.45 : 1.0;
 
+        let tex_info = {
+          tex: checkerTex,
+          size: 32,
+          wall: true,
+        }
+        let col = [255, 200, 100];
+        if (hit.id != 4) {
 
-        c.fillStyle = `rgb(
-        ${(this.lerp(fog, col[0] * shade, fog_color[0])) | 0},
-        ${(this.lerp(fog, col[1] * shade, fog_color[1])) | 0},
-        ${(this.lerp(fog, col[2] * shade, fog_color[2])) | 0})`;
-        c.fillRect(x, y0, this.sample_width, y1 - y0);
+          if (hit.id === 1) col = [0, 120, 0];
+          if (hit.id === 2) col = [230, 210, 30];
+          if (hit.id === 3) {
+            tex_info.tex = Monitor16
+            tex_info.size = 16
+            col = [40, 160, 255];
+          }
+
+          c.fillStyle = `rgb(
+            ${(this.lerp(fog_depth, col[0] * shade, fog_color[0])) | 0},
+            ${(this.lerp(fog_depth, col[1] * shade, fog_color[1])) | 0},
+            ${(this.lerp(fog_depth, col[2] * shade, fog_color[2])) | 0})`;
+          c.fillRect(_x, y0, this.sample_width, y1 - y0);
+        } else {
+          tex_info.tex = window8
+          tex_info.size = 8
+        }
 
         const wx = this.px + dx * hit.dist; // ヒット世界座標
         const wy = this.py + dy * hit.dist;
@@ -2672,28 +2729,18 @@
             (hit.dir.y < 0 ? wx - Math.floor(wx) : 1 - wx + Math.floor(wx)) :
             (hit.dir.x > 0 ? wy - Math.floor(wy) : 1 - wy + Math.floor(wy))
 
-        if (yBot - yTop < 0) return
-        for (let v = 0; v < lineH; v += this.sample_height) {
-          const startV = (y0 + v - yTop) / (yBot - yTop) // FIX!!!
-          //const checkerU = Math.floor(u * 32)
-          //const checkerV = Math.floor(startV * 32)
-          c.save()
-          const on = this.UVSampling(Monitor16, u, startV, 16)
-          if (on == 1) {
-            c.fillStyle = `rgb(
-                            ${this.lerp(fog, 255, fog_color[0])},
-                            ${this.lerp(fog, 255, fog_color[1])},
-                            ${this.lerp(fog, 255, fog_color[2])})`
+        if (yBot < yTop) return
+        const blendFogColor = `rgb(
+                            ${this.lerp(fog_depth, col[0], fog_color[0])},
+                            ${this.lerp(fog_depth, col[1], fog_color[1])},
+                            ${this.lerp(fog_depth, col[2], fog_color[2])})`
+        this.UVSampleStrand(tex_info.tex, tex_info.size, blendFogColor,
+          _x, y0, y1,
+          yTop, yBot,
+          u)
 
-            c.fillRect(x, y0 + v, this.sample_width, this.sample_height)
-          }
-          else if (on == 0) {
-            c.fillStyle = 'black'
-            c.fillRect(x, y0 + v, this.sample_width, this.sample_height)
 
-          }
-          c.restore()
-        }
+
 
 
         // ====== ★ FLOOR CAST: 壁の下の床をサンプリング ======
@@ -2701,9 +2748,9 @@
         const Kfloor = (this.eyeZ - this.world._floorZ) * FocalLength; // eyeZから床までのスケール
 
         // 床は y1(=壁下端) から画面下端まで
-        for (let y = y1; y < h; y += this.sample_height) {
+        for (let _y = y1; _y < h; _y += this.sample_height) {
           // 画面行 y → 垂直距離 d_perp
-          const denom = (y) - h / 2;             // ピクセル中心 (+0.5 推奨)
+          const denom = (_y) - h / 2;             // ピクセル中心 (+0.5 推奨)
           if (denom <= 0) continue;
           const dPerpFloor = Kfloor / denom; // Key: dist = (eyeZ-floorZ)*Focallength/(y-H/2)
           const dRay = dPerpFloor / Math.cos(ray_angle) // 画面⊥距離から実距離（魚眼補正逆変換）
@@ -2730,18 +2777,17 @@
           b = ((1 - fog) * b + fog * this.world.fogColor[2]) | 0;
 
           c.fillStyle = `rgb(${r},${g},${b})`;
-          c.fillRect(x, y, this.sample_width, this.sample_height);
+          c.fillRect(_x, _y, this.sample_width, this.sample_height);
         }
 
+
         // ====== ★ CEIL CAST: 天井をサンプリング ======
-        // 逆投影の定数（列ごとに一定）
         const CeilOffset = 0
         const KCeil = (this.world._ceilZ + CeilOffset - this.eyeZ) * FocalLength; // eyeZから床までのスケール
 
-        // 床は y1(=壁下端) から画面下端まで
-        for (let y = y0 - this.sample_height; y > 0; y -= this.sample_height) {
+        for (let _y = y0 - this.sample_height; _y > 0; _y -= this.sample_height) {
           // 画面行 y → 垂直距離 d_perp
-          const denom = h / 2 - (y);             // ピクセル中心 
+          const denom = h / 2 - (_y);             // ピクセル中心 
           if (denom <= 0) continue;
           const dPerpFloor = KCeil / denom; // Key: dist = (eyeZ-floorZ)*Focallength/(y-H/2)
           const dRay = dPerpFloor / Math.cos(ray_angle) // 魚眼補正逆変換
@@ -2760,23 +2806,482 @@
 
             // 簡単なフォグ（距離で空色へ寄せる）
             const fog = Math.min(1, dPerpFloor / 16);
-            let r = on ? 122 : 222, g = on ? 120 : 222, b = on ? 80 : 200; // 地面のベース色
+            const col = [10, 10, 10]
+            let r = on ? 122 : col[0], g = on ? 120 : col[1], b = on ? 80 : col[2]; // 地面のベース色
             r = ((1 - fog) * r + fog * this.world.fogColor[0]) | 0;
             g = ((1 - fog) * g + fog * this.world.fogColor[1]) | 0;
             b = ((1 - fog) * b + fog * this.world.fogColor[2]) | 0;
 
             c.fillStyle = `rgb(${r},${g},${b})`;
-            c.fillRect(x, y, this.sample_width, this.sample_height);
+            c.fillRect(_x, _y, this.sample_width, this.sample_height);
           } else {
           }
+        } // end of Draw ceiling for
+
+
+
+
+        GM.flatDrawList.forEach(_s => {
+          if (_s.id != 'sprite') return
+          const ca = Math.cos(this.target.angle), sa = Math.sin(this.target.angle)
+          const vx = _s.px - this.px, vy = _s.py - this.py
+          const depth = vx * ca + vy * sa
+          if (depth <= 1e-4 || depth >= distWall) return
+
+          const side = vx * (-sa) + vy * ca
+          const sideX = w / 2 + side * FocalLength / depth
+          const billHeight = (_s.height || 1.0) * FocalLength / depth
+          const billWidth = billHeight * (_s.aspect || 1.0)
+
+          const x0 = sideX - billWidth / 2, x1 = sideX + billWidth / 2
+          if (_x < x0 || _x > x1) return // out of billborad range
+
+          let yBot, yTop, y0, y1
+          if (_s.inverted) {
+            yTop = h / 2 + ((this.eyeZ - (_s.pz || 0)) * FocalLength / depth)
+            yBot = yTop + billHeight
+            y0 = Math.max(0, Math.min(h - 1, yTop | 0));
+            y1 = Math.max(0, Math.min(h, yBot | 0));
+          } else {
+
+            yBot = h / 2 + ((this.eyeZ - (_s.pz || 0)) * FocalLength / depth)
+            yTop = yBot - billHeight
+            y0 = Math.max(0, Math.min(h - 1, yTop | 0));
+            y1 = Math.max(0, Math.min(h, yBot | 0));
+          }
+
+          if (y1 > y0) {
+            const u = (_x - x0) / (x1 - x0)
+
+            this.zbuf[_x] = depth;
+
+            this.UVSampleStrand(
+              _s.sprite.tex, _s.sprite.size, _s.sprite.color,
+              _x, y0, y1,
+              yTop, yBot,
+              u
+
+            )
+            // さらに手前のものが勝てるよう更新
+          }
+        })
+
+
+        // ray sample sign
+        const fwdx = Math.cos(this.target.angle), fwdy = Math.sin(this.target.angle)
+
+        for (const _sign of signs) {
+          const hitSign = intersectRaySegment(
+            { x: this.px, y: this.py }, { x: dx, y: dy },
+            { x: _sign.ax, y: _sign.ay }, { x: _sign.bx, y: _sign.by }
+          )
+          if (!hitSign.hit) continue
+
+          //
+          const Px = this.px + hitSign.t * dx, Py = this.py + hitSign.t * dy
+          const dotDistance = (Px - this.px) * fwdx + (Py - this.py) * fwdy
+          const distSign = Math.max(1e-6, dotDistance)
+
+          if (distSign >= this.zbuf[_x]) continue
+
+          const yTop = h / 2 - ((_sign.ceilZ - this.eyeZ) * FocalLength) / distSign
+          const yBot = h / 2 + ((this.eyeZ - _sign.floorZ) * FocalLength) / distSign
+          const y0 = Math.max(0, Math.min(h - 1, yTop | 0))
+          const y1 = Math.max(0, Math.min(h, yBot | 0))
+          if (y0 < y1) {
+            c.fillStyle = 'purple'
+            c.fillRect(_x, y0, this.sample_width, y1 - y0)
+            this.zbuf[_x] = distSign
+          }
+
+          this.UVSampleStrand(checkerTex, 32, 'pink',
+            _x, y0, y1,
+            yTop, yBot,
+            hitSign.s,
+          )
+
+        } // end of sign 
+
+
+
+      } // end of for 
+
+
+
+    }
+
+
+    draw() {
+
+
+      // target check
+      // draw BG
+      // z-buffer reset
+      // cast 2D ray for loop 
+      //    check and draw wall, ceil, floor
+      //    check and draw sprites  
+      const dot = (a, b) => a.x * b.x + a.y * b.y;
+      const sub = (a, b) => ({ x: a.x - b.x, y: a.y - b.y });
+      const cross = (a, b) => a.x * b.y - a.y * b.x;
+
+      if (!this.target || !this.world) {
+        this.drawPause = true
+        console.log('camera waiting for target assign')
+        return
+      }
+
+      if (this.show2D)
+        this.Render2DView()
+
+      // --- draw background ---
+
+      // z-buffer reset
+      if (!this.zbuf || this.zbuf.length !== w) this.zbuf = new Float32Array(w);
+      this.zbuf.fill(Infinity);
+
+      // focal length pre-compute
+      // 1フレーム1回だけ
+      const FocalLength = this.getFocalLength()
+
+      // draw World
+      for (let _x = 0; _x < w; _x += this.sample_width) {
+        const ray_angle = (_x / w - 0.5) * this.FOV; // (-0.5~0.5) *FOV
+        const true_ray_angle = this.target.angle + ray_angle;
+        const
+          dx = Math.cos(true_ray_angle),
+          dy = Math.sin(true_ray_angle) // all in canvas coordination, inverted y!
+
+        // DDA（原点オフセットで自己衝突回避）
+        const hit = this.raycast2D(this.px + dx * 1e-4, this.py + dy * 1e-4, dx, dy);
+
+        if (this.show2D) {
+
+          const sw = w0 / this.world.width
+          const sh = h0 / this.world.height
+
+          drawLine(c2,
+            sw * (this.px + dx * 1e-4),
+            sw * (this.py + dy * 1e-4),
+            sw * (this.px + dx * hit.dist),
+            sw * (this.py + dy * hit.dist),
+            'white', 1
+          )
         }
 
 
+        if (!hit.hit) continue; // 壁に当たらないとレンダリングしないようにしてうる
 
-      }
+        const distWall = Math.max(1e-6, hit.dist * Math.cos(ray_angle))
+        let yTopWall = 0, yBotWall = h
 
-      this.draw_sprite()
+
+        // ⊥距離（魚眼補正 Ver
+        let perpDistance = Math.max(1e-6, hit.dist * Math.cos(ray_angle));
+        //let perp_d = Math.max(1e-6, hit.dist);
+        //
+
+        // 列が sample_width ピッチなので、該当する画面xに深度を入れておく
+        for (let _xi = _x; _xi < Math.min(w, _x + this.sample_width); _xi++) {
+          // 近いもの優先で最小を保持
+          if (perpDistance < this.zbuf[_xi]) this.zbuf[_xi] = perpDistance;
+        }
+
+        // セルの floorZ/ceilZ（今回は floorZ=0, ceilZ=height）
+        this.world._floorZ = 0.0;
+        this.world._ceilZ = 1;//これでシーンの高さを変えれる
+
+        // ★ 正しい投影：上端/下端を別々に計算
+        const yTop = (h / 2) - ((this.world._ceilZ - this.eyeZ) * FocalLength) / perpDistance;
+        const yBot = (h / 2) + ((this.eyeZ - this.world._floorZ) * FocalLength) / perpDistance;
+
+        yTopWall = yTop
+        yBotWall = yBot
+
+        // クリップ
+        const y0 = Math.max(0, Math.min(h - 1, yTop | 0));
+        const y1 = Math.max(0, Math.min(h, yBot | 0));
+        //const y0 = yTop
+        //const y1 = yBot
+        const lineH = y1 - y0
+        if (lineH <= 0) continue;
+
+        // 色（マテリアル）＋ 面向きで陰
+        // ここはまあ、Lightingもできればやってみたいけど
+        const fog_depth = Math.min(1, hit.dist / 16)
+        const fog_color = [122, 200, 255]
+        const shade = hit.side ? 0.45 : 1.0;
+
+        let tex_info = {
+          tex: checkerTex,
+          size: 32,
+          wall: true,
+        }
+        let col = [255, 200, 100];
+        if (hit.id != 4) {
+
+          if (hit.id === 1) col = [0, 120, 0];
+          if (hit.id === 2) col = [230, 210, 30];
+          if (hit.id === 3) {
+            tex_info.tex = Monitor16
+            tex_info.size = 16
+            col = [40, 160, 255];
+          }
+
+          c.fillStyle = `rgb(
+            ${(this.lerp(fog_depth, col[0] * shade, fog_color[0])) | 0},
+            ${(this.lerp(fog_depth, col[1] * shade, fog_color[1])) | 0},
+            ${(this.lerp(fog_depth, col[2] * shade, fog_color[2])) | 0})`;
+          c.fillRect(_x, y0, this.sample_width, y1 - y0);
+        } else {
+          tex_info.tex = window8
+          tex_info.size = 8
+        }
+
+        const wx = this.px + dx * hit.dist; // ヒット世界座標
+        const wy = this.py + dy * hit.dist;
+        const u =
+          hit.side ?
+            (hit.dir.y < 0 ? wx - Math.floor(wx) : 1 - wx + Math.floor(wx)) :
+            (hit.dir.x > 0 ? wy - Math.floor(wy) : 1 - wy + Math.floor(wy))
+
+        if (yBot < yTop) return
+        const blendFogColor = `rgb(
+                            ${this.lerp(fog_depth, col[0], fog_color[0])},
+                            ${this.lerp(fog_depth, col[1], fog_color[1])},
+                            ${this.lerp(fog_depth, col[2], fog_color[2])})`
+        this.UVSampleStrand(tex_info.tex, tex_info.size, blendFogColor,
+          _x, y0, y1,
+          yTop, yBot,
+          u)
+
+
+
+
+
+        // ====== ★ FLOOR CAST: 壁の下の床をサンプリング ======
+        // 逆投影の定数（列ごとに一定）
+        const Kfloor = (this.eyeZ - this.world._floorZ) * FocalLength; // eyeZから床までのスケール
+
+        // 床は y1(=壁下端) から画面下端まで
+        for (let _y = y1; _y < h; _y += this.sample_height) {
+          // 画面行 y → 垂直距離 d_perp
+          const denom = (_y) - h / 2;             // ピクセル中心 (+0.5 推奨)
+          if (denom <= 0) continue;
+          const dPerpFloor = Kfloor / denom; // Key: dist = (eyeZ-floorZ)*Focallength/(y-H/2)
+          const dRay = dPerpFloor / Math.cos(ray_angle) // 画面⊥距離から実距離（魚眼補正逆変換）
+          //const dRay = dPerpFloor;          
+
+
+          // 世界座標（同じレイ方向）
+          const fx = this.px + dx * dRay;
+          const fy = this.py + dy * dRay;
+          // タイル繰り返しUV（0..1）
+          const u = fx - Math.floor(fx);
+          const v = fy - Math.floor(fy);
+          // 例：32x32のチェッカーからサンプル
+          //const iu = (u * 32) | 0;
+          //const iv = (v * 32) | 0;
+          //const on = checkerTex[(iv & 31) * 32 + (iu & 31)];
+          const on = this.UVSampling(this.world.floor_tex, u, v, 32)
+
+          // 簡単なフォグ（距離で空色へ寄せる）
+          const fog = Math.min(1, dPerpFloor / 16);
+          let r = on ? 0 : 10, g = on ? 0 : 80, b = on ? 0 : 122; // 地面のベース色
+          r = ((1 - fog) * r + fog * this.world.fogColor[0]) | 0;
+          g = ((1 - fog) * g + fog * this.world.fogColor[1]) | 0;
+          b = ((1 - fog) * b + fog * this.world.fogColor[2]) | 0;
+
+          c.fillStyle = `rgb(${r},${g},${b})`;
+          c.fillRect(_x, _y, this.sample_width, this.sample_height);
+        }
+
+
+        // ====== ★ CEIL CAST: 天井をサンプリング ======
+        const CeilOffset = 0
+        const KCeil = (this.world._ceilZ + CeilOffset - this.eyeZ) * FocalLength; // eyeZから床までのスケール
+
+        for (let _y = y0 - this.sample_height; _y > 0; _y -= this.sample_height) {
+          // 画面行 y → 垂直距離 d_perp
+          const denom = h / 2 - (_y);             // ピクセル中心 
+          if (denom <= 0) continue;
+          const dPerpFloor = KCeil / denom; // Key: dist = (eyeZ-floorZ)*Focallength/(y-H/2)
+          const dRay = dPerpFloor / Math.cos(ray_angle) // 魚眼補正逆変換
+          //const dRay = dPerpFloor;          
+
+          // 世界座標（同じレイ方向）からタイル繰り返しUV（0..1）
+          const fx = this.px + dx * dRay;
+          const fy = this.py + dy * dRay;
+          const u = fx - Math.floor(fx)
+          const v = fy - Math.floor(fy)
+          const sampleCeil = this.UVSampling(ceilMap16, fx / 16, fy / 16, 16)
+          if (sampleCeil > 0) {
+
+            // 例：32x32のチェッカーからサンプル
+            const on = this.UVSampling(this.world.ceil_tex, u, v, 32)
+
+            // 簡単なフォグ（距離で空色へ寄せる）
+            const fog = Math.min(1, dPerpFloor / 16);
+            const col = [10, 10, 10]
+            let r = on ? 122 : col[0], g = on ? 120 : col[1], b = on ? 80 : col[2]; // 地面のベース色
+            r = ((1 - fog) * r + fog * this.world.fogColor[0]) | 0;
+            g = ((1 - fog) * g + fog * this.world.fogColor[1]) | 0;
+            b = ((1 - fog) * b + fog * this.world.fogColor[2]) | 0;
+
+            c.fillStyle = `rgb(${r},${g},${b})`;
+            c.fillRect(_x, _y, this.sample_width, this.sample_height);
+          } else {
+          }
+        } // end of Draw ceiling for
+
+
+        const hits = this.collectColumnSprites(_x, distWall, true_ray_angle, FocalLength)
+
+        const ZNew = this.renderColumnFromHits(_x, hits, distWall, yTopWall, yBotWall)
+
+
+
+      } // end of for 
+
+
+
     }
+
+
+    // only for billborads and signs
+
+
+    collectColumnSprites(_x, distWall, true_ray_angle, FocalLength) {
+      this.hits.length = 0
+      const hits = this.hits
+
+      {
+        const ca = Math.cos(this.target.angle), sa = Math.sin(this.target.angle)
+        GM.flatDrawList.forEach(spr => {
+          if (spr.id != 'sprite') return
+
+          const vx = spr.px - this.px, vy = spr.py - this.py
+          const depth = vx * ca + vy * sa
+          if (depth <= 1e-4 || depth >= distWall) return
+
+          const side = vx * (-sa) + vy * ca
+          const sideX = w / 2 + side * FocalLength / depth
+          const billHeight = (spr.height || 1.0) * FocalLength / depth
+          const billWidth = billHeight * (spr.aspect || 1.0)
+
+          const x0 = sideX - billWidth / 2, x1 = sideX + billWidth / 2
+          if (_x < x0 || _x > x1) return // out of billborad range
+
+          let yBot, yTop, y0, y1
+          if (spr.inverted) {
+            yTop = h / 2 + ((this.eyeZ - (spr.pz || 0)) * FocalLength / depth)
+            yBot = yTop + billHeight
+            y0 = Math.max(0, Math.min(h - 1, yTop | 0));
+            y1 = Math.max(0, Math.min(h, yBot | 0));
+          } else {
+
+            yBot = h / 2 + ((this.eyeZ - (spr.pz || 0)) * FocalLength / depth)
+            yTop = yBot - billHeight
+          }
+
+          const sprite = spr.sprite
+          const u = (_x - x0) / (x1 - x0)
+          hits.push({
+            depth: depth,
+            kind: 'sprite',
+            sprite: spr.sprite,
+            yTop: yTop, yBot: yBot,
+            u: u
+          })
+
+
+        })
+      }// end of collect sprite
+
+
+
+      {
+        const dir = { x: Math.cos(true_ray_angle), y: Math.sin(true_ray_angle) }
+        const fwd = { x: Math.cos(this.target.angle), y: Math.sin(this.target.angle) }
+        for (const s of signs) {
+          const e = { x: s.bx - s.ax, y: s.by - s.ay }
+          // if(s.oneSided)
+          const hitS = intersectRaySegment(
+            { x: this.px, y: this.py }, dir,
+            { x: s.ax, y: s.ay }, { x: s.bx, y: s.by }
+          )
+          if (!hitS.hit) continue
+
+          //
+          const Px = this.px + hitS.t * dir.x, Py = this.py + hitS.t * dir.y
+          const depth = (Px - this.px) * fwd.x + (Py - this.py) * fwd.y
+          if (depth <= 1e-4) continue
+
+          const yTop = h / 2 - ((s.ceilZ - this.eyeZ) * FocalLength) / depth
+          const yBot = h / 2 + ((this.eyeZ - s.floorZ) * FocalLength) / depth
+
+          const sprite = s.sprite
+          const u = hitS.s
+          hits.push({
+            depth: depth,
+            kind: 'sign',
+            sprite: s.sprite,
+            yTop: yTop, yBot: yBot,
+            u: u
+
+          })
+
+        }
+      } // end of 
+
+      return hits
+    }
+
+    renderColumnFromHits(_x, hits, zbufX, yTopWall, yBotWall) {
+      hits.sort((a, b) => b.depth - a.depth)
+
+
+      for (const hit of hits) {
+        if (hit.depth > zbufX) continue
+
+
+        let y0 = Math.max(0, hit.yTop | 0);
+        let y1 = Math.min(h, hit.yBot | 0);
+        if (y1 <= y0) continue
+        
+        /*
+        const isFront = hit.depth < zbufX
+         if (!isFront) {
+
+          const A0 = y0, A1 = Math.min(y1, yTopWall | 0)
+          const B0 = Math.max(y0, yBotWall | 0), B1 = y1
+
+          if (A1 > A0) {
+            c.globalAlpha = hit.alpha
+            c.fillStyle = hit.color
+            c.fillRect(_x, A0, this.sample_width, A1 - A0)
+          }
+          if (B1 > B0) {
+            c.globalAlpha = hit.alpha
+            c.fillStyle = hit.color
+            c.fillRect(_x, B0, this.sample_width, B1 - B0)
+          }
+          continue
+        }// end of back */
+
+
+
+        this.UVSampleStrand(
+          hit.sprite?.tex || checkerTex, hit.sprite?.size || 32, hit.sprite?.color || 'white',
+          _x, y0, y1,
+          hit.yTop, hit.yBot,
+          hit.u
+        )
+
+        zbufX = hit.depth
+      }// end of h sample
+      return zbufX
+    }
+
     getFocalLength() {
 
       return (h / 2) / Math.tan(this.FOV / 2) * (w / h)  // 投影スケール
@@ -2789,9 +3294,37 @@
       const V = Math.floor(v * texSizeY)
       return tex[V * texSizeX + U]
     }
+    UVSampleStrand(
+      _tex, _texSize, _color,
+      _x, y0, y1,
+      yTop, yBot,
+      u,
+      dotWidth = this.sample_width, dotHeight = this.sample_height
+    ) {
+      const strandHeight = y1 - y0
+      for (let y = 0; y < strandHeight; y += dotHeight) {
+        const v = (y0 + y - yTop) / (yBot - yTop) // FIX!!!
+        //const checkerU = Math.floor(u * 32)
+        //const checkerV = Math.floor(startV * 32)
+        c.save()
+        const on = this.UVSampling(_tex, u, v, _texSize)
+        if (on == 1) {
+          c.fillStyle = _color
+
+          c.fillRect(_x, y0 + y, dotWidth, dotHeight)
+        }
+        else if (on == 0) {
+          c.fillStyle = 'black'
+          c.fillRect(_x, y0 + y, dotWidth, dotHeight)
+
+        }
+        c.restore()
+      }
+    }
+
+
+    // 廃止予定
     draw_sprite() {
-
-
 
       /* if (this.show2D) {
         const sw = w0 / this.world.width
@@ -2822,7 +3355,7 @@
 
         // camera space
         const side = v1.y // camera.x
-        const vertical = -v1.z // camera.-y?
+        const vertical = -v1.z // camera.y
         const depth = v1.x // -camera.z
 
         const FocalLength = this.getFocalLength()
@@ -2837,21 +3370,33 @@
         /* if (v3.x < 0 || v3.x > W || v3.y < 0 || v3.y > H)
           return false */
 
-        const onScreenSize = 0.6 / depth * FocalLength
+        const onScreenSize = e.height / depth * FocalLength
 
         // クリップ
+        let x0, x1, y0, y1
 
-        const x0 = Math.floor(v3.x - onScreenSize / 2);
-        const x1 = Math.floor(v3.x + onScreenSize / 2);
-        const y0 = Math.floor(v3.y - onScreenSize);
-        const y1 = Math.floor(v3.y + 0);
+        if (e.inverted) {
+          x0 = Math.floor(v3.x - onScreenSize / 2);
+          x1 = Math.floor(v3.x + onScreenSize / 2);
+          y0 = Math.floor(v3.y);
+          y1 = Math.floor(v3.y + onScreenSize);
+        } else {
+          x0 = Math.floor(v3.x - onScreenSize / 2);
+          x1 = Math.floor(v3.x + onScreenSize / 2);
+          y0 = Math.floor(v3.y - onScreenSize);
+          y1 = Math.floor(v3.y + 0);
+
+        }
+
         if (x1 <= 0 || x0 >= w) return;
-
-        const cy0 = Math.max(0, y0);
-        const cy1 = Math.min(h, y1);
 
         const cx0 = Math.max(0, x0);
         const cx1 = Math.min(w, x1);
+        const cy0 = Math.max(0, y0);
+        const cy1 = Math.min(h, y1);
+
+
+
 
 
 
@@ -2864,7 +3409,7 @@
             const u = (x - x0) / onScreenSize
             for (let y = cy0; y < cy1; y += this.sample_height) {
               const v = (y - y0) / onScreenSize
-              const on = this.UVSampling(Lily32, u, v, 32)
+              const on = this.UVSampling(e.sprite.tex, u, v, e.sprite.size)
               if (on == 0) {
                 c.fillStyle = 'black'
                 c.fillRect(x, y, this.sample_width, this.sample_height);
@@ -2879,14 +3424,13 @@
           } else {
             c.save()
             c.fillStyle = '#87a7ff'
-            c.fillRect(x, y0, 1, y1 - y0);
+            c.fillRect(x, y0, 3, y1 - y0);
             c.restore()
           }
         }
 
 
-        c.fillStyle = 'red'
-        c.fillRect(v3.x - 2, v3.y - 2, 4, 4)
+        //c.fillStyle = 'red'; c.fillRect(v3.x - 2, v3.y - 2, 4, 4)
       })
 
 
@@ -3014,6 +3558,73 @@
 
   // ===== Render =====
 
+
+  // 面描画
+  const signs = [
+    {
+      ax: 12, ay: 5,   // 端点A
+      bx: 12, by: 5.5,   // 端点B
+      floorZ: 0.0,         // 下端高さ（床からのオフセット）
+      ceilZ: 0.6,         // 上端高さ
+      oneSided: true,      // 片面にする？
+      sprite:{
+        tex:Monitor16,
+        size:16,
+        color: '#ffd54a'
+      }
+    },
+    
+    {
+      ax: 12.04, ay: 5,   // 端点A
+      bx: 12.04, by: 5.5,   // 端点B
+      floorZ: 0.0,         // 下端高さ（床からのオフセット）
+      ceilZ: 0.6,         // 上端高さ
+      oneSided: true,      // 片面にする？
+      sprite:{
+        tex:Monitor16,
+        size:16,
+        color: '#ffd54a'
+      }
+    },
+
+    {
+      ax: 12.8, ay: 6.6,   // 端点A
+      bx: 10, by: 10,   // 端点B
+      floorZ: 0.0,         // 下端高さ（床からのオフセット）
+      ceilZ: 0.2,         // 上端高さ
+      oneSided: true,      // 片面にする？
+      color: '#ffd54a'
+    }
+  ];
+
+  const billBoards = [
+    {
+
+    },
+  ]
+
+  const npc1 = [{
+    txt: 'have a nice day my friend.\n and see you next time'
+  }]
+
+  const cross = (a, b) => a.x * b.y - a.y * b.x;
+  const sub = (a, b) => ({ x: a.x - b.x, y: a.y - b.y });
+
+  // O + t*d と A + s*(B-A)
+  function intersectRaySegment(O, d, A, B) {
+    const e = sub(B, A);
+    const denom = cross(d, e);
+    if (Math.abs(denom) < 1e-9) return { hit: false };
+
+    const AO = sub(A, O);
+    const t = cross(AO, e) / denom;  // レイ側
+    const s = cross(AO, d) / denom;  // 線分側(0..1)
+    if (t > 1e-6 && s >= 0 && s <= 1) return { hit: true, t, s };
+
+    return { hit: false };
+  }
+
+
   // need target to follow the angle
   class PanoramaBG extends GameObject {
     constructor(url, target) {
@@ -3022,7 +3633,7 @@
       this.iml = new ImageLoader(url)
       this.startOffset = 0
       this.drawLengthPropotion = 0.4
-      this.drawHeightPosition = 0.5
+      this.drawHeightPosition = 1
       this.rotateAngle = 0
       this.target = target
       //this.drawPause = true
@@ -3080,15 +3691,24 @@
   GM.addChild(new PanoramaBG('E:/Games/workspace/assets/BG/panorama_mountain.jpg', player))
   GM.addChild(player)
   player.world = world2_6
-  GM.addChild(new Camera2_6(player, world2_6, true))
-  GM.addChild(new SpriteAsset(Lily32, 7.5, 6.5))
-  GM.addChild(new SpriteAsset(Lily32, 12, 12))
-  GM.addChild(new ListShower())
+  GM.addChild(new RayCasterCamera(player, world2_6, true))
+  GM.addChild(new SpriteAsset({ tex: ceilLight8, size: 8, color: 'white' }, 12, 12, 1, true, 0.2))
+  GM.addChild(new SpriteAsset({ tex: ceilLight8, size: 8, color: 'white' }, 12, 10, 1, true, 0.2))
+  GM.addChild(new SpriteAsset({ tex: ceilLight8, size: 8, color: 'white' }, 12, 8, 1, true, 0.2))
+  GM.addChild(new SpriteAsset({ tex: ceilLight8, size: 8, color: 'white' }, 12, 6, 1, true, 0.2))
+  GM.addChild(new SpriteAsset({ tex: ceilLight8, size: 8, color: 'white' }, 12, 4, 1, true, 0.2))
+  GM.addChild(new SpriteAsset({ tex: Lily32, size: 32, color: 'blue' }, 12, 6, 0, false, 0.6))
+  GM.addChild(new SpriteAsset({ tex: Lily32, size: 32, color: 'white' }, 12, 8, 0, false, 0.6))
+  GM.addChild(new SpriteAsset({ tex: Lily32, size: 32, color: 'pink' }, 12, 10, 0, false, 0.6))
+
+  //GM.addChild(new ListShower())
 
 
-  let startx = 0
+  let deltaTime = 0
+
   function gameLoop() {
 
+    player.pz = 0.2 * Math.abs(Math.sin(deltaTime++ / 100))
     // --- update ---
 
     GM.update()
