@@ -2277,9 +2277,17 @@
   keyMap.e = 'turnRight'
 
   const cellSize = 64
+
+  
   const cell = v => Math.floor(v / cellSize);
   const key = (cx, cy) => `${cx}:${cy}`;
+  const aabbOf = o => ({ x: o.px, y: o.py, w: o.w ?? 0, h: o.h ?? 0 });
+  const aabbOverlap = (a, b) =>
+    !(a.px + a.w <= b.px || b.px + b.w <= a.px ||
+      a.py + a.h <= b.py || b.py + b.h <= a.py);
 
+
+  //
   class SpatialHash {
     constructor(_cellSize = cellSize) {
       this.s = _cellSize
@@ -2288,55 +2296,101 @@
     }
 
     // objの座標からKeyを割り出す
-    _keyFor(o) {
-      return key(cell(o.px), cell(o.py));
+
+
+    _keysForAABB(o) {
+      const { x, y, w, h } = aabbOf(o)
+      const s = this.s
+      const x0 = cell(x), y0 = cell(y)
+      const x1 = cell(x + w), y1 = cell(y + h)
+      const keys = []
+      for (let cy = y0; cy <= y1; cy++) for (let cx = x0; cx <= x1; cx++) {
+        keys.push(key(cx,cy))
+      }
+      return keys
     }
-    add(o) {
-      const k = this._keyFor(o);
-      if (!this.map.has(k)) this.map.set(k, new Set());
-      this.map.get(k).add(o);
-      this.loc.set(o.name, k);
+
+    addAABB(o) {
+      const keys = this._keysForAABB(o)
+      for (const k of keys) {
+        if (!this.map.has(k)) this.map.set(k, new Set())
+        this.map.get(k).add(o)
+      }
+      this.loc.set(o.name, keys)
     }
-    update(o) {
-      const oldK = this.loc.get(o.name);
-      const newK = this._keyFor(o);
-      if (oldK === newK) return;
-      if (oldK && this.map.get(oldK)) this.map.get(oldK).delete(o);
-      if (!this.map.has(newK)) this.map.set(newK, new Set());
-      this.map.get(newK).add(o);
-      this.loc.set(o.name, newK);
-    }
-    remove(o) {
-      const k = this.loc.get(o.name);
-      if (k && this.map.get(k)) this.map.get(k).delete(o);
-      this.loc.delete(o.name);
-    }
-    // 近傍取得：「自分のセル＋周囲8セル」から候補だけ持ってくる
-    neighborsAround(x, y) {
-      const cx = cell(x), cy = cell(y);
-      const out = [];
-      for (let dy = -1; dy <= 1; dy++) {
-        for (let dx = -1; dx <= 1; dx++) {
-          const result = this.map.get(key(cx + dx, cy + dy));
-          if (!result) continue;
-          for (const o of result) out.push(o);
+
+    updateAABB(o) {
+      const newKeys = this._keysForAABB(o)
+      const oldKeys = this.loc.get(o.name) || []
+
+      if (oldKeys.length === newKeys.length && oldkeys.every((k, i) => k === newkeys[i]))
+        return
+
+      for (const k of oldKeys) {
+        const result = this.map.get(k)
+        if (result) {
+          result.delete(o)
+          if (result.size === 0) this.map.delete(k)
         }
       }
 
+      for (const k of newKeys) {
+        if (!this.map.has(k)) this.map.set(k, new Set())
+        this.map.get(k).add(o)
+      }
 
-      return out;
+      this.loc.set(o.name, newKeys)
+
     }
 
-    // 半径rでさらに絞る（円 or AABBでお好み）
-    queryRadius(x, y, r) {
-      const r2 = r * r;
-      const neighbor = this.neighborsAround(x, y)
-      showHTML(`checking: ${neighbor.length}`)
-      return neighbor.filter(o => {
-        const dx = o.px - x - (o.radius ? o.radius : 10), dy = o.py - y - (o.radius ? o.radius : 10);
-        return (dx * dx + dy * dy) <= r2;
-      });
+    removeAABB(o) {
+      const keys = this.loc.get(o.name) || []
+      for (const k of keys) {
+        const result = this.map.get(k)
+        if (result) {
+          result.delete(o)
+          if (result.size === 0) this.map.delete(k)
+        }
+      }
+      this.loc.delete(o.name)
     }
+
+    // x,y 左上の座標
+    neighborsAABB(x, y, w, h, padCells = 1) {
+      const s = this.s
+      const
+        x0 = cell(x) - padCells,
+        y0 = cell(y) - padCells,
+        x1 = cell(x + w) + padCells,
+        y1 = cell(y + h) + padCells
+      const out = new Set()
+      for (let cy = y0; cy <= y1; cy++) for (let cx = x0; cx <= x1; cx++) {
+        const result = this.map.get(`${cx}:${cy}`)
+        if (!result) continue
+        for (const o of result) out.add(o)
+      }
+
+      return [...out]
+    }
+
+    // x,y 左上の座標
+    queryAABB(x, y, w, h) {
+      const a = { x, y, w, h }
+      const near = this.neighborsAABB(x, y, w, h, 1)
+      return near.filter(o => aabbOverlap(a, aabbOf(o)))
+    }
+
+    // x,y 中心座標
+    queryAABBRadius(x, y, r) {
+      const near = this.neighborsAABB(x - r, y - r, r * 2, r * 2, 0)
+      showHTML(`checking: ${near.length}`)
+      return near.filter(o => {
+        const dx = o.px - x, dy = o.py - y
+        return dx * dx + dy * dy <= (r + o.w / 2) * (r + o.w / 2)
+      })
+    }
+
+
 
   }
 
@@ -2346,13 +2400,16 @@
     px: 100,
     py: 100,
     name: 'player',
-    sense_radius: 32,
+    w: 10,
+    h: 10,
+    sense_radius: 64,
     update: function () {
       if (keys.up.pressed) this.py--
       if (keys.down.pressed) this.py++
       if (keys.left.pressed) this.px--
       if (keys.right.pressed) this.px++
-      const near = sh.queryRadius(this.px, this.py, this.sense_radius);
+
+      const near = sh.queryAABBRadius(this.px, this.py, this.sense_radius);
       showHTML(`sensed object: ${near.length}`, 1)
       for (const o of near) {
         if (o === this) continue;
@@ -2366,75 +2423,58 @@
       drawDot(this.px, this.py, this.sense_radius, 'rgba(255,255,0,0.4)')
       drawDot(this.px, this.py, 10)
 
-      const cx = cell(this.px), cy = cell(this.py);
+
+      const
+        x0 = cell(this.px - this.sense_radius),
+        y0 = cell(this.py - this.sense_radius),
+        x1 = cell(this.px + this.sense_radius),
+        y1 = cell(this.py + this.sense_radius)
+      const out = new Set()
+      for (let cy = y0; cy <= y1; cy++) for (let cx = x0; cx <= x1; cx++) {
+        c.fillStyle = 'rgba(255,0,255,0.1)'
+        c.fillRect((cx) * cellSize, (cy) * cellSize, cellSize, cellSize)
+      }
+
+
+      /* const cx = cell(this.px), cy = cell(this.py);
       for (let dy = -1; dy <= 1; dy++) {
         for (let dx = -1; dx <= 1; dx++) {
           c.fillStyle = 'rgba(255,0,255,0.1)'
           c.fillRect((cx + dx) * cellSize, (cy + dy) * cellSize, cellSize, cellSize)
         }
-      }
+      } */
     }
 
   }
 
-  const enemy = {
-    px: 300,
-    py: 200,
-    name: 'enemy',
-    update: function () {
-
-    },
-    draw: function () {
-      drawDot(this.px, this.py, 10, 'blue')
+  class character {
+    constructor(_name, px, py, color = 'blue') {
+      this.name = _name
+      this.px = px
+      this.py = py
+      this.w = 20
+      this.h = 20
+      this.color = color
     }
-
-  }
-  const enemy1 = {
-    px: 300,
-    py: 100,
-    name: 'enemy1',
-    update: function () {
-
-    },
-    draw: function () {
-      drawDot(this.px, this.py, 10, 'blue')
+    update() { }
+    draw() {
+      drawDot(this.px, this.py, this.w / 2, this.color)
     }
-
   }
-  const enemy2 = {
-    px: 100,
-    py: 140,
-    name: 'enemy2',
-    update: function () {
+  const enemy = new character('enemy0', 300, 190)
+  const enemy1 = new character('enemy1', 300, 100, 'black')
+  const enemy2 = new character('enemy2', 120, 139)
 
-    },
-    draw: function () {
-      drawDot(this.px, this.py, 10, 'blue')
-    }
-
-  }
-
-  const enemy3 = {
-    px: 400,
-    py: 260,
-    name: 'enemy3',
-    update: function () {
-
-    },
-    draw: function () {
-      drawDot(this.px, this.py, 10, 'blue')
-    }
-
-  }
+  const enemy3 = new character('enemy3', 400, 200)
 
   // 初期化
   const sh = new SpatialHash(64);
 
   // 生成時
-  sh.add(enemy)
-  sh.add(enemy1)
-  sh.add(enemy2)
-  sh.add(enemy3)
+  sh.addAABB(enemy)
+  sh.addAABB(enemy1)
+  sh.addAABB(enemy2)
+  sh.addAABB(enemy3)
 
   // 毎フレ（動いたやつだけ update）
   function step(dt) {
