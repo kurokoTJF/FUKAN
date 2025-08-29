@@ -2579,6 +2579,7 @@
             this.eyeHeight = 0.4
             this.eyeZ = 0.4
             this.followSpeed = 0.04
+            this.followDist = 1
             this.target = target                // 目線高さ（床=0 からの相対）
             this.world = world // 参照するworld
             this.show2D = show2D
@@ -2587,18 +2588,28 @@
 
         update() {
             if (!this.target || !this.world) return
+
+            const
+                _dx = -Math.cos(this.target.angle),
+                _dy = -Math.sin(this.target.angle);
+
             this.pz = this.target.pz
             this.eyeZ = this.pz + this.eyeHeight
-            const deltaX = this.target.px - this.px
-            const deltaY = this.target.py - this.py
+            const
+                tx = this.target.px + _dx * this.followDist,
+                ty = this.target.py + _dy * this.followDist
+
+            const deltaX = tx - this.px
+            const deltaY = ty - this.py
+
             if (Math.abs(deltaX) > 0.01)
                 this.px += (deltaX) * this.followSpeed
             else
-                this.px = this.target.px
+                this.px = tx
             if (Math.abs(deltaY) > 0.01)
                 this.py += (deltaY) * this.followSpeed
             else
-                this.py = this.target.py
+                this.py = ty
         }
         draw() {
 
@@ -3283,7 +3294,6 @@
         }
 
         getFocalLength() {
-
             return (h / 2) / Math.tan(this.FOV / 2) * (w / h)  // 投影スケール
         }
         lerp(k, v1, v2) {
@@ -3693,7 +3703,10 @@
     GM.addChild(new PanoramaBG('E:/Games/workspace/assets/BG/panorama_mountain.jpg', player))
     GM.addChild(player)
     player.world = world2_6
-    GM.addChild(new RayCasterCamera(player, world2_6, true))
+
+    const camera = new RayCasterCamera(player, world2_6, true)
+    GM.addChild(camera)
+
     GM.addChild(new SpriteAsset({ tex: ceilLight8, size: 8, color: 'white' }, 12, 12, 1, true, 0.2))
     GM.addChild(new SpriteAsset({ tex: ceilLight8, size: 8, color: 'white' }, 12, 10, 1, true, 0.2))
     GM.addChild(new SpriteAsset({ tex: ceilLight8, size: 8, color: 'white' }, 12, 8, 1, true, 0.2))
@@ -3707,10 +3720,15 @@
 
 
     let deltaTime = 0
+    const originalF = (w / 2) / Math.tan(Math.PI / 6)
 
     function gameLoop() {
-
-        player.pz = 0.2 * Math.abs(Math.sin(deltaTime++ / 100))
+        deltaTime++
+        camera.FOV = Math.PI / 3 + 0.8 * Math.abs(Math.sin(deltaTime / 40)) //なんか魚眼が完全に治っていない？
+        const k = camera.getFocalLength()/originalF 
+        camera.followDist = k*1 
+        camera.followSpeed = 1　//　追従速度上がらないと間に合わない
+        //player.pz = 0.2 * Math.abs(Math.sin(deltaTime / 100))
         // --- update ---
 
         GM.update()
