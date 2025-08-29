@@ -2256,73 +2256,6 @@
   // all in canvas coordination, unit 1 meter
   // block size 1 meter
   // ===== Player =====
-  const player = {
-    id: 'player',
-    angle: Math.PI / 2,
-    px: 13.5,
-    py: 5.5,
-    pz: 0,
-    sizex: 10,
-    sizey: 10,
-    moveSpeed: 0.02,
-    rotSpeed: 0.02,
-    updateList: [],
-    world: null,
-    update: function () {
-      //const dt = Math.min(0.033, (now - last) * 0.001);
-      //last = now;
-      if (this.angle < 0) {
-        this.angle *= -1
-        this.angle %= Math.PI * 2
-        this.angle = Math.PI * 2 - this.angle
-      } else {
-        this.angle %= Math.PI * 2
-      }
-      if (!this.world) return console.log('player need world!')
-      if (keys == undefined) return console.log('player waiting for key Event')
-      const
-        _fwdx = Math.cos(this.angle),
-        _fwdy = Math.sin(this.angle);
-      const
-        _rightx = Math.cos(this.angle + Math.PI / 2),
-        _righty = Math.sin(this.angle + Math.PI / 2);
-
-      let mx = 0, my = 0;
-      if (keys.up.pressed) { mx += _fwdx; my += _fwdy; }
-      if (keys.down.pressed) { mx -= _fwdx; my -= _fwdy; }
-      if (keys.left.pressed) { mx -= _rightx; my -= _righty; }
-      if (keys.right.pressed) { mx += _rightx; my += _righty; }
-
-      const mag = Math.hypot(mx, my) || 1;
-      mx /= mag;
-      my /= mag;
-
-      const step = this.moveSpeed * (keys['AltLeft'] ? 1.7 : 1.0) //* dt;
-
-      const npx = this.px + mx * step, npy = this.py + my * step;
-      if (!this.world.atPos(Math.floor(npx), Math.floor(this.py))) this.px = npx;
-      if (!this.world.atPos(Math.floor(this.px), Math.floor(npy))) this.py = npy;
-
-      if (keys.turnLeft.pressed) this.angle -= this.rotSpeed //* dt;
-      if (keys.turnRight.pressed) this.angle += this.rotSpeed //* dt;
-
-    },
-    draw: function () {
-    },
-
-    addChild: function (e, draw = true) {
-      this.updateList.push(e)
-      if (e.onAttach)
-        e.onAttach(this)
-      else
-        e.master = this
-      e.updatePause = false
-      if (e.drawPause == true) return
-      if (draw) e.drawPause = false
-      else e.drawPause = true
-    }
-  }
-
 
   class SpriteAsset extends GameObject {
     constructor(sprite = { tex, size, color: 'white' }, px = 3, py = 3, pz = 0, inverted = false, height) {
@@ -3047,6 +2980,16 @@
       this.target = target
       //this.drawPause = true
     }
+    gatherReference() {
+      if (!this.target) {
+        this.master.updateList.forEach(e => {
+          if (e.id == 'player'){
+            this.target = e
+           console.log('[]locate a player') 
+          }
+        })
+      }
+    }
     update() {
       if (this.target)
         this.rotateAngle = this.target.angle
@@ -3256,7 +3199,8 @@
       return _temp
     }
 
-    setTagPause(tag, pause = true, List = this.updateList) {
+    PauseByTag(tag, pause = true, List = this.updateList) {
+      console.log(`set ${tag}.updatePause = ${pause}`)
       this.traverse(List, (e) => {
         if (e.tags?.has(tag))
           e.updatePause = pause
@@ -3291,37 +3235,80 @@
 
   }
 
+  class Player3DWithRotation extends GameObject {
+    constructor() {
+      super()
+      this.id = 'player'
+      this.angle = Math.PI / 2
+      this.px = 13.5
+      this.py = 5.5
+      this.pz = 0
+      this.sizex = 10
+      this.sizey = 10
+      this.moveSpeed = 0.02
+      this.rotSpeed = 0.02
+      this.world = null
+    }
+
+    gatherReference() {
+      if (!this.world) {
+        this.master.updateList.forEach(e => {
+          if (e.id == 'worldArray') {
+            console.log('[player]locate a world')
+            this.world = e
+          }
+        })
+      }
+    }
+    update_self() {
+      //const dt = Math.min(0.033, (now - last) * 0.001);
+      //last = now;
+      if (!this.world) return console.log('player need world!')
+
+      if (this.angle < 0) {
+        this.angle *= -1
+        this.angle %= Math.PI * 2
+        this.angle = Math.PI * 2 - this.angle
+      } else {
+        this.angle %= Math.PI * 2
+      }
+      if (keys == undefined) return console.log('player waiting for key Event')
+      const
+        _fwdx = Math.cos(this.angle),
+        _fwdy = Math.sin(this.angle);
+      const
+        _rightx = Math.cos(this.angle + Math.PI / 2),
+        _righty = Math.sin(this.angle + Math.PI / 2);
+
+      let mx = 0, my = 0;
+      if (keys.up.pressed) { mx += _fwdx; my += _fwdy; }
+      if (keys.down.pressed) { mx -= _fwdx; my -= _fwdy; }
+      if (keys.left.pressed) { mx -= _rightx; my -= _righty; }
+      if (keys.right.pressed) { mx += _rightx; my += _righty; }
+
+      const mag = Math.hypot(mx, my) || 1;
+      mx /= mag;
+      my /= mag;
+
+      const step = this.moveSpeed * (keys['AltLeft'] ? 1.7 : 1.0) //* dt;
+
+      const npx = this.px + mx * step, npy = this.py + my * step;
+      if (!this.world.atPos(Math.floor(npx), Math.floor(this.py))) this.px = npx;
+      if (!this.world.atPos(Math.floor(this.px), Math.floor(npy))) this.py = npy;
+
+      if (keys.turnLeft.pressed) this.angle -= this.rotSpeed //* dt;
+      if (keys.turnRight.pressed) this.angle += this.rotSpeed //* dt;
+
+    }
+  }
   // into GM!
 
   const GAMA = new GameManager()
-
-  GAMA.addChild(new PanoramaBG('E:/Games/workspace/assets/BG/panorama_mountain.jpg', player))
-  
   const world = new WorldArray(worldMap, 16, 16, checkerTex, checkerTex)
-  GAMA.addChild(world)
-  
-  GAMA.addChild(player)
-  player.world = world
-  player.name = 'player'
-  player.id = 'player'
-  player.addChild(new SpriteAsset({ tex: Lily32, size: 32, color: 'red' }, 0, 0, 0, false, 0.6))
-
-
+  const player2 = new Player3DWithRotation()
   const camera = new RayCasterCamera()
-  GAMA.addChild(camera)
-
-  GAMA.addChild(new SpriteAsset({ tex: ceilLight8, size: 8, color: 'white' }, 12, 12, 1, true, 0.2))
-  GAMA.addChild(new SpriteAsset({ tex: ceilLight8, size: 8, color: 'white' }, 12, 10, 1, true, 0.2))
-  GAMA.addChild(new SpriteAsset({ tex: ceilLight8, size: 8, color: 'white' }, 12, 8, 1, true, 0.2))
-  GAMA.addChild(new SpriteAsset({ tex: ceilLight8, size: 8, color: 'white' }, 12, 6, 1, true, 0.2))
-  GAMA.addChild(new SpriteAsset({ tex: ceilLight8, size: 8, color: 'white' }, 12, 4, 1, true, 0.2))
-  GAMA.addChild(new SpriteAsset({ tex: Lily32, size: 32, color: 'blue' }, 12, 6, 0, false, 0.6))
-  GAMA.addChild(new SpriteAsset({ tex: Lily32, size: 32, color: 'white' }, 12, 8, 0, false, 0.6))
-  GAMA.addChild(new SpriteAsset({ tex: Lily32, size: 32, color: 'pink' }, 12, 10, 0, false, 0.6))
-
-
-
   const cameraVFX = new GameObject('camaraZoomer')
+  cameraVFX.tags.add('shit')
   cameraVFX.deltaTime = 0
   cameraVFX.originalF = (w / 2) / Math.tan(Math.PI / 6)
   cameraVFX.update_self = function () {
@@ -3333,10 +3320,30 @@
     m.followSpeed = 1//　追従速度上がらないと間に合わない
   }
 
+  
+  GAMA.addChild(new PanoramaBG('E:/Games/workspace/assets/BG/panorama_mountain.jpg'))
+  GAMA.addChild(world)
+  GAMA.addChild(player2)
+  player2.addChild(new SpriteAsset({ tex: Lily32, size: 32, color: 'red' }, 0, 0, 0, false, 0.6))
+  GAMA.addChild(camera)
   camera.addChild(cameraVFX)
 
+  GAMA.addChild(new SpriteAsset({ tex: ceilLight8, size: 8, color: 'white' }, 12, 12, 1, true, 0.2))
+  GAMA.addChild(new SpriteAsset({ tex: ceilLight8, size: 8, color: 'white' }, 12, 10, 1, true, 0.2))
+  GAMA.addChild(new SpriteAsset({ tex: ceilLight8, size: 8, color: 'white' }, 12, 8, 1, true, 0.2))
+  GAMA.addChild(new SpriteAsset({ tex: ceilLight8, size: 8, color: 'white' }, 12, 6, 1, true, 0.2))
+  GAMA.addChild(new SpriteAsset({ tex: ceilLight8, size: 8, color: 'white' }, 12, 4, 1, true, 0.2))
+  GAMA.addChild(new SpriteAsset({ tex: Lily32, size: 32, color: 'blue' }, 12, 6, 0, false, 0.6))
+  GAMA.addChild(new SpriteAsset({ tex: Lily32, size: 32, color: 'white' }, 12, 8, 0, false, 0.6))
+  GAMA.addChild(new SpriteAsset({ tex: Lily32, size: 32, color: 'pink' }, 12, 10, 0, false, 0.6))
 
   GAMA.addChild(new ListShower())
+
+
+
+GAMA.PauseByTag('shit')
+GAMA.PauseByTag('shit',false)
+
 
   function gameLoop() {
 
