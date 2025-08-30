@@ -2352,7 +2352,7 @@
     _rebuildFlatLists() {
       //console.clear()
       console.log('[when GM rebuild] GM rebuild update and draw Lists')
-      this.objectListTXT=null
+      this.objectListTXT = null
       this.flatUpdateList.length = 0;
       this.flatDrawList.length = 0;
 
@@ -2485,11 +2485,19 @@
       return _temp
     }
 
-    PauseByTag(tag, pause = true, List = this.objectList) {
+    PauseByTag(tag, pause = true, type = 0, List = this.objectList) {
       console.log(`set ${tag}.updatePause = ${pause}`)
+      const mapping = {
+        0: ["updatePause"],
+        1: ["drawPause"],
+        default: ["updatePause", "drawPause"]
+      };
       this.traverse(List, (e) => {
-        if (e.tags?.has(tag))
-          e.updatePause = pause
+        if (e.tags?.has(tag)) {
+          (mapping[type] ?? mapping.default).forEach(key => {
+            e[key] = pause;
+          })
+        }
       })
       this._needsRebuild = true
     }
@@ -3386,6 +3394,15 @@
 
   const dialogManager = new GameObject('DM', 'DM')
 
+  const pauseMenu = new GameObject('pause', 'pause')
+  pauseMenu.draw = function () {
+    drawSimpleBG('rgba(0,0,0,0.5)')
+    drawGrid(32)
+  }
+  GM.addChild(pauseMenu)
+    .tags.add('pauseMenu')
+
+
   getEventManager(GM)
   getEventHandler(GM)
 
@@ -3403,8 +3420,10 @@
     if (deltaTime < 200) {
       if (deltaTime == 0) {
         GM.PauseByTag('ActionStop', true)
+        GM.PauseByTag('pauseMenu', false, 2)
       } else if (deltaTime == 100) {
         GM.PauseByTag('ActionStop', false)
+        GM.PauseByTag('pauseMenu', true, 2)
       }
       deltaTime++
     } else {
@@ -3412,13 +3431,12 @@
       deltaTime = 0
     }
 
-    showHTML(deltaTime,1)
+    showHTML(deltaTime, 1)
     //player.pz = 0.2 * Math.abs(Math.sin(deltaTime / 100))
     // --- update ---
     GM.update()
+
     if (tester) {
-
-
       if (dist(pplayer.px, pplayer.py, tester?.px, tester?.py) < 1) {
         console.log('ataruuuu')
         GM.removeByTag('test')
