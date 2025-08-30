@@ -975,7 +975,7 @@
 
   //ゲーム世界の原子になる
   class GameObject {
-    constructor(name, id = 'game_object') {
+    constructor(name = 'Node', id = 'game_object') {
       this.folded = false // toggle this to fold a folder group
       this.id = id
       this.name = name
@@ -985,6 +985,19 @@
       this.drawPause = false
       this.updatePause = false
     }
+
+    get/* これは素晴らしい仕様！ */ position() {
+      return { x: this.px ?? 0, y: this.py ?? 0, z: this.pz ?? 0 }
+    }
+
+    get size() {
+      return { x: this.sizex ?? 0, y: this.sizey ?? 0, z: this.sizez ?? 0 }
+    }
+
+    get rotation() {
+      return { x: 0, y: 0, z: this.angle ?? 0 }
+    }
+
     //これは上書きしない
     update() {
       if (this.updatePause === true) return
@@ -1018,6 +1031,7 @@
       else
         e.master = this
       e.updatePause = false
+      e.gatherReference?.()
       if (e.drawPause == true) return
       if (draw) e.drawPause = false
       else e.drawPause = true
@@ -2341,8 +2355,10 @@
 
     update() {
       if (!this.target || !this.world) {
-        console.log('camera reference not enough')
-        return
+        this.updatePause = true
+
+        return console.log('camera reference not enough')
+
       }
 
       const
@@ -2983,9 +2999,9 @@
     gatherReference() {
       if (!this.target) {
         this.master.updateList.forEach(e => {
-          if (e.id == 'player'){
+          if (e.tags?.has('player')) {
             this.target = e
-           console.log('[]locate a player') 
+            console.log('[]locate a player')
           }
         })
       }
@@ -3248,6 +3264,7 @@
       this.moveSpeed = 0.02
       this.rotSpeed = 0.02
       this.world = null
+      this.tags.add('player')
     }
 
     gatherReference() {
@@ -3263,7 +3280,10 @@
     update_self() {
       //const dt = Math.min(0.033, (now - last) * 0.001);
       //last = now;
-      if (!this.world) return console.log('player need world!')
+      if (!this.world) {
+        this.updatePause = true
+        return console.log('player need world!')
+      }
 
       if (this.angle < 0) {
         this.angle *= -1
@@ -3306,28 +3326,25 @@
   const GAMA = new GameManager()
   const world = new WorldArray(worldMap, 16, 16, checkerTex, checkerTex)
   const player2 = new Player3DWithRotation()
+  player2.tags.add('eventStop')
   const camera = new RayCasterCamera()
   const cameraVFX = new GameObject('camaraZoomer')
-  cameraVFX.tags.add('shit')
+  cameraVFX.tags.add('test')
   cameraVFX.deltaTime = 0
   cameraVFX.originalF = (w / 2) / Math.tan(Math.PI / 6)
   cameraVFX.update_self = function () {
     const m = this.master
     this.deltaTime++
-    m.FOV = Math.PI / 3 + 0.8 * Math.abs(Math.sin(this.deltaTime / 40)) //なんか魚眼が完全に治っていない？
+    m.FOV = Math.PI / 3 + 0.8 * Math.abs(Math.cos(this.deltaTime / 40)) //なんか魚眼が完全に治っていない？
     const k = m.getFocalLength() / this.originalF
     m.followDist = k * 2
     m.followSpeed = 1//　追従速度上がらないと間に合わない
   }
 
-  
-  GAMA.addChild(new PanoramaBG('E:/Games/workspace/assets/BG/panorama_mountain.jpg'))
+  // 参照先は自動で探すようにしているので、依存されるものは先に出しておく
   GAMA.addChild(world)
   GAMA.addChild(player2)
   player2.addChild(new SpriteAsset({ tex: Lily32, size: 32, color: 'red' }, 0, 0, 0, false, 0.6))
-  GAMA.addChild(camera)
-  camera.addChild(cameraVFX)
-
   GAMA.addChild(new SpriteAsset({ tex: ceilLight8, size: 8, color: 'white' }, 12, 12, 1, true, 0.2))
   GAMA.addChild(new SpriteAsset({ tex: ceilLight8, size: 8, color: 'white' }, 12, 10, 1, true, 0.2))
   GAMA.addChild(new SpriteAsset({ tex: ceilLight8, size: 8, color: 'white' }, 12, 8, 1, true, 0.2))
@@ -3337,19 +3354,24 @@
   GAMA.addChild(new SpriteAsset({ tex: Lily32, size: 32, color: 'white' }, 12, 8, 0, false, 0.6))
   GAMA.addChild(new SpriteAsset({ tex: Lily32, size: 32, color: 'pink' }, 12, 10, 0, false, 0.6))
 
-  GAMA.addChild(new ListShower())
+
+  GAMA.addChild(new PanoramaBG('E:/Games/workspace/assets/BG/panorama_mountain.jpg'))
+  GAMA.addChild(camera)
+  camera.addChild(cameraVFX)
+
+
+  //GAMA.addChild(new ListShower())
 
 
 
-GAMA.PauseByTag('shit')
-GAMA.PauseByTag('shit',false)
+  GAMA.PauseByTag('test')
+  GAMA.PauseByTag('test', false)
 
 
   function gameLoop() {
 
     //player.pz = 0.2 * Math.abs(Math.sin(deltaTime / 100))
     // --- update ---
-
     GAMA.update()
 
     GAMA.draw()
