@@ -2635,6 +2635,7 @@
       this.eyeZ = 0.4
       this.followSpeed = 0.04
       this.followDist = 1
+      this.followOffset = 0.1
       this.target = _target                // 目線高さ（床=0 からの相対）
       this.world = _world // 参照するworld
       this.show2D = show2D
@@ -2679,8 +2680,8 @@
       this.pz = this.target.pz
       this.eyeZ = this.pz + this.eyeHeight
       const
-        tx = this.target.px + _dx * this.followDist,
-        ty = this.target.py + _dy * this.followDist
+        tx = this.target.px + _dx * this.followDist + _dy * this.followOffset,
+        ty = this.target.py + _dy * this.followDist - _dx * this.followOffset
 
       const deltaX = tx - this.px
       const deltaY = ty - this.py
@@ -2783,7 +2784,7 @@
             y: hit.side ? (hit.dir.y > 0 ? -1 : 1) : 0,
             z: 0
           }
-          const shade = Math.max(0, (-dx * normal.x  -dy * normal.y + 0 * normal.z))
+          const shade = Math.max(0, (-dx * normal.x - dy * normal.y + 0 * normal.z))
 
           let tex_info = { ...this.defaultTexInfo }
           let col = [255, 200, 100];
@@ -2791,7 +2792,7 @@
             tex_info.tex = window8
             tex_info.size = 8
           } else {
-            if (hit.id === 1){
+            if (hit.id === 1) {
               col = [0, 220, 220]
             }
             else if (hit.id === 2)
@@ -3136,13 +3137,13 @@
         nextBlockDistByX = (_nextBlockX - ox) * invDx, // tMaxX * Math.cos(ra) = (N-O)
         nextBlockDistByY = (_nextBlockY - oy) * invDy;
 
-      // check if inside
-      const id0 = this.world.atPos(mapX, mapY)
+      // check if inside、これはいなくてもいいな
+      /* const id0 = this.world.atPos(mapX, mapY)
       if (id0) return {
         hit: true, dist: 0, id: id0,
         side: 0, dir: { x: searchDirX, y: searchDirY },
         cellX: mapX, cellY: mapY
-      };
+      }; */
 
       let side = 0, dist = 0, hitId = 0;
       for (let i = 0; i < 128; i++) {
@@ -3164,7 +3165,7 @@
         if (dist > maxDist) break;
 
         hitId = this.world.atPos(mapX, mapY)
-        if (hitId)
+        if (hitId && dist > this.followDist)
           return {
             hit: true, dist, id: hitId,
             side, dir: { x: searchDirX, y: searchDirY },
@@ -3383,14 +3384,29 @@
   world._ceilZ = 2
 
   const player = new Player3DWithRotation()
+  player.px = 12
+  player.py = 8
   player.tags.add('eventStop')
   player.addChild(new SpriteAsset({ tex: Lily32, size: 32 }, 0.6))
+  const lockOner = new GameObject()
+  lockOner.update = function () {
+    this.master.angle = this.lookAt(12, 12)
+  }
+  lockOner.lookAt = function (px, py) {
+    const dx = px - this.master.px
+    const dy = py - this.master.py
+    return Math.atan2(dy, dx);
+  }
+  player.addChild(lockOner)
+
 
   GM.addChild(folder1)
   folder1.addChild(world)
   folder1.addChild(player)
   folder1.addChild(new RayCasterCamera())
+  folder1.addChild(new SpriteAsset({ tex: Lily32, size: 32 }, 0.6, false, 12, 12, 0))
   GM.addChild(new ListShower())
+
 
 
 
