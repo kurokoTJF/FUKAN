@@ -3378,6 +3378,13 @@
 <script id="white canvas">
   const GM = new GameManager()
   const backGO = new GameObject()
+  backGO.update = function(){
+    backGO.px +=1
+  }
+  backGO.draw = function(){
+    c.fillStyle = 'black'
+    c.fillRect(backGO.px, 0, 100, 100)
+  }
   GM.addChild(backGO)
   backGO.addChild(new GameObject(name='new shit'))
   GM.addChild(new ListShower())
