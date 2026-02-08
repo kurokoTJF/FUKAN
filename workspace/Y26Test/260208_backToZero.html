@@ -767,6 +767,7 @@
   }
 
   //ゲーム世界の原子になる
+  //name for showList, id more like type
   class GameObject {
     constructor(name = 'Node', id = 'game_object') {
       this.folded = false // toggle this to fold a folder group
@@ -3375,7 +3376,16 @@
 
 
 <script id="white canvas">
+  const GM = new GameManager()
+  const backGO = new GameObject()
+  GM.addChild(backGO)
+  backGO.addChild(new GameObject(name='new shit'))
+  GM.addChild(new ListShower())
 
+  gameLoop = function(){
+    GM.update()
+    GM.draw()
+  }
 </script>
 
 </html>
