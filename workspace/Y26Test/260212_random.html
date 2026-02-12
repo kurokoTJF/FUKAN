@@ -2325,12 +2325,11 @@
   class GameManager extends GameObject {
     constructor() {
       super()
-      this.register = new Map()//外部読み込み用
-      this.counters = [] // 最初のUpdateListじゃないかな
-      this.flatUpdateList = []
-      this.flatDrawList = []
-      this._needsRebuild = true
-      this.camera = { // これはちょっと汚いな。。。。
+      
+      this.flatUpdateList = []//そのままUpdateリスト。じゃないと毎回重い
+      this.flatDrawList = []//そのままDrawリスト
+      this._needsRebuild = true // render queue rebuild
+      this.camera = { // default scene camera 汚いかも
         update: () => { },
         draw: () => {
           this.flatDrawList.forEach(e => {
@@ -2338,6 +2337,8 @@
           })
         },
       }
+      this.counters = [] // 最初のUpdateListじゃないかな
+      this.register = new Map()//外部読み込み用
       console.log('[game manager instanced]')
     }
 
@@ -2415,6 +2416,7 @@
       this._needsRebuild = false;
 
       console.log(`[when GM rebuild] gathering reference`)
+      //再構築するたびに下やるの？？
       this.flatUpdateList.forEach(e => {
         e.gatherReference?.(this)
 
@@ -2597,6 +2599,7 @@
   class WorldArray extends GameObject {
     constructor(worldMap = {}, ceilMap = {}, floorMap = {}, skyBox = {}) {
       super('worldArray', 'worldArray')
+      //デフォルトTextureがほしいんよな
       this.worldMap = worldMap
       this.ceilMap = ceilMap
       this.floorMap = floorMap
@@ -2628,6 +2631,8 @@
   }
 
   // draw ID: 'sprite'
+  // 2D Array world[][] 専用！
+  // Tag player
   class RayCasterCamera extends GameObject {
     constructor(_target = null, _world = null, show2D = true, texChecker) {
       super('camera', '2DRayCamera')
