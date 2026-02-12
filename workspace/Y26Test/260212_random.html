@@ -3307,6 +3307,8 @@
 
     // ゲーム世界がStopMotionなら、これがその「動かす手」になる
 
+    // xy平面の回転付きプレイヤー
+
     class Player3DWithRotation extends GameObject {
         constructor() {
             super('player', 'player')
@@ -3322,8 +3324,8 @@
             this.tags.add('player')
         }
 
-        gatherReference(gm) {
-            this.GM = gm
+        gatherReference(_root) {
+            this.GM = _root
             if (!this.world) {
                 this.master.objectList.forEach(e => {
                     if (e.id == 'worldArray') {
