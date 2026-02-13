@@ -2790,6 +2790,9 @@
                 if (hit.hit) {
                     // 色（マテリアル）＋ 面向きで陰
                     // ここはまあ、Lightingもできればやってみたいけど
+                    
+                    // 1. get the color 
+                    // NdotL !!
                     const normal = {
                         x: hit.side ? 0 : (hit.dir.x > 0 ? -1 : 1),
                         y: hit.side ? (hit.dir.y > 0 ? -1 : 1) : 0,
@@ -2797,6 +2800,7 @@
                     }
                     const shade = Math.max(0, (-dx * normal.x - dy * normal.y + 0 * normal.z))
 
+                    
                     let tex_info = { ...this.defaultTexInfo }
                     let col = [255, 200, 100];
                     if (hit.id == 4) {
@@ -2819,6 +2823,8 @@
             ${(this.lerp(fog_depth, col[1] * shade, fog_color[1])) | 0},
             ${(this.lerp(fog_depth, col[2] * shade, fog_color[2])) | 0})`;
 
+                        
+                        // 2. fill Rectangle area
                         c.fillRect(_x, y0, this.sample_width, y1 - y0);
 
                     }
@@ -2841,7 +2847,7 @@
                         _x, y0, y1,
                         wallTop, wallBot,
                         u)
-                }
+                } // end of if hit.hit
 
 
 
@@ -2850,11 +2856,12 @@
                 const Kfloor = (this.eyeZ - this.world._floorZ) * FocalLength; // eyeZから床までのスケール
 
                 // 床は y1(=壁下端) から画面下端まで
-                // ⊥距離を求めて、実距離を出す、したらRayのVectorにのかって座標を出せる。
+                // ⊥距離を求めて、実距離を出す、したらRayのVectorにのかってworld座標を出せる。
                 // Key: dist = (eyeZ-floorZ)*Focallength/denom
                 for (let _y = y1; _y < h; _y += this.sample_height) {
                     // 画面行 y → 垂直距離 d_perp
 
+                    // 1. sample the color
                     const denom = (_y) - h / 2;  // ピクセル中心 (+0.5 推奨)
                     if (denom <= 0) continue;
                     const dPerpFloor = Kfloor / denom; // 
@@ -2879,9 +2886,10 @@
                     g = ((1 - fog) * g + fog * fog_color[1]) | 0;
                     b = ((1 - fog) * b + fog * fog_color[2]) | 0;
 
+                    // 2. fill the rectangle
                     c.fillStyle = `rgb(${r},${g},${b})`;
                     c.fillRect(_x, _y, this.sample_width, this.sample_height);
-                }
+                }// end of draw floor 
 
 
                 // ====== ★ CEIL CAST: 天井をサンプリング ======
@@ -2922,6 +2930,7 @@
                 } // end of Draw ceiling for
 
 
+                // draw the sprite
                 const hits = this.collectColumnSprites(_x, perpDistance, true_ray_angle, FocalLength)
 
                 const ZNew = this.renderColumnFromHits(_x, hits, perpDistance, wallTop, wallBot)
