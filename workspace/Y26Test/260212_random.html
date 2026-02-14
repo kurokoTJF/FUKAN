@@ -1658,6 +1658,7 @@
     }
 
     // standard state unit
+    // why not extends the gameObject?
     class Player3DState {
         constructor(master) {
             this.name = ''
@@ -1685,8 +1686,8 @@
                 const n = this.data.baseState
                 this.data = master.data.state[n]
             }
+            // setting up handlers
             for (const [eventName, action] of Object.entries(this.data.on || {})) {
-                // setting up handlers
                 this.on(eventName, (target, EventData) => {
                     if (action.move) {
                         for (const m in action.move) {
