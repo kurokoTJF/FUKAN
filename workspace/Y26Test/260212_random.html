@@ -91,6 +91,7 @@
 
 <script id="equipment & engine & utilities">
 
+    // key Maps > keys > Listener
     document.addEventListener("keyup", (e) => {
         const action = keyMap[e.key.toLowerCase()]
         if (action) {
@@ -423,10 +424,11 @@
         }
     }
 
-    // the Event dealer + notifier
+    // the Event notifier
     // pushEventなどを使いたいとき
     function getEventManager(target) {
         // State: logic object. わざと別で定義するのは、StateMachineの導入用のInterfaceとしてです
+        if (!target.update) return console.log('man remember to use as gameObject')
         target.state = target
         target.eventQueue = [] // かの有名なEventQueue
         target.pushEvent = function (eName, ...args) {
@@ -439,7 +441,15 @@
                 logic_object.onRequest(ev, this, ...args)
             this.eventQueue = []
         }
-        
+
+        // auto dealEvent 
+
+        const t = target.update.bind(target)
+        target.update = function () {
+            target.dealEvent()
+            t()
+        }
+
         // masterのイベントを、ChildrenにHandleしてもらう
         // 一回対応されると消える
         target.notifyEventToChildren = function () {
@@ -492,8 +502,8 @@
 
     // Methodを結合する。returnのスコープを注意
     function addMethodFirst(target, target_method, comp, method) {
-        const t = target[target_method].bind(target)
-        const c = comp[method].bind(comp)
+        const t = target[target_method].bind(target)// this = target
+        const c = comp[method].bind(comp)// this = comp
         target[target_method] = function (...args) {
             c(...args)
             t(...args)
@@ -1441,6 +1451,8 @@
         }
     }
 
+
+
     class ListShower {
         constructor() {
             this.text = []
@@ -2020,74 +2032,6 @@
 </script>
 
 
-<script id="key mapping">
-    // EventID好きなだけ追加
-    const eventID = new Proxy({}, (() => {
-        let currentID = 0;
-        const map = new Map();
-        return {
-            get(target, prop) {
-
-                if (typeof prop === "symbol") return undefined;
-                if (!map.has(prop)) {
-                    map.set(prop, currentID++);
-                }
-                return map.get(prop);
-            },
-            ownKeys() {
-                return Array.from(map.keys());
-            },
-        };
-    })());
-
-    // if(keys.xxx.pressed)これをGameLoopに入れたら連続発火
-    // keyMap -> keys
-    const keyMap = {
-        'a': 'left',
-        'd': 'right',
-        'w': 'up',
-        's': 'down',
-        'i': 'parry',
-        'j': 'attack',
-        'k': 'jump',
-        'l': 'camera_radius_down',
-        ' ': 'shot',
-        'q': 'rotateL',
-        'e': 'rotateR'
-    }
-
-    // 必要なキーだけ登録すればOK
-    // onPress: 押した瞬間
-    const onPressHandlers = {
-        up: () => {
-
-        },
-        down: () => {
-        },
-        left: () => {
-        },
-        right: () => {
-        },
-        shot: () => {
-
-        }
-    }
-
-    // onRelease: 離した瞬間
-    const onReleasehandlers = {
-        left: () => {
-        },
-        right: () => {
-        },
-        shot: () => {
-        }
-    }
-
-    // the event list
-
-
-</script>
-
 
 <script id="texture data">
     // ===== Map (16x16) =====
@@ -2596,7 +2540,7 @@
 
     // worldMap, ceilMap, floorMap,skyBoxが必要だなこれは
     class WorldArray extends GameObject {
-        constructor(worldMap = { map: worldMap32, w: 16 ,ceilZ:3}, ceilMap = { map: ceilMap16, width: 16 }, floorMap = { map: floorMap16, w: 16 }, skyBox = {}) {
+        constructor(worldMap = { map: worldMap32, w: 16, ceilZ: 3 }, ceilMap = { map: ceilMap16, width: 16 }, floorMap = { map: floorMap16, w: 16 }, skyBox = {}) {
             super('worldArray', 'worldArray')
             //デフォルトTextureがほしいんよな
             this.worldMap = worldMap
@@ -2638,16 +2582,17 @@
             this.px = 15
             this.py = 4
             this.pz = 0
-            this.FOV = Math.PI / 3// angle of view
-            this.sample_width = 4//2 とかちょっと重たくなる
-            this.sample_height = 2
             this.eyeHeight = 0.4
             this.eyeZ = 0.4
+            this.FOV = Math.PI / 3// angle of view
+
+            this.sample_width = 4//2 とかちょっと重たくなる
+            this.sample_height = 2
             this.followSpeed = 0.04
             this.followDist = 1
             this.followOffset = 0.1
             this.target = _target                // 目線高さ（床=0 からの相対）
-            this.world = _world // 参照するworld
+            this.world = _world // 見るするworld
             this.show2D = show2D
             this.hits = []
             this.defaultTexInfo = {
@@ -2716,15 +2661,17 @@
             // cast 2D ray for loop 
             //    check and draw wall, ceil, floor
             //    check and draw sprites  
+            if (!this.target || !this.world) {
+                this.drawPause = true
+                return
+            }
+
 
             const dot = (a, b) => a.x * b.x + a.y * b.y;
             const sub = (a, b) => ({ x: a.x - b.x, y: a.y - b.y });
             const cross = (a, b) => a.x * b.y - a.y * b.x;
 
-            if (!this.target || !this.world) {
-                this.drawPause = true
-                return
-            }
+
 
             // --- draw background ---
 
@@ -2854,20 +2801,20 @@
                 // 逆投影の定数（列ごとに一定）
                 const Kfloor = (this.eyeZ - this.world._floorZ) * FocalLength; // eyeZから床までのスケール
 
-                if(Kfloor>0){
+                if (Kfloor > 0) {
 
                     // 床は y1(=壁下端) から画面下端まで
                     // ⊥距離を求めて、実距離を出す、したらRayのVectorにのかってworld座標を出せる。
                     // Key: dist = (eyeZ-floorZ)*Focallength/denom
                     for (let _y = y1; _y < h; _y += this.sample_height) {
                         // 画面行 y → 垂直距離 d_perp
-                        
+
                         // 1. sample the color
                         const denom = (_y) - h / 2;  // ピクセル中心 (+0.5 推奨)
                         if (denom <= 0) continue;
                         const dPerpFloor = Kfloor / denom; // 
                         const dRay = dPerpFloor / Math.cos(ray_angle) // 画面⊥距離から実距離（魚眼補正逆変換）
-                        
+
                         // 世界座標（同じレイ方向）
                         const fx = this.px + dx * dRay;
                         const fy = this.py + dy * dRay;
@@ -2875,20 +2822,20 @@
                         const u = fx - Math.floor(fx);
                         const v = fy - Math.floor(fy);
                         const on = this.UVSampling(checkerTex, u, v, 32)
-                        
+
                         // 簡単なフォグ（距離で空色へ寄せる）
                         const fog = Math.min(1, dPerpFloor / 16);
                         let r = on ? 0 : 10, g = on ? 0 : 80, b = on ? 0 : 122; // 地面のベース色
                         r = ((1 - fog) * r + fog * fog_color[0]) | 0;
                         g = ((1 - fog) * g + fog * fog_color[1]) | 0;
                         b = ((1 - fog) * b + fog * fog_color[2]) | 0;
-                        
+
                         // 2. fill the rectangle
                         c.fillStyle = `rgb(${r},${g},${b})`;
                         c.fillRect(_x, _y, this.sample_width, this.sample_height);
                     }// end of draw floor 
                 }
-                    
+
 
                 // ====== ★ CEIL CAST: 天井をサンプリング ======
                 const CeilOffset = 0
@@ -3087,7 +3034,7 @@
         getFocalLength() {
             return (w / 2) / Math.tan(this.FOV / 2)  // 投影スケール
         }
-        
+
         lerp(k, v1, v2) {
             return (1 - k) * v1 + k * v2
         }
@@ -3395,18 +3342,83 @@
 </script>
 
 
+<script id="key mapping">
+    // EventID好きなだけ追加
+    const eventID = new Proxy({}, (() => {
+        let currentID = 0;
+        const map = new Map();
+        return {
+            get(target, prop) {
+
+                if (typeof prop === "symbol") return undefined;
+                if (!map.has(prop)) {
+                    map.set(prop, currentID++);
+                }
+                return map.get(prop);
+            },
+            ownKeys() {
+                return Array.from(map.keys());
+            },
+        };
+    })());
+
+    // if(keys.xxx.pressed)これをGameLoopに入れたら連続発火
+    // keyMap -> keys
+    const keyMap = {
+        'a': 'left',
+        'd': 'right',
+        'w': 'up',
+        's': 'down',
+        'i': 'parry',
+        'j': 'attack',
+        'k': 'jump',
+        'l': 'camera_radius_down',
+        ' ': 'shot',
+        'q': 'rotateL',
+        'e': 'rotateR'
+    }
+
+    // 必要なキーだけ登録すればOK
+    // onPress: 押した瞬間
+    const onPressHandlers = {
+        up: () => {
+
+        },
+        down: () => {
+        },
+        left: () => {
+        },
+        right: () => {
+        },
+        shot: () => {
+            pl0.pushEvent('jump')
+
+        }
+    }
+
+    // onRelease: 離した瞬間
+    const onReleasehandlers = {
+        left: () => {
+        },
+        right: () => {
+        },
+        shot: () => {
+        }
+    }
+
+    // the event list
+
+
+</script>
+
 
 <script id="white canvas">
-
 
     const GM = new GameManager()
     GM.addChild(new RayCasterCamera())
     GM.addChild(new WorldArray())
 
-
     const pl0 = new GameObject('2dplayer')
-    pl0.counter = 0
-    pl0.sizex = 60
     pl0.setup = function () {
         this.px = 0
         this.py = 0
@@ -3417,55 +3429,58 @@
         this.angle = Math.PI / 2
 
         this.tags.add('player')
-        this.deltaY = 0
+
+
+        this.draw = function () { }
+        this.update = function () {
+
+            if (keys.rotateL.pressed)
+                this.angle -= 0.01
+            if (keys.rotateR.pressed)
+                this.angle += 0.01
+
+            if (keys.right.pressed)
+                this.deltaX = 0.1
+            if (keys.left.pressed)
+                this.deltaX = -0.1
+
+            if (keys.up.pressed)
+                this.deltaY = -0.1
+            if (keys.down.pressed)
+                this.deltaY = 0.1
+
+            this.deltaZ += -0.02
+
+            // double buffer?
+            this.px += this.deltaX
+            this.py += this.deltaY
+
+            if (this.pz + this.deltaZ > 0) {
+                this.pz += this.deltaZ
+            } else {
+                this.pz = 0
+                this.deltaZ = 0
+            }
+
+            //reset
+            this.deltaX = 0
+            this.deltaY = 0
+        }
     }
     pl0.setup()
-    console.log(pl0.px)
-    pl0.draw = function () {
-        /* c.fillStyle = 'red'
-        c.fillRect(this.px, this.py, this.sizex, this.sizex) */
-    }
-    pl0.update = function () {
+    getEventManager(pl0)
+    getEventHandler(pl0)
 
-        if(keys.rotateL.pressed)
-            this.angle-=0.01
-        if(keys.rotateR.pressed)
-            this.angle+=0.01
-        if (keys.shot.pressed) {
-            this.deltaZ = 0.2
-        }
 
-        if (keys.right.pressed)
-            this.deltaX = 0.1
-        if (keys.left.pressed)
-            this.deltaX = -0.1
 
-        if (keys.up.pressed)
-            this.deltaY = -0.1
-        if (keys.down.pressed)
-            this.deltaY = 0.1
 
-        this.deltaZ += -0.02
 
-        // double buffer?
-        this.px += this.deltaX
-
-        this.py += this.deltaY
-
-        if (this.pz + this.deltaZ > 0) {
-            this.pz += this.deltaZ
-        } else {
-            this.pz = 0
-            this.deltaZ = 0
-        }
-
-        //reset
-        this.deltaX = 0
-        this.deltaY = 0
-    }
-
+    pl0.on('jump', () => {
+        pl0.deltaZ = 0.2
+    })
     GM.addChild(pl0)
     GM.addChild(new ListShower())
+
     gameLoop = function () {
         GM.update()
         GM.draw()
