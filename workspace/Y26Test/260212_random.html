@@ -402,22 +402,20 @@
     // 疎結合のためのEvent対応ようComponent
     function getEventHandler(target) {
         target.handlers = {}
+        // handler setting up function
         target.on = function (event, handler) {
             this.handlers[event] = handler
         }
 
         // onRequestの有無で、通知されるかがきめる
         // Manager側で、自分の参照をtargetで送って来る
-
+        // event name, who send the event, arguments
         target.onRequest = function (eventName, target, ...args) {
             const handler = this.handlers[eventName]
             if (handler) {
                 handler(target, ...args)
                 return true
-            } else {
-                return false
-            }
-
+            } else return false
         }
 
         target.resetHandlers = function () {
@@ -425,13 +423,12 @@
         }
     }
 
+    // the Event dealer + notifier
     // pushEventなどを使いたいとき
     function getEventManager(target) {
-        // Stateはイベントの処理する対象。
-        // わざと別で定義するのは、StateMachineの導入用のInterfaceとしてです
+        // State: logic object. わざと別で定義するのは、StateMachineの導入用のInterfaceとしてです
         target.state = target
-        // かの有名なEventQueue
-        target.eventQueue = []
+        target.eventQueue = [] // かの有名なEventQueue
         target.pushEvent = function (eName, ...args) {
             this.eventQueue.push([eName, ...args])
         }
@@ -442,8 +439,9 @@
                 logic_object.onRequest(ev, this, ...args)
             this.eventQueue = []
         }
+        
         // masterのイベントを、ChildrenにHandleしてもらう
-        // Eventは一回対応されると消える
+        // 一回対応されると消える
         target.notifyEventToChildren = function () {
             this.objectList.forEach(child => {
                 if (child.onRequest)
@@ -1647,6 +1645,7 @@
 
     }
 
+    // standard state unit
     class Player3DState {
         constructor(master) {
             this.name = ''
@@ -1675,7 +1674,7 @@
                 this.data = master.data.state[n]
             }
             for (const [eventName, action] of Object.entries(this.data.on || {})) {
-
+                // setting up handlers
                 this.on(eventName, (target, EventData) => {
                     if (action.move) {
                         for (const m in action.move) {
@@ -2339,7 +2338,7 @@
             }
             this.counters = [] // 最初のUpdateListじゃないかな
             this.register = new Map()//外部読み込み用
-            console.log('[game manager instanced]')
+            console.log('[SYSTEM]game manager instanced, equip the EventManager if needed')
         }
 
         update_self() {
@@ -2855,38 +2854,41 @@
                 // 逆投影の定数（列ごとに一定）
                 const Kfloor = (this.eyeZ - this.world._floorZ) * FocalLength; // eyeZから床までのスケール
 
-                // 床は y1(=壁下端) から画面下端まで
-                // ⊥距離を求めて、実距離を出す、したらRayのVectorにのかってworld座標を出せる。
-                // Key: dist = (eyeZ-floorZ)*Focallength/denom
-                for (let _y = y1; _y < h; _y += this.sample_height) {
-                    // 画面行 y → 垂直距離 d_perp
+                if(Kfloor>0){
 
-                    // 1. sample the color
-                    const denom = (_y) - h / 2;  // ピクセル中心 (+0.5 推奨)
-                    if (denom <= 0) continue;
-                    const dPerpFloor = Kfloor / denom; // 
-                    const dRay = dPerpFloor / Math.cos(ray_angle) // 画面⊥距離から実距離（魚眼補正逆変換）
-
-                    // 世界座標（同じレイ方向）
-                    const fx = this.px + dx * dRay;
-                    const fy = this.py + dy * dRay;
-                    // タイル繰り返しUV（0..1）
-                    const u = fx - Math.floor(fx);
-                    const v = fy - Math.floor(fy);
-                    const on = this.UVSampling(checkerTex, u, v, 32)
-
-                    // 簡単なフォグ（距離で空色へ寄せる）
-                    const fog = Math.min(1, dPerpFloor / 16);
-                    let r = on ? 0 : 10, g = on ? 0 : 80, b = on ? 0 : 122; // 地面のベース色
-                    r = ((1 - fog) * r + fog * fog_color[0]) | 0;
-                    g = ((1 - fog) * g + fog * fog_color[1]) | 0;
-                    b = ((1 - fog) * b + fog * fog_color[2]) | 0;
-
-                    // 2. fill the rectangle
-                    c.fillStyle = `rgb(${r},${g},${b})`;
-                    c.fillRect(_x, _y, this.sample_width, this.sample_height);
-                }// end of draw floor 
-
+                    // 床は y1(=壁下端) から画面下端まで
+                    // ⊥距離を求めて、実距離を出す、したらRayのVectorにのかってworld座標を出せる。
+                    // Key: dist = (eyeZ-floorZ)*Focallength/denom
+                    for (let _y = y1; _y < h; _y += this.sample_height) {
+                        // 画面行 y → 垂直距離 d_perp
+                        
+                        // 1. sample the color
+                        const denom = (_y) - h / 2;  // ピクセル中心 (+0.5 推奨)
+                        if (denom <= 0) continue;
+                        const dPerpFloor = Kfloor / denom; // 
+                        const dRay = dPerpFloor / Math.cos(ray_angle) // 画面⊥距離から実距離（魚眼補正逆変換）
+                        
+                        // 世界座標（同じレイ方向）
+                        const fx = this.px + dx * dRay;
+                        const fy = this.py + dy * dRay;
+                        // タイル繰り返しUV（0..1）
+                        const u = fx - Math.floor(fx);
+                        const v = fy - Math.floor(fy);
+                        const on = this.UVSampling(checkerTex, u, v, 32)
+                        
+                        // 簡単なフォグ（距離で空色へ寄せる）
+                        const fog = Math.min(1, dPerpFloor / 16);
+                        let r = on ? 0 : 10, g = on ? 0 : 80, b = on ? 0 : 122; // 地面のベース色
+                        r = ((1 - fog) * r + fog * fog_color[0]) | 0;
+                        g = ((1 - fog) * g + fog * fog_color[1]) | 0;
+                        b = ((1 - fog) * b + fog * fog_color[2]) | 0;
+                        
+                        // 2. fill the rectangle
+                        c.fillStyle = `rgb(${r},${g},${b})`;
+                        c.fillRect(_x, _y, this.sample_width, this.sample_height);
+                    }// end of draw floor 
+                }
+                    
 
                 // ====== ★ CEIL CAST: 天井をサンプリング ======
                 const CeilOffset = 0
@@ -2961,11 +2963,12 @@
                 dir = { x: Math.cos(true_ray_angle), y: Math.sin(true_ray_angle) },
                 fwd = { x: Math.cos(this.target.angle), y: Math.sin(this.target.angle) }
 
+            // find sprite id from GM draw list, kind expensive?
             this.GM.flatDrawList?.forEach(spr => {
                 if (spr.id == 'sprite') {
                     const vx = spr.px - this.px, vy = spr.py - this.py
                     const depth = vx * ca + vy * sa
-                    if (depth <= 1e-4 || depth >= distWall) return
+                    if (depth <= 1e-4 || depth >= distWall) return //1)out of depth range
 
                     const side = vx * (-sa) + vy * ca
                     const sideX = w / 2 + side * FocalLength / depth
@@ -2973,7 +2976,7 @@
                     const billWidth = billHeight * (spr.aspect || 1.0)
 
                     const x0 = sideX - billWidth / 2, x1 = sideX + billWidth / 2
-                    if (_x < x0 || _x > x1) return // out of billborad range
+                    if (_x < x0 || _x > x1) return //2) ray out of billborad range, 
 
                     let yBot, yTop, y0, y1
                     if (spr.inverted) {
@@ -3084,6 +3087,7 @@
         getFocalLength() {
             return (w / 2) / Math.tan(this.FOV / 2)  // 投影スケール
         }
+        
         lerp(k, v1, v2) {
             return (1 - k) * v1 + k * v2
         }
