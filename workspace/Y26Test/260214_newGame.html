@@ -39,8 +39,8 @@
 <script id="page basic setting">
     // ===== Canvas =====
     const canvas0 = document.getElementById('c');
-    const c = canvas0.getContext('2d', { alpha: false });
-    const w = canvas0.width, h = canvas0.height;
+    const C = canvas0.getContext('2d', { alpha: false });
+    const W = canvas0.width, H = canvas0.height;
 
     const canvas1 = document.getElementById('c0');
     const c2 = canvas1.getContext('2d', { alpha: false });
@@ -57,33 +57,33 @@
     }
 
     function drawSimpleBG(color) {
-        c.fillStyle = color
-        c.fillRect(0, 0, w, h)
+        C.fillStyle = color
+        C.fillRect(0, 0, W, H)
     }
 
     function drawGrid(cellSize = 50) {
-        const cols = Math.floor(w / cellSize); // 横方向のマス数
-        const rows = Math.floor(h / cellSize); // 縦方向のマス数
+        const cols = Math.floor(W / cellSize); // 横方向のマス数
+        const rows = Math.floor(H / cellSize); // 縦方向のマス数
 
-        c.strokeStyle = 'rgba(0,0,0,0.2)';
-        c.lineWidth = 2
-        c.fillStyle = 'black'
-        c.font = '10px sans-serif' // フォント指定も忘れずに
+        C.strokeStyle = 'rgba(0,0,0,0.2)';
+        C.lineWidth = 2
+        C.fillStyle = 'black'
+        C.font = '10px sans-serif' // フォント指定も忘れずに
 
         for (let i = 0; i <= cols; i++) {
-            c.beginPath();
-            c.moveTo(i * cellSize, 0);
-            c.lineTo(i * cellSize, h);
-            c.stroke();
-            c.fillText(i * cellSize, i * cellSize, 10)
+            C.beginPath();
+            C.moveTo(i * cellSize, 0);
+            C.lineTo(i * cellSize, H);
+            C.stroke();
+            C.fillText(i * cellSize, i * cellSize, 10)
         }
 
         for (let j = 0; j <= rows; j++) {
-            c.beginPath();
-            c.moveTo(0, j * cellSize);
-            c.lineTo(w, j * cellSize);
-            c.stroke();
-            c.fillText(j * cellSize, 0, j * cellSize)
+            C.beginPath();
+            C.moveTo(0, j * cellSize);
+            C.lineTo(W, j * cellSize);
+            C.stroke();
+            C.fillText(j * cellSize, 0, j * cellSize)
         }
     }
 </script>
@@ -196,29 +196,29 @@
     function cameraProjection(target, camera) {
         //target.drawPosition.x = target.position.x
         //target.drawPosition.y = target.position.y
-        c.save()
+        C.save()
 
-        target.drawPosition.x = target.position.x - camera.position.x + w / 2
-        target.drawPosition.y = target.position.y - camera.position.y + h / 2
+        target.drawPosition.x = target.position.x - camera.position.x + W / 2
+        target.drawPosition.y = target.position.y - camera.position.y + H / 2
 
         const scale = 1.5
-        c.scale(scale, scale)
+        C.scale(scale, scale)
         // 左上がスケールの原点
         // 真ん中の点を真ん中に戻せばいい
         // 拡大したら、点の調整もスケールかけるので、最後に/scaleが必要
-        target.drawPosition.x -= ((scale - 1) * w / 2) / scale
-        target.drawPosition.y -= ((scale - 1) * h / 2) / scale
+        target.drawPosition.x -= ((scale - 1) * W / 2) / scale
+        target.drawPosition.y -= ((scale - 1) * H / 2) / scale
 
         target.draw()
 
-        c.restore()
+        C.restore()
 
 
     }
 
     // 四角い判定ボックスと 予測型コリジョン判定用のやつ
     // updateしないと、drawPositionも更新されない
-    function getCollision(target, draw = true, ctx = c) {
+    function getCollision(target, draw = true, ctx = C) {
         target.position = { x: 0, y: 0 }
         target.deltaPosition = { x: 0, y: 0 }
         target.drawPosition = { x: 0, y: 0 }
@@ -256,7 +256,7 @@
             else if (target.deltaPosition.x < 0) target.direction = -1
         }
 
-        target.drawRect = function (ctx = c) {
+        target.drawRect = function (ctx = C) {
             ctx.fillStyle = 'grey'
             ctx.fillRect(target.drawPosition.x, target.drawPosition.y, this.width, this.height)
         }
@@ -430,6 +430,7 @@
     // pushEventなどを使いたいとき
     function getEventManager(target) {
         // State: logic object. わざと別で定義するのは、StateMachineの導入用のInterfaceとしてです
+        // ここは記憶の負担になるな
         if (!target.update) return console.log('man remember to use as gameObject')
         target.state = target
         target.eventQueue = [] // かの有名なEventQueue
@@ -580,7 +581,7 @@
         }
         draw() {
             if (!this.loaded) return
-            c.drawImage(this.img, 0, 0, this.img.width, this.img.height, 0, 0, w, h)
+            C.drawImage(this.img, 0, 0, this.img.width, this.img.height, 0, 0, W, H)
         }
     }
 
@@ -658,8 +659,8 @@
         })
 
         t.drawCounter = function () {
-            c.fillStyle = 'red'
-            c.fillRect(t.drawPosition.x, t.drawPosition.y, 32 * t.counter.progress(), 10)
+            C.fillStyle = 'red'
+            C.fillRect(t.drawPosition.x, t.drawPosition.y, 32 * t.counter.progress(), 10)
         }
 
         addMethodLast(t, 'draw', t, 'drawCounter')
@@ -981,7 +982,7 @@
                 const h1 = v2_p.y // top
                 const h2 = v_p.y // bottom
 
-                if (h1 < h && h2 > 0) if (h2 - h1 > 0)
+                if (h1 < H && h2 > 0) if (h2 - h1 > 0)
                     // draw front height
                     camera.renderQueue.push({
                         depth: x + y + z + 1,
@@ -999,7 +1000,7 @@
                             }
 
                             if (blockImage.loaded) {
-                                c.drawImage(
+                                C.drawImage(
                                     blockImage.img,
                                     coord.x * 48,
                                     coord.y * 48,
@@ -1011,8 +1012,8 @@
                                     Math.ceil(h2 - h1) + 1)
                             }
 
-                            c.fillStyle = this.color;
-                            c.fillRect(
+                            C.fillStyle = this.color;
+                            C.fillRect(
                                 v2_p.x,
                                 v2_p.y,
                                 block_size,
@@ -1037,7 +1038,7 @@
                     const h1 = vt_p.y // top
                     const h2 = vt2_p.y // bottom
 
-                    if (h1 < h && h2 > 0) if (h2 - h1 > 0)
+                    if (h1 < H && h2 > 0) if (h2 - h1 > 0)
 
                         camera.renderQueue.push({
                             depth: x + y + z + 1,
@@ -1051,7 +1052,7 @@
 
                                 if (blockImage.loaded) {
                                     const coord = { x: 12, y: 12 }
-                                    c.drawImage(
+                                    C.drawImage(
                                         blockImage.img,
                                         coord.x * 48,
                                         coord.y * 48,
@@ -1063,8 +1064,8 @@
                                         Math.ceil(h2 - h1) + 1)
                                 }
 
-                                c.fillStyle = this.color;
-                                c.fillRect(
+                                C.fillStyle = this.color;
+                                C.fillRect(
                                     vt_p.x,
                                     vt_p.y,
                                     block_size,
@@ -1145,7 +1146,7 @@
 
             const v2 = {
                 x: v1.x,
-                y: h - v1.y,
+                y: H - v1.y,
                 z: v1.z
             }
             // world to camera(in Maya XYZ)
@@ -1158,8 +1159,8 @@
             // camera(Maya XYZ) to screen(invert the y)
             // camera center! (x, h * Math.cos(rad))
             const v4 = {
-                x: (v3.x) + w / 2,
-                y: (h * Math.cos(rad) - v3.y) + h / 2,
+                x: (v3.x) + W / 2,
+                y: (H * Math.cos(rad) - v3.y) + H / 2,
                 z: v3.z
             }
 
@@ -1172,16 +1173,16 @@
         draw() {
             this.getGMRenderQueue()
 
-            c.save(); // 現在の状態を保存
+            C.save(); // 現在の状態を保存
             // 中心を回転の基準点に移動
-            c.translate(w / 2, h / 2);
-            c.rotate(this.tilt * Math.PI / 180);
-            c.scale(1 + (this.zoom - 1) * 2, this.zoom)
-            c.translate(-w / 2, -h / 2);
+            C.translate(W / 2, H / 2);
+            C.rotate(this.tilt * Math.PI / 180);
+            C.scale(1 + (this.zoom - 1) * 2, this.zoom)
+            C.translate(-W / 2, -H / 2);
             this.renderQueue.forEach(e => {
                 e.draw?.()
             })
-            c.restore(); // 状態を元に戻す
+            C.restore(); // 状態を元に戻す
 
             this.renderQueue.length = 0 // こっちのほうがメモリー的に良いらしい
 
@@ -1301,16 +1302,16 @@
             camera.renderQueue.push({
                 depth: (m.position.x + m.position.y + m.position.z) / m.world.block_size,
                 draw: () => {
-                    c.fillStyle = 'yellow';
-                    c.fillRect(
+                    C.fillStyle = 'yellow';
+                    C.fillRect(
                         vp1.x,
                         vp1.y,
                         m.size.x,
                         (vp2.y - vp1.y)
                     );
 
-                    c.fillStyle = 'red';
-                    c.fillRect(
+                    C.fillStyle = 'red';
+                    C.fillRect(
                         vp2.x,
                         vp2.y,
                         m.size.x,
@@ -1388,16 +1389,16 @@
             camera.renderQueue.push({
                 depth: (this.position.x + this.position.y + this.position.z) / this.world.block_size,
                 draw: () => {
-                    c.fillStyle = this.color;
-                    c.fillRect(
+                    C.fillStyle = this.color;
+                    C.fillRect(
                         vp1.x,
                         vp1.y,
                         this.size.x,
                         (vp2.y - vp1.y)
                     );
 
-                    c.fillStyle = 'rgba(160,0,100,1)';
-                    c.fillRect(
+                    C.fillStyle = 'rgba(160,0,100,1)';
+                    C.fillRect(
                         vp2.x,
                         vp2.y,
                         this.size.x,
@@ -1472,14 +1473,14 @@
                 const startY = 0
                 const lineHeight = 20 // 行間。お好みで調整
 
-                c.fillStyle = 'rgba(0,0,0,0.5)'
-                c.fillRect(0, 0, w / 3, lineHeight * lines.length)
+                C.fillStyle = 'rgba(0,0,0,0.5)'
+                C.fillRect(0, 0, W / 3, lineHeight * lines.length)
 
-                c.fillStyle = 'white'
-                c.font = '10px sans-serif' // フォント指定も忘れずに
+                C.fillStyle = 'white'
+                C.font = '10px sans-serif' // フォント指定も忘れずに
 
                 lines.forEach((line, i) => {
-                    c.fillText(line, 10, startY + 20 + i * lineHeight)
+                    C.fillText(line, 10, startY + 20 + i * lineHeight)
                 })
             } else {
 
@@ -1487,13 +1488,13 @@
                 const startY = 0
                 const lineHeight = 20 // 行間。お好みで調整
 
-                c.fillStyle = 'rgba(0,0,0,0.5)'
-                c.fillRect(0, 0, w / 3, lineHeight * lines.length)
+                C.fillStyle = 'rgba(0,0,0,0.5)'
+                C.fillRect(0, 0, W / 3, lineHeight * lines.length)
 
-                c.fillStyle = 'white'
-                c.font = '10px sans-serif' // フォント指定も忘れずに
+                C.fillStyle = 'white'
+                C.font = '10px sans-serif' // フォント指定も忘れずに
                 lines.forEach((line, i) => {
-                    c.fillText(line, 10, startY + 20 + i * lineHeight)
+                    C.fillText(line, 10, startY + 20 + i * lineHeight)
                 })
             }
         }
@@ -1584,9 +1585,9 @@
                 depth: (target.position.x + target.position.y + target.position.z) / target.world.block_size,
 
                 draw: () => {
-                    c.save()
-                    c.scale(flip, 1);
-                    c.drawImage(
+                    C.save()
+                    C.scale(flip, 1);
+                    C.drawImage(
                         this.spriteImage.img,
                         cropbox.position.x,
                         cropbox.position.y,
@@ -1599,7 +1600,7 @@
                         sh,
                     )
 
-                    c.restore()
+                    C.restore()
 
 
                     showHTML(`${this.master.activeState.name}: ${Math.floor(this.master.counter?.progress() * 10) / 10},currentFrame:${this.currentFrame}`, 11)
@@ -1635,7 +1636,7 @@
                 this.drawPosition.y += this.offset.y
             }
 
-            c.drawImage(
+            C.drawImage(
                 this.spriteImage,
                 cropbox.position.x,
                 cropbox.position.y,
@@ -1789,8 +1790,8 @@
 
         draw() {
             if (this.drawPause) return
-            c.fillStyle = 'red'
-            c.fillRect(0, 0, w, h)
+            C.fillStyle = 'red'
+            C.fillRect(0, 0, W, H)
         }
 
         exportRenderQueue(camera) {
@@ -1804,8 +1805,8 @@
             camera.renderQueue.push({
                 depth: (this.master.position.x + this.master.position.y + this.master.position.z) / this.master.world.block_size,
                 draw: () => {
-                    c.fillStyle = 'red';
-                    c.fillRect(
+                    C.fillStyle = 'red';
+                    C.fillRect(
                         vp1.x - sizex / 2,
                         vp1.y - sizey / 2,
                         sizex,
@@ -1898,10 +1899,10 @@
             // draw time line process bar
             const thickness = 14
             const pos = Math.min(1, Math.sin(this.process() * Math.PI) * 8) * thickness
-            c.fillStyle = 'black'
-            c.fillRect(0, h - pos, w, thickness)
-            c.fillStyle = 'rgba(0,128,255,1)'
-            c.fillRect(0, h - pos, this.process() * w, thickness)
+            C.fillStyle = 'black'
+            C.fillRect(0, H - pos, W, thickness)
+            C.fillStyle = 'rgba(0,128,255,1)'
+            C.fillRect(0, H - pos, this.process() * W, thickness)
         }
         destroy() {
             console.log('destroying')
@@ -2043,13 +2044,13 @@
         1, 0, 0, 0, 0, 3, 3, 1, 0, 0, 2, 0, 1, 1, 1, 1,
         1, 0, 3, 3, 0, 0, 0, 1, 0, 1, 1, 0, 0, 0, 0, 1,
         1, 0, 3, 0, 0, 0, 0, 0, 0, 0, 2, 0, 0, 0, 0, 1,
-        0, 0, 3, 0, 3, 3, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1,
+        0, 0, 3, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1,
         0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1,
-        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2, 2, 1, 1,
-        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1,
-        1, 0, 3, 3, 3, 0, 2, 2, 2, 0, 2, 0, 0, 1, 1, 1,
-        1, 0, 0, 0, 0, 0, 0, 0, 4, 0, 4, 0, 0, 1, 1, 3,
-        1, 0, 3, 3, 3, 0, 2, 2, 2, 0, 4, 0, 0, 1, 1, 3,
+        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1,
+        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1,
+        1, 0, 3, 3, 3, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1,
+        1, 0, 0, 0, 0, 0, 0, 0, 4, 0, 4, 0, 0, 0, 0, 3,
+        1, 0, 3, 3, 3, 0, 0, 2, 0, 0, 4, 0, 0, 0, 0, 3,
         1, 0, 0, 0, 0, 0, 0, 0, 4, 0, 0, 0, 0, 0, 0, 4,
         1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 4, 0, 0, 1, 1, 1,
         1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 4, 0, 0, 1, 1, 1,
@@ -2266,7 +2267,7 @@
 </script>
 
 
-<script id="2D rayCaster">
+<script id="2D rayCaster world engine">
     class GameManager extends GameObject {
         constructor() {
             super()
@@ -2306,7 +2307,7 @@
         }
 
         draw() {
-            c.clearRect(0, 0, w, h)
+            C.clearRect(0, 0, W, H)
 
             //this.camera.draw()
             this.flatDrawList.forEach(e => {
@@ -2497,7 +2498,7 @@
     }
 
     class SpriteAsset extends GameObject {
-        constructor(sprite = { tex: checkerTex, size: 32, color: 'white' }, height = 1, inverted = false, px = 3, py = 3, pz = 0) {
+        constructor(sprite = { tex: checkerTex, size: 32, color: 'white' }, height = 1, inverted = false, px = 6, py = 6, pz = 0) {
             super('sprite', 'sprite')
             this.localx = px
             this.localy = py
@@ -2506,8 +2507,6 @@
             this.inverted = inverted
             this.height = height
         }
-
-
 
         update_self() {
 
@@ -2596,7 +2595,8 @@
             this.target = _target                // 目線高さ（床=0 からの相対）
             this.world = _world // 見るするworld
             this.show2D = show2D
-            this.hits = []
+            this.hits = []// the result of rays
+
             this.defaultTexInfo = {
                 tex: checkerTex,
                 size: 32,
@@ -2622,13 +2622,14 @@
 
         }
 
-        update() {
+        update() { // follow the target
             if (!this.target || !this.world) {
                 this.updatePause = true
                 return console.log('camera reference not enough')
 
             }
             if (this.target.angle == undefined) {
+                this.target.angle = 0
                 return console.log('camera target need angle')
             }
 
@@ -2668,6 +2669,10 @@
                 return
             }
 
+            // draw canvas 2
+            if (this.show2D)
+                this.Render2DView()
+
 
             const dot = (a, b) => a.x * b.x + a.y * b.y;
             const sub = (a, b) => ({ x: a.x - b.x, y: a.y - b.y });
@@ -2678,34 +2683,34 @@
             // --- draw background ---
 
             // z-buffer reset
-            if (!this.zbuf || this.zbuf.length !== w) this.zbuf = new Float32Array(w);
+            if (!this.zbuf || this.zbuf.length !== W) this.zbuf = new Float32Array(W);
             this.zbuf.fill(Infinity);
 
-            // focal length pre-compute 1フレーム1回だけ
+            // FOV フレームごとに更新が必要
             // FocalLengthは、画面と焦点の垂直距離?
             const FocalLength = this.getFocalLength()
 
             // draw World
-            for (let _x = -1/* 0だと中央がなぜかバグる */; _x < w; _x += this.sample_width) {
-                const ray_angle = (_x / w - 0.5) * this.FOV; // (-0.5~0.5) *FOV
+            for (let _x = -1/* 0だと中央がなぜかバグる */; _x < W; _x += this.sample_width) {
+                const ray_angle = (_x / W - 0.5) * this.FOV; // (-0.5~0.5) *FOV
                 const true_ray_angle = this.target.angle + ray_angle;
                 const
                     dx = Math.cos(true_ray_angle),
                     dy = Math.sin(true_ray_angle) // all in canvas coordination, inverted y!
 
-                // DDA（原点オフセットで自己衝突回避）
+                // DDA the wall（原点オフセットで自己衝突回避）
                 const hit = this.raycast2D(this.px + dx * 1e-4, this.py + dy * 1e-4, dx, dy);
 
                 if (this.show2D) {
+                    const sizew = w0 / this.world.width
+                    const sizeh = h0 / this.world.height
 
-                    const sw = w0 / this.world.width
-                    const sh = h0 / this.world.height
-
-                    drawLine(c2,
-                        sw * (this.px + dx * 1e-4),
-                        sw * (this.py + dy * 1e-4),
-                        sw * (this.px + dx * hit.dist),
-                        sw * (this.py + dy * hit.dist),
+                    drawLine(
+                        c2,
+                        sizew * (this.px + dx * 1e-4),
+                        sizew * (this.py + dy * 1e-4),
+                        sizew * (this.px + dx * hit.dist),
+                        sizew * (this.py + dy * hit.dist),
                         'white', 1
                     )
                 }
@@ -2716,18 +2721,18 @@
 
 
                 // 列が sample_width ピッチなので、該当する画面xに深度を入れておく
-                for (let _xi = _x; _xi < Math.min(w, _x + this.sample_width); _xi++) {
+                for (let _xi = _x; _xi < Math.min(W, _x + this.sample_width); _xi++) {
                     // 近いもの優先で最小を保持
                     if (perpDistance < this.zbuf[_xi]) this.zbuf[_xi] = perpDistance;
                 }
 
                 // ★ 正しい投影：上端/下端を別々に計算
-                const wallTop = (h / 2) - ((this.world._ceilZ - this.eyeZ) * FocalLength) / perpDistance;
-                const wallBot = (h / 2) + ((this.eyeZ - this.world._floorZ) * FocalLength) / perpDistance;
+                const wallTop = (H / 2) - ((this.world._ceilZ - this.eyeZ) * FocalLength) / perpDistance;
+                const wallBot = (H / 2) + ((this.eyeZ - this.world._floorZ) * FocalLength) / perpDistance;
 
                 // クリップ
-                const y0 = Math.max(0, Math.min(h - 1, wallTop | 0));
-                const y1 = Math.max(0, Math.min(h, wallBot | 0));
+                const y0 = Math.max(0, Math.min(H - 1, wallTop | 0));
+                const y1 = Math.max(0, Math.min(H, wallBot | 0));
                 const lineH = y1 - y0
                 if (lineH <= 0) continue;
 
@@ -2766,14 +2771,14 @@
                             tex_info.size = 16
                         }
 
-                        c.fillStyle = `rgb(
+                        C.fillStyle = `rgb(
             ${(this.lerp(fog_depth, col[0] * shade, fog_color[0])) | 0},
             ${(this.lerp(fog_depth, col[1] * shade, fog_color[1])) | 0},
             ${(this.lerp(fog_depth, col[2] * shade, fog_color[2])) | 0})`;
 
 
                         // 2. fill Rectangle area
-                        c.fillRect(_x, y0, this.sample_width, y1 - y0);
+                        C.fillRect(_x, y0, this.sample_width, y1 - y0);
 
                     }
 
@@ -2802,17 +2807,16 @@
                 // ====== ★ FLOOR CAST: 壁の下の床をサンプリング ======
                 // 逆投影の定数（列ごとに一定）
                 const Kfloor = (this.eyeZ - this.world._floorZ) * FocalLength; // eyeZから床までのスケール
-
                 if (Kfloor > 0) {
 
                     // 床は y1(=壁下端) から画面下端まで
                     // ⊥距離を求めて、実距離を出す、したらRayのVectorにのかってworld座標を出せる。
                     // Key: dist = (eyeZ-floorZ)*Focallength/denom
-                    for (let _y = y1; _y < h; _y += this.sample_height) {
+                    for (let _y = y1; _y < H; _y += this.sample_height) {
                         // 画面行 y → 垂直距離 d_perp
 
                         // 1. sample the color
-                        const denom = (_y) - h / 2;  // ピクセル中心 (+0.5 推奨)
+                        const denom = (_y) - H / 2;  // ピクセル中心 (+0.5 推奨)
                         if (denom <= 0) continue;
                         const dPerpFloor = Kfloor / denom; // 
                         const dRay = dPerpFloor / Math.cos(ray_angle) // 画面⊥距離から実距離（魚眼補正逆変換）
@@ -2833,8 +2837,8 @@
                         b = ((1 - fog) * b + fog * fog_color[2]) | 0;
 
                         // 2. fill the rectangle
-                        c.fillStyle = `rgb(${r},${g},${b})`;
-                        c.fillRect(_x, _y, this.sample_width, this.sample_height);
+                        C.fillStyle = `rgb(${r},${g},${b})`;
+                        C.fillRect(_x, _y, this.sample_width, this.sample_height);
                     }// end of draw floor 
                 }
 
@@ -2842,12 +2846,11 @@
                 // ====== ★ CEIL CAST: 天井をサンプリング ======
                 const CeilOffset = 0
                 const KCeil = (this.world._ceilZ + CeilOffset - this.eyeZ) * FocalLength; // eyeZから床までのスケール
-
                 if (KCeil > 0) {
 
                     for (let _y = y0 - this.sample_height; _y > 0; _y -= this.sample_height) {
                         // 画面行 y → 垂直距離 d_perp
-                        const denom = h / 2 - (_y);             // ピクセル中心 
+                        const denom = H / 2 - (_y);             // ピクセル中心 
                         if (denom <= 0) continue;
                         const dPerpFloor = KCeil / denom; // Key: dist = (eyeZ-floorZ)*Focallength/(y-H/2)
                         const dRay = dPerpFloor / Math.cos(ray_angle) // 魚眼補正逆変換
@@ -2872,8 +2875,8 @@
                             g = ((1 - fog) * g + fog * fog_color[1]) | 0;
                             b = ((1 - fog) * b + fog * fog_color[2]) | 0;
 
-                            c.fillStyle = `rgb(${r},${g},${b})`;
-                            c.fillRect(_x, _y, this.sample_width, this.sample_height);
+                            C.fillStyle = `rgb(${r},${g},${b})`;
+                            C.fillRect(_x, _y, this.sample_width, this.sample_height);
                         } else {
                         }
                     } // end of Draw ceiling for
@@ -2881,18 +2884,15 @@
 
 
                 // draw the sprite
-                const hits = this.collectColumnSprites(_x, perpDistance, true_ray_angle, FocalLength)
+                const hit_sprite = this.collectColumnSprites(_x, perpDistance, true_ray_angle, FocalLength)
 
-                const ZNew = this.renderColumnFromHits(_x, hits, perpDistance, wallTop, wallBot)
-
-
-
-            } // end of for 
+                const ZNew = this.renderColumnFromHits(_x, hit_sprite, perpDistance, wallTop, wallBot)
 
 
-            // draw canvas 2
-            if (this.show2D)
-                this.Render2DView()
+
+            } // end of for render stripes
+
+
 
 
         }
@@ -2901,7 +2901,7 @@
         // only for billborads and signs
 
 
-        collectColumnSprites(_x, distWall/* 壁は描画されている */, true_ray_angle, FocalLength) {
+        collectColumnSprites(screen_x, distWall/* 壁は描画されている */, true_ray_angle, FocalLength) {
             this.hits.length = 0
             const hits = this.hits
 
@@ -2915,32 +2915,41 @@
             // find sprite id from GM draw list, kind expensive?
             this.GM.flatDrawList?.forEach(spr => {
                 if (spr.id == 'sprite') {
-                    const vx = spr.px - this.px, vy = spr.py - this.py
-                    const depth = vx * ca + vy * sa
+                    const
+                        vx = spr.px - this.px,
+                        vy = spr.py - this.py
+                    const depth = vx * ca + vy * sa // dot to get depth
                     if (depth <= 1e-4 || depth >= distWall) return //1)out of depth range
 
                     const side = vx * (-sa) + vy * ca
-                    const sideX = w / 2 + side * FocalLength / depth
-                    const billHeight = (spr.height || 1.0) * FocalLength / depth
+
+                    // camera to screen (the origin is different)
+                    const _ratio = FocalLength / depth
+
+                    const billHeight = (spr.height || 1.0) * _ratio
                     const billWidth = billHeight * (spr.aspect || 1.0)
 
-                    const x0 = sideX - billWidth / 2, x1 = sideX + billWidth / 2
-                    if (_x < x0 || _x > x1) return //2) ray out of billborad range, 
+                    const sideX = W / 2 + side * _ratio
+                    const
+                        screen_x0 = sideX - billWidth / 2,
+                        screen_x1 = sideX + billWidth / 2
+
+                    if (screen_x < screen_x0 || screen_x > screen_x1) return //2) ray out of billborad range, 
 
                     let yBot, yTop, y0, y1
-                    if (spr.inverted) {
-                        yTop = h / 2 + ((this.eyeZ - (spr.pz || 0)) * FocalLength / depth)
-                        yBot = yTop + billHeight
-                        y0 = Math.max(0, Math.min(h - 1, yTop | 0));
-                        y1 = Math.max(0, Math.min(h, yBot | 0));
-                    } else {
-
-                        yBot = h / 2 + ((this.eyeZ - (spr.pz || 0)) * FocalLength / depth)
+                    if (!spr.inverted) {
+                        yBot = H / 2 + ((this.eyeZ - (spr.pz || 0)) * _ratio)
                         yTop = yBot - billHeight
+                    } else {
+                        yTop = H / 2 + ((this.eyeZ - (spr.pz || 0)) * _ratio)
+                        yBot = yTop + billHeight
+                        y0 = Math.max(0, Math.min(H - 1, yTop | 0));
+                        y1 = Math.max(0, Math.min(H, yBot | 0));
+
                     }
 
                     const sprite = spr.sprite
-                    const u = (_x - x0) / (x1 - x0)
+                    const u = (screen_x - screen_x0) / (screen_x1 - screen_x0)
                     hits.push({
                         depth: depth,
                         kind: 'sprite',
@@ -2964,8 +2973,8 @@
                     const depth = (Px - this.px) * fwd.x + (Py - this.py) * fwd.y
                     if (depth <= 1e-4) return
 
-                    const yTop = h / 2 - ((spr.ceilZ - this.eyeZ) * FocalLength) / depth
-                    const yBot = h / 2 + ((this.eyeZ - spr.floorZ) * FocalLength) / depth
+                    const yTop = H / 2 - ((spr.ceilZ - this.eyeZ) * FocalLength) / depth
+                    const yBot = H / 2 + ((this.eyeZ - spr.floorZ) * FocalLength) / depth
 
                     const sprite = spr.sprite
                     const u = hitS.s
@@ -2980,23 +2989,20 @@
 
                 }
 
-
             })
 
             return hits
         }
 
-        renderColumnFromHits(_x, hits, zbufX, yTopWall, yBotWall) {
+        renderColumnFromHits(screen_x, hits, zbufX, yTopWall, yBotWall) {
             hits.sort((a, b) => b.depth - a.depth)
 
 
             for (const hit of hits) {
                 if (hit.depth > zbufX) continue
-
-
-                let y0 = Math.max(0, hit.yTop | 0);
-                let y1 = Math.min(h, hit.yBot | 0);
-                if (y1 <= y0) continue
+                let screen_y0 = Math.max(0, hit.yTop | 0);
+                let screen_y1 = Math.min(H, hit.yBot | 0);
+                if (screen_y1 <= screen_y0) continue
 
                 /*
                 const isFront = hit.depth < zbufX
@@ -3022,7 +3028,7 @@
 
                 this.UVSampleStrand(
                     hit.sprite?.tex || checkerTex, hit.sprite?.size || 32, hit.sprite?.color || 'white',
-                    _x, y0, y1,
+                    screen_x, screen_y0, screen_y1,
                     hit.yTop, hit.yBot,
                     hit.u
                 )
@@ -3034,7 +3040,7 @@
 
         // get full width focal length
         getFocalLength() {
-            return (w / 2) / Math.tan(this.FOV / 2)  // 投影スケール
+            return (W / 2) / Math.tan(this.FOV / 2)  // 投影スケール
         }
 
         lerp(k, v1, v2) {
@@ -3055,36 +3061,36 @@
 
             return { hit: false };
         }
+
+        // u,v (0.0 to 1.0)
         UVSampling(tex, u, v, texSizeX, texSizeY = texSizeX) {
             const U = Math.floor(u * texSizeX)
             const V = Math.floor(v * texSizeY)
             return tex[V * texSizeX + U]
         }
+
+        // draw strand from (_x,y0) to (_x,y1)
         UVSampleStrand(
             _tex, _texSize, _color,
-            _x, y0, y1,
+            _x, screen_y0, screen_y1,
             yTop, yBot,
             u,
             dotWidth = this.sample_width, dotHeight = this.sample_height
         ) {
-            const strandHeight = y1 - y0
+            const strandHeight = screen_y1 - screen_y0
             for (let y = 0; y < strandHeight; y += dotHeight) {
-                const v = (y0 + y - yTop) / (yBot - yTop) // FIX!!!
+                const v = (screen_y0 + y - yTop) / (yBot - yTop) // FIX!!!
                 //const checkerU = Math.floor(u * 32)
                 //const checkerV = Math.floor(startV * 32)
-                c.save()
+                C.save()
                 const on = this.UVSampling(_tex, u, v, _texSize)
-                if (on == 1) {
-                    c.fillStyle = _color
+                if (on == 1)
+                    C.fillStyle = _color
+                else if (on == 0)
+                    C.fillStyle = 'black'
 
-                    c.fillRect(_x, y0 + y, dotWidth, dotHeight)
-                }
-                else if (on == 0) {
-                    c.fillStyle = 'black'
-                    c.fillRect(_x, y0 + y, dotWidth, dotHeight)
-
-                }
-                c.restore()
+                C.fillRect(_x, screen_y0 + y, dotWidth, dotHeight)
+                C.restore()
             }
         }
 
@@ -3239,27 +3245,27 @@
             const drawLength = width * this.drawLengthPropotion
             if (startPos + drawLength > width) {
                 const drawLength1 = width - startPos
-                const drawEndPos1 = w * drawLength1 / drawLength
-                c.drawImage(
+                const drawEndPos1 = W * drawLength1 / drawLength
+                C.drawImage(
                     img,
                     startPos, 0,
                     drawLength1, height * this.drawHeightPosition,
                     0, 0,
-                    drawEndPos1, h * this.drawHeightPosition)
-                c.drawImage(
+                    drawEndPos1, H * this.drawHeightPosition)
+                C.drawImage(
                     img,
                     0, 0,
                     drawLength - drawLength1, height * this.drawHeightPosition,
                     drawEndPos1 - 1, 0,
-                    w - drawEndPos1 + 1, h * this.drawHeightPosition)
+                    W - drawEndPos1 + 1, H * this.drawHeightPosition)
 
             } else {
-                c.drawImage(
+                C.drawImage(
                     img,
                     startPos, 0,
                     drawLength, height * this.drawHeightPosition,
                     0, 0,
-                    w, h * this.drawHeightPosition)
+                    W, H * this.drawHeightPosition)
 
             }
         }
@@ -3422,13 +3428,13 @@
 
     const pl0 = new GameObject('2dplayer')
     pl0.setup = function () {
-        this.px = 0
-        this.py = 0
+        this.px = 8
+        this.py = 8
         this.pz = 0
         this.deltaX = 0
         this.deltaY = 0
         this.deltaZ = 0
-        this.angle = Math.PI / 2
+        this.angle = -Math.PI / 2
 
         this.tags.add('player')
 
@@ -3462,6 +3468,7 @@
             } else {
                 this.pz = 0
                 this.deltaZ = 0
+                this.pushEvent('land')
             }
 
             //reset
@@ -3471,14 +3478,37 @@
     }
     pl0.setup()
     getEventManager(pl0)
-    
     getEventHandler(pl0)
-    pl0.on('jump', () => {
-        pl0.deltaZ = 0.2
-    })
+
 
     GM.addChild(pl0)
+
+    GM.addChild(new SpriteAsset())
+
     GM.addChild(new ListShower())
+
+
+
+    class playerStateManual extends GameObject {
+        constructor() {
+            super()
+            getEventHandler(this)
+        }
+    }
+
+    const idleState = new playerStateManual()
+    const jumpState = new playerStateManual()
+    idleState.on('jump', () => {
+        pl0.state = jumpState
+        pl0.deltaZ = 0.2
+    })
+    jumpState.on('land', () => {
+        pl0.state = idleState
+    })
+    pl0.state = idleState
+
+
+
 
     gameLoop = function () {
         GM.update()
