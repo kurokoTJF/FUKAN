@@ -24,11 +24,10 @@
 <body>
   <p>[canvas0: c(w,h)]</p>
   <canvas id="c" width="480" height="320"></canvas>
-
   <p>[canvas1: c2(w0,h0)]</p>
-
-
   <canvas id="c0" width="240" height="240"></canvas>
+  <p id="list"></p>
+
 
 </body>
 
@@ -404,6 +403,9 @@
 
   // 疎結合のためのEvent対応ようComponent
   function getEventHandler(target) {
+    if (!target.update) return console.log('man remember to use as gameObject')
+    else console.log('equip [' + target.name + '] as Event Handler')
+
     target.handlers = {}
     // handler setting up function
     target.on = function (event, handler) {
@@ -428,17 +430,18 @@
 
   // the Event notifier
   // pushEventなどを使いたいとき
-  function getEventManager(target) {
+  function getEventManager(target, _AddMethodFirst = true) {
     // State: logic object. わざと別で定義するのは、StateMachineの導入用のInterfaceとしてです
     // ここは記憶の負担になるな
     if (!target.update) return console.log('man remember to use as gameObject')
+    else console.log('equip [' + target.name + '] as Event Manager')
     target.state = target
     target.eventQueue = [] // かの有名なEventQueue
     target.pushEvent = function (eName, ...args) {
       this.eventQueue.push([eName, ...args])
     }
 
-    // 一回きりでhandleする
+    // 一回きりで自分の専属Handlerにhandleしてもらう
     target.dealEvent = function (logic_object = target.state) {
       for (const [ev, ...args] of this.eventQueue)
         logic_object.onRequest(ev, this, ...args)
@@ -446,11 +449,25 @@
     }
 
     // auto dealEvent 
+    if (_AddMethodFirst) {
+      const t = target.update.bind(target)
+      target.update = function () {
+        target.dealEvent()
+        t()
+      }
+    }
 
-    const t = target.update.bind(target)
-    target.update = function () {
-      target.dealEvent()
-      t()
+    target.dealEventByChildren = function (_List) {
+      if (_List.length * this.eventQueue.length > 0) {
+        _List.forEach(e => {
+          if (e.onRequest) {
+            for (const [ev, ...args] of this.eventQueue) {
+              e.onRequest(ev, this, ...args)
+            }
+          }
+        })
+        this.eventQueue.length = 0
+      }
     }
 
     // masterのイベントを、ChildrenにHandleしてもらう
@@ -1501,6 +1518,26 @@
   }
 
 
+  class ListShowerHTML extends GameObject {
+    constructor(name='ListShowerHTML') {
+      super(name)
+      this.text = []
+    }
+    update() {
+    }
+    draw() {
+      if (!this.master) return
+      const text = this.master.showList(this.master.objectList)
+
+      if (text) {
+        showHTML(text, 'list')
+
+      }
+    }
+  }
+
+
+
   class stateRenderer2_5 extends GameObject {
     constructor(master) {
       super()
@@ -2269,8 +2306,8 @@
 
 <script id="2D rayCaster world engine">
   class GameManager extends GameObject {
-    constructor() {
-      super()
+    constructor(name = 'GM', id = 'GM') {
+      super(name, id)
 
       this.flatUpdateList = []//そのままUpdateリスト。じゃないと毎回重い
       this.flatDrawList = []//そのままDrawリスト
@@ -2286,6 +2323,9 @@
       this.counters = [] // 最初のUpdateListじゃないかな
       this.register = new Map()//外部読み込み用
       console.log('[SYSTEM]game manager instanced, equip the EventManager if needed')
+
+      getEventManager(this, false)
+      getEventHandler(this)
     }
 
     update_self() {
@@ -2293,9 +2333,11 @@
 
       this.camera.update()
       // delayed event 
-      this.dealEvent?.()
+      //this.dealEvent?.()
+      this.dealEventByChildren?.(this.flatUpdateList)
       // counterはEventになる、そしてEventとInputと同様
       this.gameLoop_input?.()
+
       // 予測型コリジョン判定用
       this.gameLoop_check?.()
       // 数値の適応と更新
@@ -2313,6 +2355,8 @@
       this.flatDrawList.forEach(e => {
         e.draw?.()
       })
+
+      showHTML(this.showEventQueue(), 'event')
 
     }
 
@@ -3415,7 +3459,7 @@
     right: () => {
     },
     shot: () => {
-      pl0.pushEvent('jump')
+      //pl0.pushEvent('jump')
 
     }
   }
@@ -3437,6 +3481,26 @@
 
 
 <script id="white canvas">
+  const GM = new GameManager('shit_GM')
+
+
+  const p = new GameObject('player')
+  getEventHandler(p)
+
+  GM.addChild(p)
+  GM.addChild(new ListShowerHTML())
+
+
+  GM.pushEvent('shit it')
+  p.on('shit it', () => {
+    showHTML('fine shit it','playerD')
+  })
+
+  gameLoop = function () {
+
+    GM.update()
+    GM.draw()
+  }
 
 </script>
 
