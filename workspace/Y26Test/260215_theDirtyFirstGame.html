@@ -457,20 +457,26 @@
       }
     }
 
+    // これ！
     target.dealEventByChildren = function (_List) {
+      // Eventを処理している最中にEventが発生するから、
+      // 次のFrameに回せるようにコピーしておく！
+      const _currenctFrameEventQueue = target.eventQueue.slice()
+      target.eventQueue.length = 0
       if (target.onRequest)
-        for (const [ev, ...args] of this.eventQueue)
+        for (const [ev, ...args] of _currenctFrameEventQueue)
           target.onRequest(ev, this, ...args)
 
-      if (_List.length * this.eventQueue.length > 0) {
+      if (_List.length * _currenctFrameEventQueue.length > 0) {
         _List.forEach(e => {
           if (e.onRequest) {
-            for (const [ev, ...args] of this.eventQueue)
+            for (const [ev, ...args] of _currenctFrameEventQueue)
               e.onRequest(ev, this, ...args)
 
           }
         })
-        this.eventQueue.length = 0
+        //target.eventQueue.length = 0 最初はここで空にしてしまっている
+
       }
     }
 
@@ -805,6 +811,7 @@
       this.folded = false // toggle this to fold a folder group
       this.id = id
       this.name = name
+      this.deleted = false
       this.objectList = []
       this.drawList = []
       this.tags = new Set()
@@ -893,6 +900,8 @@
       return e
     }
     destroy() {
+      if (this.deleted) return
+      this.deleted = true
       console.log(`${this.constructor.name} destroyed`);
     }
 
@@ -2081,18 +2090,18 @@
   // ===== Map (16x16) =====
   const worldMap32 = [
     1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
-    1, 0, 0, 0, 0, 0, 0, 1, 0, 0, 2, 0, 1, 1, 1, 1,
-    1, 0, 0, 0, 0, 3, 3, 1, 0, 0, 2, 0, 1, 1, 1, 1,
-    1, 0, 3, 3, 0, 0, 0, 1, 0, 1, 1, 0, 0, 0, 0, 1,
-    1, 0, 3, 0, 0, 0, 0, 0, 0, 0, 2, 0, 0, 0, 0, 1,
-    0, 0, 3, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1,
-    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1,
-    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1,
-    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1,
-    1, 0, 3, 3, 3, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1,
+    1, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 1, 1, 1,
+    1, 0, 0, 0, 0, 3, 3, 1, 0, 0, -1, 0, 1, 1, 1, 1,
+    1, 0, 3, 3, 0, 0, 0, 1, 0, 1, -1, 0, 0, 0, 0, 1,
+    1, 0, 3, 0, 0, 0, 0, -1, 0, 0, -1, 0, 0, 0, 0, 1,
+    -2, 0, 3, 0, 0, -1, 0, -1, 0, 0, -1, 0, 0, 0, 0, 1,
+    -2, 0, 0, 0, 0, 0, 0, -1, 0, 0, -1, 0, 0, 0, 0, 1,
+    -2, 0, 0, 0, 0, 0, 0, -1, -1, -1, -1, 0, 0, 0, 1, 1,
+    -2, 0, 0, 0, 0, 0, -1, -1, -1, -1, -1, 0, 0, 0, 1, 1,
+    1, 0, 3, 3, 3, 0, -1, -1, -1, -1, -1, 0, 0, 0, 0, 1,
     1, 0, 0, 0, 0, 0, 0, 0, 4, 0, 4, 0, 0, 0, 0, 3,
     1, 0, 3, 3, 3, 0, 0, 2, 0, 0, 4, 0, 0, 0, 0, 3,
-    1, 0, 0, 0, 0, 0, 0, 0, 4, 0, 0, 0, 0, 0, 0, 4,
+    1, 0, 0, 0, 0, 0, 0, 0, 4, 0, -1, 0, 0, 0, 0, 4,
     1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 4, 0, 0, 1, 1, 1,
     1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 4, 0, 0, 1, 1, 1,
     1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
@@ -2634,6 +2643,7 @@
       this.px = 15
       this.py = 4
       this.pz = 0
+      this.angle = 0
       this.eyeHeight = 0.4
       this.eyeZ = 0.4
       this.FOV = Math.PI / 3// angle of view
@@ -2659,13 +2669,15 @@
 
     gatherReference(gm) {
       this.GM = gm
-      if (!this.target || !this.world) {
+      if (!this.target || this.target.deleted || !this.world || this.world.deleted) {
+        this.target = null
+        this.world = null
         this.GM.objectList.forEach(e => {
           if (e.id == 'worldArray' && !this.world) {
             this.world = e
             console.log('[camera] locate a world')
           }
-          if (e.id == 'Player3DWithRotation' && !this.target) {
+          if (e.id == 'player' && !this.target) {
             this.target = e
             console.log('[camera] locate a target')
           }
@@ -2678,17 +2690,18 @@
     update() { // follow the target
       if (!this.target || !this.world) {
         this.updatePause = true
-        return console.log('camera reference not enough')
-
+        return showHTML('camera reference not enough', 'camera_channel')
       }
+
       if (this.target.angle == undefined) {
         this.target.angle = 0
-        return console.log('camera target need angle')
+        return showHTML('camera target need angle', 'camera_channel')
       }
 
+      this.angle = this.target.angle
       const
-        _dx = -Math.cos(this.target.angle),
-        _dy = -Math.sin(this.target.angle);
+        _dx = -Math.cos(this.angle),
+        _dy = -Math.sin(this.angle);
 
       this.pz = this.target.pz
       this.eyeZ = this.pz + this.eyeHeight
@@ -2717,10 +2730,7 @@
       // cast 2D ray for loop 
       //    check and draw wall, ceil, floor
       //    check and draw sprites  
-      if (!this.target || !this.world) {
-        this.drawPause = true
-        return
-      }
+      if (!this.world) return
 
       // draw canvas 2
       if (this.show2D)
@@ -2748,7 +2758,7 @@
 
 
         const ray_angle = (_x / W - 0.5) * this.FOV; // (-0.5~0.5) *FOV
-        const true_ray_angle = this.target.angle + ray_angle;
+        const true_ray_angle = this.angle + ray_angle;
         const
           dx = Math.cos(true_ray_angle),
           dy = Math.sin(true_ray_angle) // all in canvas coordination, inverted y!
@@ -2884,12 +2894,24 @@
             const v = fy - Math.floor(fy);
             const on = this.UVSampling(checkerTex, u, v, 32)
 
-            // 簡単なフォグ（距離で空色へ寄せる）
-            const fog = Math.min(1, dPerpFloor / 16);
-            let r = on ? 0 : 10, g = on ? 0 : 80, b = on ? 0 : 122; // 地面のベース色
-            r = ((1 - fog) * r + fog * fog_color[0]) | 0;
-            g = ((1 - fog) * g + fog * fog_color[1]) | 0;
-            b = ((1 - fog) * b + fog * fog_color[2]) | 0;
+            const floorID = this.world.atPos(Math.floor(fx), Math.floor(fy))
+
+            let r = 255, g = 255, b = 133
+            if (floorID == 0) {
+
+              // 簡単なフォグ（距離で空色へ寄せる）
+              const fog = Math.min(1, dPerpFloor / 16);
+              r = on ? 0 : 10
+              g = on ? 0 : 80
+              b = on ? 0 : 122; // 地面のベース色
+              r = ((1 - fog) * r + fog * fog_color[0]) | 0;
+              g = ((1 - fog) * g + fog * fog_color[1]) | 0;
+              b = ((1 - fog) * b + fog * fog_color[2]) | 0;
+            } else if (floorID == -1) {
+              r=255,g=0,b=0
+            } else if (floorID == -2) {
+              
+            }
 
             // 2. fill the rectangle
             C.fillStyle = `rgb(${r},${g},${b})`;
@@ -2970,11 +2992,11 @@
       const hits = this.hits
 
       const
-        ca = Math.cos(this.target.angle),
-        sa = Math.sin(this.target.angle)
+        ca = Math.cos(this.angle),
+        sa = Math.sin(this.angle)
       const
         dir = { x: Math.cos(true_ray_angle), y: Math.sin(true_ray_angle) },
-        fwd = { x: Math.cos(this.target.angle), y: Math.sin(this.target.angle) }
+        fwd = { x: Math.cos(this.angle), y: Math.sin(this.angle) }
 
       // find sprite id from list every ray, kind expensive?
       this.sprite_list.forEach(spr => {
@@ -3210,7 +3232,7 @@
         if (dist > maxDist) break;
 
         hitId = this.world.atPos(mapX, mapY)
-        if (hitId && dist > this.followDist)
+        if (hitId > 0 && dist > this.followDist)
           return {
             hit: true, dist, id: hitId,
             side, dir: { x: searchDirX, y: searchDirY },
@@ -3227,22 +3249,41 @@
 
     }
     Render2DView() {
-
+      let target_px = 0, target_py = 0, target_angle = 0
+      if (this.target) {
+        target_px = this.target.px
+        target_py = this.target.py
+        target_angle = this.target.angle
+      } else {
+        target_px = this.px
+        target_py = this.py
+        target_angle = this.angle
+      }
       c2.fillStyle = 'grey'
       c2.fillRect(0, 0, w0, h0)
       const sw = w0 / this.world.width
       const sh = h0 / this.world.height
-      for (let y = 0; y < this.world.height; y++) for (let x = 0; x < this.world.width; x++)
-        if (this.world.map[x + y * this.world.width] > 0) {
+      for (let y = 0; y < this.world.height; y++) for (let x = 0; x < this.world.width; x++) {
+        const on = this.world.atPos(x, y)
+        if (on > 0) {
           c2.fillStyle = 'black'
           c2.fillRect(x * sw + 1, y * sh + 1, sw - 1, sh - 1)
+        } else if (on == -1) {
+          c2.fillStyle = 'red'
+          c2.fillRect(x * sw + 1, y * sh + 1, sw - 1, sh - 1)
+
+        } else if (on == -2) {
+          c2.fillStyle = 'yellow'
+          c2.fillRect(x * sw + 1, y * sh + 1, sw - 1, sh - 1)
+
         }
+      }
 
 
       const arraylength = 20
       const targetsizex = 20 // なるべくDecouplingしたい！
       c2.beginPath();
-      c2.arc(this.target.px * sw, this.target.py * sh, targetsizex / 2, 0, 2 * Math.PI)
+      c2.arc(target_px * sw, target_py * sh, targetsizex / 2, 0, 2 * Math.PI)
       c2.fillStyle = "red"
       c2.fill()
 
@@ -3263,10 +3304,10 @@
 
 
       drawLine(c2,
-        this.target.px * sw,
-        this.target.py * sh,
-        this.target.px * sw + arraylength * Math.cos(this.target.angle),
-        this.target.py * sh + arraylength * Math.sin(this.target.angle)
+        target_px * sw,
+        target_py * sh,
+        target_px * sw + arraylength * Math.cos(target_angle),
+        target_py * sh + arraylength * Math.sin(target_angle)
       )
 
     }
@@ -3345,15 +3386,18 @@
 
   class Player3DWithRotation extends GameObject {
     constructor() {
-      super('player', 'Player3DWithRotation')
+      super('player', 'player')
       this.angle = Math.PI / 2
       this.px = 13.5
       this.py = 5.5
       this.pz = 0
+      this.deltaX = 0
+      this.deltaY = 0
+      this.deltaZ = 0
       this.sizex = 10
       this.sizey = 10
       this.moveSpeed = 0.01
-      this.rotSpeed = 0.01
+      this.rotSpeed = 0.02
       this.world = null
       //this.tags.add('player')
     }
@@ -3405,8 +3449,37 @@
       const step = this.moveSpeed * (keys['AltLeft'] ? 1.7 : 1.0) //* dt;
 
       const npx = this.px + mx * step, npy = this.py + my * step;
-      if (!this.world.atPos(Math.floor(npx), Math.floor(this.py))) this.px = npx;
-      if (!this.world.atPos(Math.floor(this.px), Math.floor(npy))) this.py = npy;
+      const nwx = this.world.atPos(Math.floor(npx), Math.floor(this.py))
+      const nwy = this.world.atPos(Math.floor(this.px), Math.floor(npy))
+      if (nwx <= 0)
+        this.px = npx;
+
+      if (nwy <= 0)
+        this.py = npy;
+
+      if (nwx == -1 && this.pz == 0) {
+        GM.pushEvent(eventID.playerDie)
+      }
+      if (nwy == -1 && this.pz == 0) {
+        GM.pushEvent(eventID.playerDie)
+      }
+
+      if (nwx == -2 && this.pz == 0) {
+        GM.pushEvent(eventID.playerGoal)
+      }
+      if (nwy == -2 && this.pz == 0) {
+        GM.pushEvent(eventID.playerGoal)
+      }
+
+      const npz = this.pz + this.deltaZ
+      if (npz > 0) {
+        this.pz = npz
+        this.deltaZ -= 0.001
+      } else {
+        this.pz = 0
+        this.deltaZ = 0
+      }
+
 
       if (keys.turnLeft.pressed) this.angle -= this.rotSpeed //* dt;
       if (keys.turnRight.pressed) this.angle += this.rotSpeed //* dt;
@@ -3468,7 +3541,7 @@
     },
     shot: () => {
       //pl0.pushEvent('jump')
-      GM.pushEvent('start')
+      GM.pushEvent(eventID.space)
     }
   }
 
@@ -3491,16 +3564,8 @@
 <script id="white canvas">
   const GM = new GameManager('pauseMenu_GM')
 
-  const p = new Player3DWithRotation()
-  p.setup = function () {
-    this.tags.add(eventID.eventStop)
-    this.counter = 0
-    getEventHandler(this)
-  }
-  p.setup()
-  p.addChild(new SpriteAsset(0, 0, 0, 0.3))
+  const sa = new SpriteAsset(0,0,0,0.3,{tex:Lily32,size:32,color:'white'})
 
-  GM.addChild(p)
   GM.addChild(new WorldArray())
 
   const rcc = new RayCasterCamera()
@@ -3508,32 +3573,62 @@
   GM.addChild(rcc)
   GM.addChild(new SpriteAsset(5, 5, 0))
 
+  GM.switchPauseByTag(eventID.eventStop, true, 0)
+  GM.switchPauseByTag(eventID.eventStop, true, 1)
+  GM._needsRebuild = true
 
-  GM.pushEvent('stop')
-  GM.on('stop', () => {
-    GM.switchPauseByTag(eventID.eventStop, true, 0)
-    GM.switchPauseByTag(eventID.eventStop, true, 1)
-    GM._needsRebuild = true
-  })
-  GM.on('start', () => {
-    GM.removeByTag(eventID.eventStart)
+
+
+  GM.on('startGame', () => {
+    console.log('GM handle startGame')
+    GM.removeByTag('startMenu')
     GM.switchPauseByTag(eventID.eventStop, false, 0)
     GM.switchPauseByTag(eventID.eventStop, false, 1)
+    GM._needsRebuild = true
+    const p = new Player3DWithRotation()
+    p.tags.add('jumper').add(eventID.eventStop)
+    p.addChild(sa)
+    getEventHandler(p)
+    p.on(eventID.space, () => {
+      showHTML('player jump', 'playerChannel')
+      p.deltaZ = 0.08
+    })
+    GM.addChild(p)
 
     GM._needsRebuild = true
   })
-  p.on('start', () => {
-    console.log('starat!!!')
+
+
+  GM.on(eventID.playerDie, () => {
+    GM.removeByTag('jumper')
+    GM.addChild(sm)
+    sm.msg = 'You DIE, do not try to swim in lava, Press SPACE to retry'
+  })
+
+  GM.on(eventID.playerGoal, () => {
+    GM.removeByTag('jumper')
+    GM.addChild(sm)
+    sm.msg = 'You WIN!!! Thank you for playing, Press Space to play again'
   })
 
   const sm = new GameObject('startmenu')
-  sm.tags.add(eventID.eventStart)
+  sm.msg = 'Press SPACE to Start'
+  getEventHandler(sm)
+  sm.tags.add('startMenu')
   sm.draw = function () {
     C.fillStyle = 'black'
     C.fillRect(0, 0, W, H)
     C.fillStyle = 'white'
-    C.fillText('Press SPACE to Start', W / 2, H / 2)
+    C.fillText(this.msg, W / 2 - 100, H / 2)
   }
+
+  sm.on(eventID.space, () => {
+    console.log('sm send startGame')
+    GM.pushEvent('startGame')
+
+  })
+
+
 
   GM.addChild(sm)
 
