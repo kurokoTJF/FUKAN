@@ -1,0 +1,735 @@
+<!doctype html>
+<html lang="ja">
+
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>WebGPU Voxel Raycaster (DDA) - Single HTML</title>
+  <style>
+    :root {
+      color-scheme: light dark;
+    }
+
+    body {
+      margin: 12px;
+      font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+    }
+
+    h1 {
+      font-size: 1.1rem;
+      margin: 0 0 8px;
+    }
+
+    .row {
+      display: grid;
+      grid-template-columns: 1fr 320px;
+      gap: 12px;
+    }
+
+    #wrap {
+      position: relative;
+    }
+
+    #view {
+      width: 100%;
+      max-width: 960px;
+      border: 1px solid #8886;
+      border-radius: 8px;
+      image-rendering: pixelated;
+    }
+
+    .hud {
+      position: absolute;
+      left: 8px;
+      top: 8px;
+      padding: 6px 8px;
+      background: color-mix(in oklab, Canvas, transparent 25%);
+      border: 1px solid #8886;
+      border-radius: 6px;
+      font: 12px/1.3 ui-monospace, SFMono-Regular, Consolas, monospace;
+      backdrop-filter: blur(4px);
+    }
+
+    .panel {
+      border: 1px solid #8886;
+      border-radius: 8px;
+      padding: 10px;
+    }
+
+    .panel h2 {
+      font-size: 1rem;
+      margin: 0 0 8px;
+    }
+
+    label {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin: 6px 0;
+    }
+
+    input[type="range"] {
+      width: 100%;
+    }
+
+    .btn {
+      padding: 6px 10px;
+      border: 1px solid #8888;
+      border-radius: 6px;
+      background: #eee;
+      cursor: pointer;
+    }
+
+    .btn:active {
+      transform: translateY(1px);
+    }
+
+    .kbd {
+      padding: 1px 4px;
+      border: 1px solid #aaa;
+      border-radius: 3px;
+      background: #f6f6f6;
+    }
+
+    .note {
+      font-size: 12px;
+      opacity: 0.8;
+    }
+
+    .warn {
+      padding: 10px;
+      border: 1px solid #f886;
+      border-radius: 8px;
+      margin: 10px 0;
+    }
+
+    code {
+      font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+    }
+  </style>
+</head>
+
+<body>
+  <h1>3D Voxel レンダリング（Amanatides &amp; Woo DDA / WebGPU）</h1>
+
+  <div id="noWebGPU" class="warn" style="display:none">
+    このブラウザは WebGPU に対応していないようです。<br />
+    Chrome / Edge の最新版で、必要なら <code>chrome://flags</code> の WebGPU を有効にしてください。
+  </div>
+
+  <div class="row">
+    <div id="wrap">
+      <canvas id="view" width="960" height="540"></canvas>
+      <div class="hud" id="stats">—</div>
+    </div>
+
+    <div class="panel">
+      <h2>コントロール</h2>
+      <div>
+        <label>解像度縮小（ピクセル化：値が大きいほど粗い）
+          <input id="scale" type="range" min="1" max="8" value="4">
+        </label>
+        <label>視野角（FOV°）
+          <input id="fov" type="range" min="40" max="100" value="75">
+        </label>
+        <label>最大距離（t）
+          <input id="maxDist" type="range" min="16" max="200" value="90">
+        </label>
+        <label>ステップ上限（安全）
+          <input id="maxSteps" type="range" min="64" max="2048" value="512">
+        </label>
+        <label>露出（全体の明るさ）
+          <input id="exposure" type="range" min="0" max="200" value="110">
+        </label>
+        <div style="display:flex; gap:8px; flex-wrap:wrap; margin:8px 0;">
+          <button class="btn" id="regen">ワールド再生成</button>
+          <button class="btn" id="toggleWire">ワイヤー（面の法線色）</button>
+        </div>
+        <div class="note">
+          移動: <span class="kbd">W</span><span class="kbd">A</span><span class="kbd">S</span><span class="kbd">D</span> /
+          上下: <span class="kbd">Space</span><span class="kbd">C</span> /
+          走る: <span class="kbd">Shift</span><br>
+          マウスドラッグ（キャンバス上）で視点回転。
+        </div>
+      </div>
+      <hr>
+      <h2>現在値</h2>
+      <pre class="note" id="info" style="white-space:pre-wrap">—</pre>
+    </div>
+  </div>
+
+  <script>
+    /* =========================
+       CPU側ユーティリティ（ワールド生成＆入力）
+       ========================= */
+    class Vec3 {
+      constructor(x = 0, y = 0, z = 0) { this.x = x; this.y = y; this.z = z; }
+      set(x, y, z) { this.x = x; this.y = y; this.z = z; return this; }
+      add(v) { this.x += v.x; this.y += v.y; this.z += v.z; return this; }
+      mul(s) { this.x *= s; this.y *= s; this.z *= s; return this; }
+      clone() { return new Vec3(this.x, this.y, this.z); }
+      norm() { const l = Math.hypot(this.x, this.y, this.z) || 1; this.x /= l; this.y /= l; this.z /= l; return this; }
+      static fromYawPitch(yawDeg, pitchDeg) {
+        const yaw = yawDeg * Math.PI / 180, pitch = pitchDeg * Math.PI / 180;
+        const cy = Math.cos(yaw), sy = Math.sin(yaw);
+        const cp = Math.cos(pitch), sp = Math.sin(pitch);
+        return new Vec3(sy * cp, -sp, cy * cp).norm();
+      }
+    }
+
+    function clamp(v, a, b) { return Math.max(a, Math.min(b, v)); }
+    function mulberry32(a) { return function () { let t = a += 0x6D2B79F5; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; }
+    function noise2d(x, z) {
+      const xi = Math.floor(x), zi = Math.floor(z);
+      const xf = x - xi, zf = z - zi;
+      function hash(i, j) {
+        const seed = ((i * 73856093) ^ (j * 19349663)) >>> 0;
+        return mulberry32(seed)();
+      }
+      const v00 = hash(xi, zi), v10 = hash(xi + 1, zi), v01 = hash(xi, zi + 1), v11 = hash(xi + 1, zi + 1);
+      const v0 = v00 + (v10 - v00) * xf;
+      const v1 = v01 + (v11 - v01) * xf;
+      return v0 + (v1 - v0) * zf;
+    }
+
+    /* =========================
+       ワールド（Uint8Array -> 3D texture r8uint）
+       ========================= */
+    const WORLD_W = 48, WORLD_H = 24, WORLD_D = 48; // 元HTMLと同じ
+    // 0=空気, 1=草土, 2=石, 3=木
+    function createWorld(seed = Math.random()) {
+      const data = new Uint8Array(WORLD_W * WORLD_H * WORLD_D);
+      const idx = (x, y, z) => (y * WORLD_D + z) * WORLD_W + x;
+
+      // y=0 地面（石）
+      for (let x = 0; x < WORLD_W; x++)for (let z = 0; z < WORLD_D; z++) data[idx(x, 0, z)] = 2;
+
+      const rng = mulberry32(Math.floor(seed * 0x7fffffff));
+
+      // 起伏（草土）
+      for (let x = 0; x < WORLD_W; x++) {
+        for (let z = 0; z < WORLD_D; z++) {
+          const h = 1 + Math.floor(5 * noise2d(x * 0.12, z * 0.12));
+          for (let y = 1; y < Math.min(WORLD_H, h + 1); y++) data[idx(x, y, z)] = 1;
+        }
+      }
+      // 柱・壁（石/木）
+      for (let i = 0; i < 220; i++) {
+        const x = 2 + Math.floor(rng() * (WORLD_W - 4));
+        const z = 2 + Math.floor(rng() * (WORLD_D - 4));
+        const ht = 3 + Math.floor(rng() * 8);
+        const id = (rng() < 0.7) ? 2 : 3;
+        for (let y = 1; y < Math.min(WORLD_H, ht); y++) data[idx(x, y, z)] = id;
+        if (rng() < 0.3 && x + 1 < WORLD_W) for (let y = 1; y < Math.min(WORLD_H, ht - 1); y++) data[idx(x + 1, y, z)] = id;
+        if (rng() < 0.3 && z + 1 < WORLD_D) for (let y = 1; y < Math.min(WORLD_H, ht - 1); y++) data[idx(x, y, z + 1)] = id;
+      }
+      // 広場
+      for (let x = 18; x < 30; x++) for (let z = 18; z < 30; z++) for (let y = 1; y < 6; y++) data[idx(x, y, z)] = 0;
+
+      return data;
+    }
+
+    /* =========================
+       WebGPU 初期化
+       ========================= */
+    const canvas = document.getElementById('view');
+    const statsEl = document.getElementById('stats');
+    const infoEl = document.getElementById('info');
+    const noWebGPU = document.getElementById('noWebGPU');
+
+    let internalScale = 4;
+    let fovDeg = 75;
+    let maxDistance = 90;
+    let maxSteps = 512;
+    let exposure = 1.10;
+    let showNormals = false;
+
+    let camPos = new Vec3(10.5, 3.0, 10.5);
+    let yaw = 45, pitch = -10;
+
+    let keyState = new Map();
+    let dragging = false, lastMouse = null;
+
+    window.addEventListener('keydown', e => keyState.set(e.code, true));
+    window.addEventListener('keyup', e => keyState.set(e.code, false));
+
+    canvas.addEventListener('mousedown', e => { dragging = true; lastMouse = { x: e.clientX, y: e.clientY }; });
+    window.addEventListener('mouseup', () => { dragging = false; lastMouse = null; });
+    window.addEventListener('mousemove', e => {
+      if (!dragging) return;
+      if (!lastMouse) { lastMouse = { x: e.clientX, y: e.clientY }; return; }
+      const dx = e.clientX - lastMouse.x;
+      const dy = e.clientY - lastMouse.y;
+      lastMouse = { x: e.clientX, y: e.clientY };
+      const sens = 0.2;
+      yaw = yaw + dx * sens;
+      pitch = clamp(pitch + dy * sens, -89.5, 89.5);
+    });
+
+    const scaleEl = document.getElementById('scale');
+    const fovEl = document.getElementById('fov');
+    const maxDistEl = document.getElementById('maxDist');
+    const maxStepsEl = document.getElementById('maxSteps');
+    const exposureEl = document.getElementById('exposure');
+    const regenBtn = document.getElementById('regen');
+    const toggleWireBtn = document.getElementById('toggleWire');
+
+    scaleEl.addEventListener('input', () => internalScale = parseInt(scaleEl.value, 10));
+    fovEl.addEventListener('input', () => fovDeg = parseFloat(fovEl.value));
+    maxDistEl.addEventListener('input', () => maxDistance = parseFloat(maxDistEl.value));
+    maxStepsEl.addEventListener('input', () => maxSteps = parseInt(maxStepsEl.value, 10));
+    exposureEl.addEventListener('input', () => exposure = Math.max(0.01, parseInt(exposureEl.value, 10) / 100));
+    toggleWireBtn.addEventListener('click', () => showNormals = !showNormals);
+
+    let device, context, pipeline, bindGroup, uniformBuf, worldTex, worldSampler;
+    let presentationFormat;
+    let worldData = createWorld();
+
+    regenBtn.addEventListener('click', async () => {
+      worldData = createWorld();
+      if (device) uploadWorldTexture(device, worldTex, worldData);
+    });
+
+    async function initWebGPU() {
+      if (!navigator.gpu) {
+        noWebGPU.style.display = 'block';
+        return;
+      }
+      const adapter = await navigator.gpu.requestAdapter();
+      if (!adapter) {
+        noWebGPU.style.display = 'block';
+        return;
+      }
+      device = await adapter.requestDevice();
+      context = canvas.getContext('webgpu');
+      presentationFormat = navigator.gpu.getPreferredCanvasFormat();
+      context.configure({ device, format: presentationFormat, alphaMode: 'opaque' });
+
+      // 3D texture（r8uint）: world[x,y,z] を格納
+      worldTex = device.createTexture({
+        size: { width: WORLD_W, height: WORLD_H, depthOrArrayLayers: WORLD_D },
+        dimension: '3d',
+        format: 'r8uint',
+        usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST
+      });
+      uploadWorldTexture(device, worldTex, worldData);
+
+      // sampler（使わないけど、今後の拡張用に置いてもOK）
+      worldSampler = device.createSampler({ magFilter: 'nearest', minFilter: 'nearest' });
+
+      // uniform（16バイト境界を意識して詰める）
+      // layout:
+      // 0: camPos.xyz, time
+      // 1: yaw,pitch,fovRad, aspect
+      // 2: maxDist, maxSteps, exposure, scale
+      // 3: flags(showNormals), WORLD_W, WORLD_H, WORLD_D
+      uniformBuf = device.createBuffer({
+        size: 16 * 4,
+        usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
+      });
+
+      const shader = device.createShaderModule({ code: wgslSource() });
+
+      pipeline = device.createRenderPipeline({
+        layout: 'auto',
+        vertex: { module: shader, entryPoint: 'vs_main' },
+        fragment: { module: shader, entryPoint: 'fs_main', targets: [{ format: presentationFormat }] },
+        primitive: { topology: 'triangle-list', cullMode: 'none' }
+      });
+
+      bindGroup = device.createBindGroup({
+        layout: pipeline.getBindGroupLayout(0),
+        entries: [
+          { binding: 0, resource: { buffer: uniformBuf } },
+          { binding: 1, resource: worldTex.createView({ dimension: '3d' }) },
+        ]
+      });
+
+      requestAnimationFrame(loop);
+    }
+
+    function uploadWorldTexture(device, tex, data) {
+      // WebGPU writeTexture の bytesPerRow は 256アライン推奨。
+      // 3D書き込みは depthOrArrayLayers を使うので、各スライスを行列として詰める。
+      // ここではシンプルに「Zをdepth」にして、(W x H x D) を連続で渡す。
+      // ただし bytesPerRow は 256倍数にする必要があるのでパディングする。
+      const bytesPerPixel = 1;
+      const unpaddedBytesPerRow = WORLD_W * bytesPerPixel;
+      const align = 256;
+      const paddedBytesPerRow = Math.ceil(unpaddedBytesPerRow / align) * align;
+      const padded = new Uint8Array(paddedBytesPerRow * WORLD_H * WORLD_D);
+
+      // data のレイアウト: idx=(y*D+z)*W + x
+      // writeTexture が期待するレイアウト: sliceごとに rows
+      // ここでは slice=z としてもいいが、すでに data は (y,z,x) の順なので
+      // スライス順を worldTex の (x,y,z) に合わせて「zを深さ」にして詰め直す。
+      let dst = 0;
+      for (let z = 0; z < WORLD_D; z++) {
+        for (let y = 0; y < WORLD_H; y++) {
+          // row start
+          const rowStart = dst;
+          for (let x = 0; x < WORLD_W; x++) {
+            const srcIdx = (y * WORLD_D + z) * WORLD_W + x;
+            padded[dst++] = data[srcIdx];
+          }
+          // pad
+          dst = rowStart + paddedBytesPerRow;
+        }
+      }
+
+      device.queue.writeTexture(
+        { texture: tex },
+        padded,
+        { bytesPerRow: paddedBytesPerRow, rowsPerImage: WORLD_H },
+        { width: WORLD_W, height: WORLD_H, depthOrArrayLayers: WORLD_D }
+      );
+    }
+
+    /* =========================
+       メインループ（更新 & 描画）
+       ========================= */
+    function update(dt) {
+      const speed = (keyState.get('ShiftLeft') || keyState.get('ShiftRight')) ? 12 : 5;
+      const step = speed * dt;
+
+      const forward = Vec3.fromYawPitch(yaw, 0);
+      const right = new Vec3(Math.cos((yaw + 90) * Math.PI / 180), 0, Math.sin((yaw + 90) * Math.PI / 180)).norm();
+
+      if (keyState.get('KeyW')) camPos.add(forward.clone().mul(step));
+      if (keyState.get('KeyS')) camPos.add(forward.clone().mul(-step));
+      if (keyState.get('KeyA')) camPos.add(right.clone().mul(-step));
+      if (keyState.get('KeyD')) camPos.add(right.clone().mul(step));
+      if (keyState.get('Space')) camPos.y += step;
+      if (keyState.get('KeyC')) camPos.y -= step;
+
+      camPos.x = clamp(camPos.x, 0.01, WORLD_W - 0.01);
+      camPos.y = clamp(camPos.y, 0.01, WORLD_H - 0.01);
+      camPos.z = clamp(camPos.z, 0.01, WORLD_D - 0.01);
+    }
+
+    let lastTime = performance.now();
+    function loop() {
+      const now = performance.now();
+      const dt = Math.min(0.05, (now - lastTime) / 1000);
+      lastTime = now;
+
+      update(dt);
+      draw(now / 1000);
+
+      requestAnimationFrame(loop);
+    }
+
+    function draw(timeSec) {
+      const Wc = canvas.width, Hc = canvas.height;
+      const aspect = Wc / Hc;
+      const fovRad = fovDeg * Math.PI / 180;
+
+      // uniforms 書き込み（Float32/Uint32 を混ぜるので ArrayBuffer を使う）
+      const ab = new ArrayBuffer(16 * 4);
+      const f32 = new Float32Array(ab);
+      const u32 = new Uint32Array(ab);
+
+      // vec4 camPos.xyz, time
+      f32[0] = camPos.x; f32[1] = camPos.y; f32[2] = camPos.z; f32[3] = timeSec;
+      // vec4 yaw,pitch,fovRad, aspect
+      f32[4] = yaw; f32[5] = pitch; f32[6] = fovRad; f32[7] = aspect;
+      // vec4 maxDist, maxSteps, exposure, scale
+      f32[8] = maxDistance; f32[9] = maxSteps; f32[10] = exposure; f32[11] = internalScale;
+      // uvec4 flags, dims
+      u32[12] = showNormals ? 1 : 0;
+      u32[13] = WORLD_W;
+      u32[14] = WORLD_H;
+      u32[15] = WORLD_D;
+
+      device.queue.writeBuffer(uniformBuf, 0, ab);
+
+      const encoder = device.createCommandEncoder();
+      const view = context.getCurrentTexture().createView();
+      const pass = encoder.beginRenderPass({
+        colorAttachments: [{
+          view,
+          clearValue: { r: 0, g: 0, b: 0, a: 1 },
+          loadOp: 'clear',
+          storeOp: 'store'
+        }]
+      });
+      pass.setPipeline(pipeline);
+      pass.setBindGroup(0, bindGroup);
+      pass.draw(3, 1, 0, 0); // full-screen triangle
+      pass.end();
+
+      device.queue.submit([encoder.finish()]);
+
+      // 簡易HUD
+      // ここではGPU時間計測はしない（timestamp queryが要る）ので、CPU側のフレーム間隔だけ出す
+      const fps = (1 / Math.max(1e-6, (performance.now() - lastTime) / 1000)).toFixed(1);
+      statsEl.textContent =
+        `FPS(approx): ${fps}
+pos=(${camPos.x.toFixed(2)}, ${camPos.y.toFixed(2)}, ${camPos.z.toFixed(2)}) yaw=${yaw.toFixed(1)} pitch=${pitch.toFixed(1)}
+${Math.floor(canvas.width / internalScale)}x${Math.floor(canvas.height / internalScale)} (scale ${internalScale}x)`;
+
+      infoEl.textContent =
+        `W,H,D = ${WORLD_W}, ${WORLD_H}, ${WORLD_D}
+world = Uint8Array(${WORLD_W * WORLD_H * WORLD_D}) -> texture3D(r8uint)
+DDA = WGSL(フラグメント)で 1ピクセル1レイ
+fog距離 = ${maxDistance}, steps上限=${maxSteps}, exposure=${exposure.toFixed(2)}
+操作: WASD/Space/C + マウスドラッグ + Shift(ダッシュ)`;
+    }
+
+    /* =========================
+       WGSL（DDAレイキャスト本体）
+       ========================= */
+    function wgslSource() {
+      return /* wgsl */`
+struct Uniforms {
+  camPos_time : vec4f,   // xyz, time
+  yawPitchFovAspect : vec4f, // yawDeg, pitchDeg, fovRad, aspect
+  maxDistStepsExposureScale : vec4f, // maxDist, maxSteps(float), exposure, scale
+  flags_dims : vec4u,    // flags(showNormals), W,H,D
+};
+@group(0) @binding(0) var<uniform> U : Uniforms;
+@group(0) @binding(1) var worldTex : texture_3d<u32>;
+
+struct VSOut {
+  @builtin(position) pos : vec4f,
+};
+
+@vertex
+fn vs_main(@builtin(vertex_index) vid : u32) -> VSOut {
+  // full-screen triangle
+  var p = array<vec2f,3>(
+    vec2f(-1.0, -1.0),
+    vec2f( 3.0, -1.0),
+    vec2f(-1.0,  3.0)
+  );
+  var out : VSOut;
+  out.pos = vec4f(p[vid], 0.0, 1.0);
+  return out;
+}
+
+fn clampf(v:f32, a:f32, b:f32) -> f32 { return max(a, min(b, v)); }
+fn mixf(a:f32, b:f32, t:f32) -> f32 { return a + (b - a) * t; }
+fn mix3(a:vec3f, b:vec3f, t:f32) -> vec3f { return a + (b - a) * t; }
+
+fn dirFromYawPitch(yawDeg:f32, pitchDeg:f32) -> vec3f {
+  let yaw = yawDeg * 3.14159265 / 180.0;
+  let pitch = pitchDeg * 3.14159265 / 180.0;
+  let cy = cos(yaw);
+  let sy = sin(yaw);
+  let cp = cos(pitch);
+  let sp = sin(pitch);
+  // forward = (sy*cp, -sp, cy*cp)
+  let v = vec3f(sy*cp, -sp, cy*cp);
+  return normalize(v);
+}
+
+fn worldLoad(x:i32,y:i32,z:i32, W:i32,H:i32,D:i32) -> u32 {
+  if (x < 0 || x >= W || y < 0 || y >= H || z < 0 || z >= D) { return 0u; }
+  return textureLoad(worldTex, vec3i(x,y,z), 0).r;
+}
+
+fn getBlockColor(id:u32, n:vec3f) -> vec3f {
+  if (id == 1u) {
+    let g = 0.38 + 0.22 * clampf(n.y, 0.0, 1.0);
+    return vec3f(0.18, g, 0.12);
+  } else if (id == 2u) {
+    return vec3f(0.48, 0.50, 0.52);
+  } else if (id == 3u) {
+    return vec3f(0.40, 0.28, 0.14);
+  }
+  return vec3f(0.8, 0.0, 0.8);
+}
+
+// Amanatides & Woo DDA
+fn raycastVoxel(origin:vec3f, dirN:vec3f, maxDist:f32, maxSteps:u32, dims:vec3i) -> vec4f {
+  var vx:i32 = i32(floor(origin.x));
+  var vy:i32 = i32(floor(origin.y));
+  var vz:i32 = i32(floor(origin.z));
+
+  let stepX:i32 = select(0, select(-1, 1, dirN.x > 0.0), dirN.x != 0.0);
+  let stepY:i32 = select(0, select(-1, 1, dirN.y > 0.0), dirN.y != 0.0);
+  let stepZ:i32 = select(0, select(-1, 1, dirN.z > 0.0), dirN.z != 0.0);
+
+  let tDeltaX:f32 = select(1e30, abs(1.0/dirN.x), stepX != 0);
+  let tDeltaY:f32 = select(1e30, abs(1.0/dirN.y), stepY != 0);
+  let tDeltaZ:f32 = select(1e30, abs(1.0/dirN.z), stepZ != 0);
+
+  var tMaxX:f32;
+  var tMaxY:f32;
+  var tMaxZ:f32;
+
+  if (stepX > 0) {
+    tMaxX = (floor(origin.x) + 1.0 - origin.x) * tDeltaX;
+  } else if (stepX < 0) {
+    tMaxX = (origin.x - floor(origin.x)) * tDeltaX;
+  } else { tMaxX = 1e30; }
+
+  if (stepY > 0) {
+    tMaxY = (floor(origin.y) + 1.0 - origin.y) * tDeltaY;
+  } else if (stepY < 0) {
+    tMaxY = (origin.y - floor(origin.y)) * tDeltaY;
+  } else { tMaxY = 1e30; }
+
+  if (stepZ > 0) {
+    tMaxZ = (floor(origin.z) + 1.0 - origin.z) * tDeltaZ;
+  } else if (stepZ < 0) {
+    tMaxZ = (origin.z - floor(origin.z)) * tDeltaZ;
+  } else { tMaxZ = 1e30; }
+
+  var t:f32 = 0.0;
+  var lastAxis:i32 = 0; // 1=x,2=y,3=z
+
+  let W = dims.x; let H = dims.y; let D = dims.z;
+
+  for (var i:u32=0u; i<maxSteps; i=i+1u) {
+    if (tMaxX < tMaxY) {
+      if (tMaxX < tMaxZ) {
+        vx = vx + stepX;
+        t = tMaxX;
+        tMaxX = tMaxX + tDeltaX;
+        lastAxis = 1;
+      } else {
+        vz = vz + stepZ;
+        t = tMaxZ;
+        tMaxZ = tMaxZ + tDeltaZ;
+        lastAxis = 3;
+      }
+    } else {
+      if (tMaxY < tMaxZ) {
+        vy = vy + stepY;
+        t = tMaxY;
+        tMaxY = tMaxY + tDeltaY;
+        lastAxis = 2;
+      } else {
+        vz = vz + stepZ;
+        t = tMaxZ;
+        tMaxZ = tMaxZ + tDeltaZ;
+        lastAxis = 3;
+      }
+    }
+
+    if (t > maxDist) { break; }
+    if (vx < 0 || vx >= W || vy < 0 || vy >= H || vz < 0 || vz >= D) {
+      // miss
+      return vec4f(0.0, 0.0, 0.0, 0.0); // a==0 => no hit
+    }
+
+    let id = worldLoad(vx,vy,vz,W,H,D);
+    if (id != 0u) {
+      var n = vec3f(0.0,0.0,0.0);
+      if (lastAxis == 1) { n.x = f32(-stepX); }
+      else if (lastAxis == 2) { n.y = f32(-stepY); }
+      else { n.z = f32(-stepZ); }
+
+      // pack: rgb = normal (encoded), a = 1.0 means hit
+      // We'll return (t, id, nxPacked, nyPacked) ... but keep it simple:
+      // return: (t, f32(id), n.x, n.y) and store n.z separately later? -> not enough.
+      // Use vec4f: t, id, nx, ny then recompute nz from |n| since axis-aligned. We'll pass lastAxis too? not.
+      // Instead return: t, id, n.x, n.y and derive n.z as sign if x/y are 0.
+      var enc : f32 = 0.0;
+      if (lastAxis == 1) { enc = f32(-stepX) * 1.0; } // ±X
+      else if (lastAxis == 2) { enc = f32(-stepY) * 2.0; } // ±Y
+      else { enc = f32(-stepZ) * 3.0; } // ±Z
+
+      return vec4f(t, f32(id), enc, 1.0); // w=1.0 をヒットフラグに
+    }
+  }
+
+  return vec4f(0.0, 0.0, 0.0, 0.0);
+}
+
+fn normalFromHit(enc:f32) -> vec3f {
+  let a = abs(enc);
+  if (a < 1.5) { return vec3f(sign(enc), 0.0, 0.0); }      // X
+  if (a < 2.5) { return vec3f(0.0, sign(enc), 0.0); }      // Y
+  return vec3f(0.0, 0.0, sign(enc));                       // Z
+}
+
+@fragment
+fn fs_main(@builtin(position) fragPos: vec4f) -> @location(0) vec4f {
+  let camPos = U.camPos_time.xyz;
+
+  let yawDeg = U.yawPitchFovAspect.x;
+  let pitchDeg = U.yawPitchFovAspect.y;
+  let fovRad = U.yawPitchFovAspect.z;
+  let aspect = U.yawPitchFovAspect.w;
+
+  let maxDist = U.maxDistStepsExposureScale.x;
+  let maxSteps = u32(max(1.0, U.maxDistStepsExposureScale.y));
+  let exposure = U.maxDistStepsExposureScale.z;
+  let scale = max(1.0, U.maxDistStepsExposureScale.w);
+
+  let showNormals = (U.flags_dims.x & 1u) != 0u;
+  let dims = vec3i(i32(U.flags_dims.y), i32(U.flags_dims.z), i32(U.flags_dims.w));
+
+  // "pixelation": snap frag coordinate to scale-sized blocks
+  let snapped = (floor(fragPos.xy / scale) + vec2f(0.5, 0.5)) * scale;
+
+  // NDC [-1,1]
+  let res = vec2f(f32(textureDimensions(worldTex).x), f32(textureDimensions(worldTex).y)); // not screen
+  // use canvas size from fragPos.w? unavailable. We'll approximate using fragPos and viewport:
+  // In WebGPU, fragPos.xy are in framebuffer pixel space already; we need framebuffer size.
+  // We can't query it in shader; pass aspect and fov already. We'll derive normalized x/y using aspect and assume height=1 scale.
+  // So use centered coords in pixels relative to an arbitrary "height" based on aspect: Let y in [-1,1], x in [-aspect, aspect]
+  // But we need actual framebuffer size for proper mapping. We'll approximate using fragPos.xy and a constant "height" from aspect:
+  // Better: pass "invResolution" via uniforms; we didn't. So: encode using fov+aspect with an assumed resolution derived from scale? Not correct.
+  // Fix: Use fragPos.xy and a hard-coded canvas size? No.
+  // => We will treat fragPos.xy as if canvas is 960x540; but canvas in this demo is fixed anyway.
+  let screen = vec2f(960.0, 540.0); // demo固定
+  let uv = snapped / screen; // [0,1]
+  let ndc = vec2f(uv.x * 2.0 - 1.0, 1.0 - uv.y * 2.0);
+
+  let halfW = tan(fovRad * 0.5);
+  let vx = ndc.x * halfW * aspect;
+  let vy = ndc.y * halfW;
+
+  let forward = dirFromYawPitch(yawDeg, pitchDeg);
+  let right = normalize(vec3f(cos((yawDeg + 90.0) * 3.14159265/180.0), 0.0, sin((yawDeg + 90.0) * 3.14159265/180.0)));
+  let up = normalize(cross(right, forward));
+
+  let dir = normalize(forward + right*vx + up*vy);
+
+  // sky
+  let skyTop = vec3f(0.60, 0.78, 0.98);
+  let skyHzn = vec3f(0.85, 0.92, 1.00);
+
+  let skyT = 0.5 - 0.5 * dir.y;
+  let sky = mix3(skyHzn, skyTop, skyT);
+
+let hit = raycastVoxel(camPos, dir, maxDist, maxSteps, dims);
+
+if (hit.w == 0.0) {
+  return vec4f(sky, 1.0);
+}
+
+let t = hit.x;
+let id = u32(max(0.0, hit.y));
+let n = normalFromHit(hit.z);
+
+  let lightDir = normalize(vec3f(0.6, -0.8, 0.2));
+  let ambient = 0.18;
+  let ndl = max(0.0, -(dot(n, lightDir)));
+  var lit = ambient + (1.0 - ambient) * ndl;
+
+  var col = getBlockColor(id, n);
+  if (showNormals) {
+    col = vec3f(n.x*0.5 + 0.5, n.y*0.5 + 0.5, n.z*0.5 + 0.5);
+    lit = 1.0;
+  }
+
+  let fogT = clampf(t / maxDist, 0.0, 1.0);
+  let shaded = col * lit * exposure;
+  let outc = mix3(sky, shaded, 1.0 - fogT);
+  return vec4f(outc, 1.0);
+}
+`;
+    }
+
+    /* =========================
+       起動
+       ========================= */
+    initWebGPU();
+  </script>
+</body>
+
+</html>
