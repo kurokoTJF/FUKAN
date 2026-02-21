@@ -1,4 +1,3 @@
-
 <!doctype html>
 <html lang="ja">
 
@@ -6,141 +5,12 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <title>3D Voxel Raycaster (DDA) - 単一HTMLデモ</title>
-  <style>
-    :root {
-      color-scheme: light dark;
-    }
-
-    body {
-      margin: 12px;
-      font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
-    }
-
-    h1 {
-      font-size: 1.1rem;
-      margin: 0 0 8px;
-    }
-
-    .row {
-      display: grid;
-      grid-template-columns: 1fr 320px;
-      gap: 12px;
-    }
-
-    #wrap {
-      position: relative;
-    }
-
-    #view {
-      width: 100%;
-      max-width: 960px;
-      border: 1px solid #8886;
-      border-radius: 8px;
-      image-rendering: pixelated;
-    }
-
-    .hud {
-      position: absolute;
-      left: 8px;
-      top: 8px;
-      padding: 6px 8px;
-      background: color-mix(in oklab, Canvas, transparent 25%);
-      border: 1px solid #8886;
-      border-radius: 6px;
-      font: 12px/1.3 ui-monospace, SFMono-Regular, Consolas, monospace;
-      backdrop-filter: blur(4px);
-    }
-
-    .panel {
-      border: 1px solid #8886;
-      border-radius: 8px;
-      padding: 10px;
-    }
-
-    .panel h2 {
-      font-size: 1rem;
-      margin: 0 0 8px;
-    }
-
-    label {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      margin: 6px 0;
-    }
-
-    input[type="range"] {
-      width: 100%;
-    }
-
-    .btn {
-      padding: 6px 10px;
-      border: 1px solid #8888;
-      border-radius: 6px;
-      background: #eee;
-      cursor: pointer;
-    }
-
-    .btn:active {
-      transform: translateY(1px);
-    }
-
-    .kbd {
-      padding: 1px 4px;
-      border: 1px solid #aaa;
-      border-radius: 3px;
-      background: #f6f6f6;
-    }
-
-    .note {
-      font-size: 12px;
-      opacity: 0.8;
-    }
-  </style>
 </head>
 
 <body>
   <h1>3D Voxel レンダリング（Amanatides &amp; Woo DDA / 純JS）</h1>
-  <div class="row">
-    <div id="wrap">
-      <canvas id="view" width="960" height="540"></canvas>
-      <div class="hud" id="stats">—</div>
-    </div>
-    <div class="panel">
-      <h2>コントロール</h2>
-      <div class="note">
-        移動: <span class="kbd">W</span><span class="kbd">A</span><span class="kbd">S</span><span class="kbd">D</span> /
-        上下: <span class="kbd">Space</span><span class="kbd">C</span> / 走る: <span class="kbd">Shift</span><br>
-        マウスドラッグ（キャンバス上）で視点回転。重いときは「解像度縮小」を上げてください。
-      </div>
-      <div style="display:flex; gap:8px; flex-wrap:wrap; margin:8px 0;">
-        <button class="btn" id="regen">ワールド再生成</button>
-        <button class="btn" id="toggleWire">ワイヤー（面の法線色）</button>
-      </div>
-      <div>
-        <label>解像度縮小（内部解像度 = 960 / 値）
-          <input id="scale" type="range" min="1" max="6" value="6">
-        </label>
-        <label>視野角（FOV°）
-          <input id="fov" type="range" min="16" max="100" value="75">
-        </label>
-        <label>最大距離（t）
-          <input id="maxDist" type="range" min="16" max="200" value="90">
-        </label>
-        <label>ステップ上限（安全）
-          <input id="maxSteps" type="range" min="64" max="2048" value="512">
-        </label>
-        <label>露出（全体の明るさ）
-          <input id="exposure" type="range" min="0" max="200" value="110">
-        </label>
-
-
-      </div>
-      <hr>
-      <h2>ほか内部パラメーター</h2>
-      <pre class="note" id="info" style="white-space:pre-wrap">—</pre>
-    </div>
-  </div>
+  <canvas id="view" width="480" height="270"></canvas>
+  <div class="hud" id="stats">—</div>
 
 </body>
 
@@ -183,19 +53,18 @@
      ========================= */
 
 
-  const __W = 48, __H = 24, __D = 48; // サイズ
-
-
-
   // 0=空気, 1=草土, 2=石, 3=木
   class worldBlock {
     constructor(width = 48, height = 24, depth = 48) {
-      this.__W = width
-      this.__H = height
-      this.__D = depth
-      this.worldXYZ = worldBlock.createWorld()
+      this.width = width
+      this.height = height
+      this.depth = depth
+      this.worldXYZ = worldBlock.createWorld(Math.random(), this.width, this.height, this.depth)
     }
-    static createWorld(seed = Math.random()) {
+    static createWorld(seed = Math.random(), _width, _height, _depth) {
+      const __W = _width
+      const __H = _height
+      const __D = _depth
       // 三次元配列アクセスの見た目を保ちつつ、内部は1D配列で高速化
       const data = new Uint8Array(__W * __H * __D);
       const idx = (x, y, z) => (y * __D + z) * __W + x;
@@ -260,10 +129,10 @@
       return v0 + (v1 - v0) * zf;
     }
 
-    static inBounds(x, y, z) { return x >= 0 && x < __W && y >= 0 && y < __H && z >= 0 && z < __D }
+    static inBounds(x, y, z, _world) { return x >= 0 && x < _world.width && y >= 0 && y < _world.height && z >= 0 && z < _world.depth }
 
-    static isSolid(x, y, z, worldXYZ) {
-      return worldBlock.inBounds(x, y, z) ? worldXYZ[x][y][z] !== 0 : false;
+    static isSolid(x, y, z, _world) {
+      return worldBlock.inBounds(x, y, z, _world) ? _world.worldXYZ[x][y][z] !== 0 : false;
     }
 
     static mulberry32(a) {
@@ -277,22 +146,33 @@
   }
 
 
-  class cameraRayCastVoxel {
-    constructor(px = 10.5, py = 3.0, pz = 10.5, yaw = 0, pitch = 20, world = world__) {
+  class cameraRCV {
+    constructor(px = 10.5, py = 3.0, pz = 10.5, yaw = 0, pitch = 20, world) {
       this.camPos = new Vec3(px, py, pz)
       this.yaw = yaw
       this.pitch = pitch
-      this.worldXYZ = world.worldXYZ
+      this.world = world
+      this.fovDeg = 40
     }
 
     update() {
-      this.camPos.x = clamp(this.camPos.x, 0.01, __W - 0.01);
-      this.camPos.y = clamp(this.camPos.y, 0.01, __H - 0.01);
-      this.camPos.z = clamp(this.camPos.z, 0.01, __D - 0.01);
+      this.camPos.x = clamp(this.camPos.x, 0.01, this.world.width - 0.01);
+      this.camPos.y = clamp(this.camPos.y, 0.01, this.world.height - 0.01);
+      this.camPos.z = clamp(this.camPos.z, 0.01, this.world.depth - 0.01);
 
     }
 
-    static raycastVoxel(origin, dir, maxDistance = 90, maxSteps = 1024, _worldXYZ) {
+
+
+  }
+
+  class RendererRCV {
+    constructor(_currentCamera, _currentWorld) {
+      this.currentCamera = _currentCamera
+      this.currentWorld = _currentWorld
+    }
+
+    static raycastVoxel(dir, maxDistance = 90, maxSteps = 1024, _currentWorld, _camera) {
       /* =========================
        DDA レイキャスト（Amanatides & Woo）
        ========================= */
@@ -303,6 +183,10 @@
        * @param {number} maxSteps    ステップ上限
        * @returns { hit:boolean, t:number, vox?:{x,y,z}, normal?:{x,y,z}, id?:number }
        */
+
+      const _worldXYZ = _currentWorld.worldXYZ
+      const origin = _camera.camPos
+
       let vx = Math.floor(origin.x), vy = Math.floor(origin.y), vz = Math.floor(origin.z);
 
       // 各軸の進行符号
@@ -342,28 +226,39 @@
           else { vz += stepZ; t = tMaxZ; tMaxZ += tDeltaZ; lastAxis = 'z'; }
         }
         if (t > maxDistance) break;
-        if (!worldBlock.inBounds(vx, vy, vz)) return { hit: false, t };
+        if (!worldBlock.inBounds(vx, vy, vz, _currentWorld)) return { hit: false, t };
 
-        if (worldBlock.isSolid(vx, vy, vz, _worldXYZ)) {
+        if (worldBlock.isSolid(vx, vy, vz, _currentWorld)) {
           let nx = 0, ny = 0, nz = 0;
           if (lastAxis === 'x') nx = -stepX;
           else if (lastAxis === 'y') ny = -stepY;
           else nz = -stepZ;
-          return { hit: true, t, vox: { x: vx, y: vy, z: vz }, normal: { x: nx, y: ny, z: nz }, id: _world[vx][vy][vz] };
+          return { hit: true, t, vox: { x: vx, y: vy, z: vz }, normal: { x: nx, y: ny, z: nz }, id: _worldXYZ[vx][vy][vz] };
         }
       }
       return { hit: false, t };
     }
 
     draw() {
-      const Wc = canvas.width, Hc = canvas.height;
+      let internalScale = 6; // 解像度縮小（1=フル, 2=1/2, 4=1/4）
+
+      let maxDistance = 90;
+      let maxSteps = 512;
+      let exposure = 1.10;
+      let showNormals = false;
+
+      const skyTop = [0.60, 0.78, 0.98];  // 空（上）
+      const skyHzn = [0.85, 0.92, 1.00];  // 空（地平）
+      const lightDir = new Vec3(0.6, -0.8, 0.2).norm(); // 太陽光
+      const ambient = 0.18;
+
       const w = Math.floor(Wc / internalScale), h = Math.floor(Hc / internalScale);
 
       const _img = ctx.getImageData(0, 0, Wc, Hc); // 直接フル解像度を塗る（拡大補間なし）
       const data = _img.data;
 
       // カメラ基底ベクトル
-      const dirForward = Vec3.fromYawPitch(_yaw, _pitch); // -Z基準ではなく、既に前方
+      const dirForward = Vec3.fromYawPitch(this.currentCamera.yaw, this.currentCamera.pitch); // -Z基準ではなく、既に前方
 
       // スクリーン座標系（右・上）
       const worldUp = new Vec3(0, 1, 0);
@@ -372,7 +267,7 @@
       const dirUp = dirRight.cross(dirForward).norm();
 
 
-      const fov = fovDeg * Math.PI / 180;
+      const fov = this.currentCamera.fovDeg * Math.PI / 180;
       const halfW = Math.tan(fov / 2);
       const aspect = w / h;
 
@@ -390,7 +285,7 @@
             dirForward.z + dirRight.z * vx + dirUp.z * vy
           ).norm();
 
-          const result = cameraRayCastVoxel.raycastVoxel(_camPos, dir, maxDistance, maxSteps, _world);
+          const result = RendererRCV.raycastVoxel(dir, maxDistance, maxSteps, this.currentWorld, this.currentCamera);
 
           let r, g, b;
           if (result.hit) {
@@ -449,34 +344,30 @@
       statsEl.textContent = `
         FPS: ${(1000 / dt).toFixed(1)} | 
         render=${dt.toFixed(1)}ms | ${Math.floor(canvas.width / internalScale)}x${Math.floor(canvas.height / internalScale)} (scale ${internalScale}x)
-  pos=(${_camPos.x.toFixed(2)}, ${_camPos.y.toFixed(2)}, ${_camPos.z.toFixed(2)}) 
-  yaw=${_yaw.toFixed(1)} 
-  pitch=${_pitch.toFixed(1)}`;
+  pos=(${this.currentCamera.camPos.x.toFixed(2)}, ${this.currentCamera.camPos.y.toFixed(2)}, ${this.currentCamera.camPos.z.toFixed(2)}) 
+  yaw=${this.currentCamera.yaw.toFixed(1)} 
+  pitch=${this.currentCamera.pitch.toFixed(1)}`;
     }
 
   }
 
 
-  const world__ = new worldBlock(48, 24, 28)
+  const testWorld = new worldBlock(48, 24, 48)
 
   // ここはややこしいな、引用されているのでどうすれば断ち切れるのか
-  let _world = world__.worldXYZ
+  let _world = testWorld.worldXYZ
 
 
   /* =========================
      レンダラー（ソフトウェア・レイキャスト）
      ========================= */
   const canvas = document.getElementById('view');
+  const Wc = canvas.width, Hc = canvas.height;
   const ctx = canvas.getContext('2d', { alpha: false, desynchronized: true });
   const statsEl = document.getElementById('stats');
   const infoEl = document.getElementById('info');
 
-  let internalScale = 6; // 解像度縮小（1=フル, 2=1/2, 4=1/4）
-  let fovDeg = 16;
-  let maxDistance = 90;
-  let maxSteps = 512;
-  let exposure = 1.10;
-  let showNormals = false;
+
 
   // block ID data
   function getBlockColor(id, normal) {
@@ -498,19 +389,14 @@
   }
 
   // shader parameter
-  const skyTop = [0.60, 0.78, 0.98];  // 空（上）
-  const skyHzn = [0.85, 0.92, 1.00];  // 空（地平）
-  const lightDir = new Vec3(0.6, -0.8, 0.2).norm(); // 太陽光
-  const ambient = 0.18;
+
 
 
   function clamp(v, a, b) { return Math.max(a, Math.min(b, v)); }
   function mix(a, b, t) { return a + (b - a) * t; }
 
 
-  const crv = new cameraRayCastVoxel(10.5, 3.0, 10.5, 0, -20, world__)
-  let _camPos = crv.camPos;
-  let _yaw = crv.yaw, _pitch = crv.pitch;
+  const testCamera = new cameraRCV(10.5, 5.0, 10.5, 0, -20, testWorld)
 
   let keyState = new Map();
   let dragging = false, lastMouse = null;
@@ -518,21 +404,15 @@
   /* =========================
      入力とUI
      ========================= */
-  const scaleEl = document.getElementById('scale');
-  const fovEl = document.getElementById('fov');
-  const maxDistEl = document.getElementById('maxDist');
-  const maxStepsEl = document.getElementById('maxSteps');
-  const exposureEl = document.getElementById('exposure');
-  const regenBtn = document.getElementById('regen');
-  const toggleWireBtn = document.getElementById('toggleWire');
 
-  scaleEl.addEventListener('input', () => internalScale = parseInt(scaleEl.value));
-  fovEl.addEventListener('input', () => fovDeg = parseFloat(fovEl.value));
-  maxDistEl.addEventListener('input', () => maxDistance = parseFloat(maxDistEl.value));
-  maxStepsEl.addEventListener('input', () => maxSteps = parseInt(maxStepsEl.value));
-  exposureEl.addEventListener('input', () => exposure = Math.max(0.01, parseInt(exposureEl.value) / 100));
-  regenBtn.addEventListener('click', () => { _world = worldBlock.createWorld(); });
-  toggleWireBtn.addEventListener('click', () => { showNormals = !showNormals; });
+
+  //scaleEl.addEventListener('input', () => internalScale = parseInt(scaleEl.value));
+  //fovEl.addEventListener('input', () => fovDeg = parseFloat(fovEl.value));
+  //maxDistEl.addEventListener('input', () => maxDistance = parseFloat(maxDistEl.value));
+  //maxStepsEl.addEventListener('input', () => maxSteps = parseInt(maxStepsEl.value));
+  //exposureEl.addEventListener('input', () => exposure = Math.max(0.01, parseInt(exposureEl.value) / 100));
+  //regenBtn.addEventListener('click', () => { _world = worldBlock.createWorld(); });
+  //toggleWireBtn.addEventListener('click', () => { showNormals = !showNormals; });
 
   // これもすごい簡潔だよね
   window.addEventListener('keydown', e => { keyState.set(e.code, true); });
@@ -549,8 +429,8 @@
     const dy = e.clientY - lastMouse.y;
     lastMouse = { x: e.clientX, y: e.clientY };
     const sens = 0.2;
-    _yaw = (_yaw + dx * sens);
-    _pitch = clamp(_pitch + dy * sens, -89.5, 89.5);
+    testCamera.yaw = (testCamera.yaw + dx * sens);
+    testCamera.pitch = clamp(testCamera.pitch + dy * sens, -89.5, 89.5);
   });
 
   /* =========================
@@ -562,40 +442,29 @@
     const step = speed * dt;
 
     const worldUp = new Vec3(0, 1, 0);
-    const forward = Vec3.fromYawPitch(_yaw, 0); // 水平の前方
+    const forward = Vec3.fromYawPitch(testCamera.yaw, 0); // 水平の前方
     const right = forward.cross(worldUp).norm();
 
     //.clone.mul ... sugoi
-    if (keyState.get('KeyW')) _camPos.add(forward.clone().mul(step));
-    if (keyState.get('KeyS')) _camPos.add(forward.clone().mul(-step));
-    if (keyState.get('KeyA')) _camPos.add(right.clone().mul(-step));
-    if (keyState.get('KeyD')) _camPos.add(right.clone().mul(step));
-    if (keyState.get('Space')) _camPos.y += step;
-    if (keyState.get('KeyC')) _camPos.y -= step;
+    if (keyState.get('KeyW')) testCamera.camPos.add(forward.clone().mul(step));
+    if (keyState.get('KeyS')) testCamera.camPos.add(forward.clone().mul(-step));
+    if (keyState.get('KeyA')) testCamera.camPos.add(right.clone().mul(-step));
+    if (keyState.get('KeyD')) testCamera.camPos.add(right.clone().mul(step));
+    if (keyState.get('Space')) testCamera.camPos.y += step;
+    if (keyState.get('KeyC')) testCamera.camPos.y -= step;
 
     // camera.update
     // ワールド内に留める
-    crv.update()
+    testCamera.update()
   }
 
 
-
-  function draw() {
-    infoEl.textContent =
-      `W,H,D = ${__W}, ${__H}, ${__D}
-内部データ: Uint8Array(${__W * __H * __D}) / world[x][y][z] ラッパー
-DDA: tMax/tDelta で 1ボクセルずつ進行
-光源 = (${lightDir.x.toFixed(2)}, ${lightDir.y.toFixed(2)}, ${lightDir.z.toFixed(2)}), 
-ambient=${ambient}
-fog距離 = ${maxDistance}, 
-steps上限=${maxSteps}, 
-exposure=${exposure.toFixed(2)}
-操作: WASD/Space/C + マウスドラッグ + Shift(ダッシュ)`;
-
-  }
 
 
   let lastTime = performance.now();
+
+
+  const Renderer = new RendererRCV(testCamera, testWorld)
 
   function gameLoop() {
     const now = performance.now();
@@ -603,9 +472,8 @@ exposure=${exposure.toFixed(2)}
     lastTime = now;
     update(dt);
 
-    crv.draw();
+    Renderer.draw();
 
-    draw()
 
 
     requestAnimationFrame(gameLoop);
