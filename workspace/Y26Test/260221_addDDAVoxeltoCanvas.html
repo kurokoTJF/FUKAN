@@ -3495,6 +3495,13 @@
   /* =========================
      ベクトル & 数学ユーティリティ
      ========================= */
+  class Math2 {
+    constructor() { }
+    static clamp(v, a, b) { return Math.max(a, Math.min(b, v)); }
+    static mix(a, b, t) { return a + (b - a) * t; }
+
+  }
+
   class Vec3 {
     constructor(x = 0, y = 0, z = 0) { this.x = x; this.y = y; this.z = z; }
     set(x, y, z) { this.x = x; this.y = y; this.z = z; return this; }
@@ -3523,6 +3530,337 @@
       return new Vec3(sin_yaw * cos_pitch, -sin_pinch, cos_yaw * cos_pitch).norm();
     }
   }
+
+  /* =========================
+     ワールド（world[x][y][z]）
+     ========================= */
+  class worldBlock {
+    constructor(width = 48, height = 24, depth = 48) {
+      this.width = width
+      this.height = height
+      this.depth = depth
+      this.worldXYZ = worldBlock.createWorld(Math.random(), this.width, this.height, this.depth)
+    }
+    static createWorld(seed = Math.random(), _width, _height, _depth) {
+      const __W = _width
+      const __H = _height
+      const __D = _depth
+      // 三次元配列アクセスの見た目を保ちつつ、内部は1D配列で高速化
+      const data = new Uint8Array(__W * __H * __D);
+      const idx = (x, y, z) => (y * __D + z) * __W + x;
+
+      // y=0：地面（石）
+      for (let x = 0; x < __W; x++) for (let z = 0; z < __D; z++) data[idx(x, 0, z)] = 2;
+
+      // 簡易の高さマップ＋構造物
+      const rng = worldBlock.mulberry32(Math.floor(seed * 0x7fffffff));
+      // 起伏（草土）
+      for (let x = 0; x < __W; x++) {
+        for (let z = 0; z < __D; z++) {
+          const h = 1 + Math.floor(5 * worldBlock.noise2d(x * 0.12, z * 0.12, rng));
+          for (let y = 1; y < Math.min(__H, h + 1); y++) data[idx(x, y, z)] = 1;
+        }
+      }
+      // 柱や壁（石/木）
+      for (let i = 0; i < 220; i++) {
+        const x = 2 + Math.floor(rng() * (__W - 4));
+        const z = 2 + Math.floor(rng() * (__D - 4));
+        const ht = 3 + Math.floor(rng() * 8);
+        const id = (rng() < 0.7) ? 2 : 3;
+        for (let y = 1; y < Math.min(__H, ht); y++) data[idx(x, y, z)] = id;
+        // たまに横へ延ばす
+        if (rng() < 0.3 && x + 1 < __W) for (let y = 1; y < Math.min(__H, ht - 1); y++) data[idx(x + 1, y, z)] = id;
+        if (rng() < 0.3 && z + 1 < __D) for (let y = 1; y < Math.min(__H, ht - 1); y++) data[idx(x, y, z + 1)] = id;
+      }
+      // 空の広場
+      for (let x = 18; x < 30; x++) for (let z = 18; z < 30; z++) for (let y = 1; y < 6; y++) data[idx(x, y, z)] = 0;
+
+      // ラッパー：world[x][y][z] 風アクセスを提供
+      const wrapperXYZ = [];
+      for (let x = 0; x < __W; x++) {
+        wrapperXYZ[x] = [];
+        for (let y = 0; y < __H; y++) {
+          wrapperXYZ[x][y] = [];
+          for (let z = 0; z < __D; z++) {
+            Object.defineProperty(wrapperXYZ[x][y], z, {
+              get() { return data[idx(x, y, z)]; },
+              set(v) { data[idx(x, y, z)] = v | 0; },
+              enumerable: true
+            });
+          }
+        }
+      }
+      wrapperXYZ._data = data; wrapperXYZ._idx = idx;
+      return wrapperXYZ;
+    }
+
+    static noise2d(x, z, rng) {
+      // 簡易な値ノイズ（勾配なし）：タイル状に乱数→双線形補間
+      const xi = Math.floor(x), zi = Math.floor(z);
+      const xf = x - xi, zf = z - zi;
+      function hash(i, j) { // 位置依存の擬似乱数
+        const seed = ((i * 73856093) ^ (j * 19349663)) >>> 0;
+        const r = worldBlock.mulberry32(seed)();
+        return r;
+      }
+      const v00 = hash(xi, zi), v10 = hash(xi + 1, zi), v01 = hash(xi, zi + 1), v11 = hash(xi + 1, zi + 1);
+      const v0 = v00 + (v10 - v00) * xf;
+      const v1 = v01 + (v11 - v01) * xf;
+      return v0 + (v1 - v0) * zf;
+    }
+
+    static inBounds(x, y, z, _world) { return x >= 0 && x < _world.width && y >= 0 && y < _world.height && z >= 0 && z < _world.depth }
+
+    static isSolid(x, y, z, _world) {
+      return worldBlock.inBounds(x, y, z, _world) ? _world.worldXYZ[x][y][z] !== 0 : false;
+    }
+
+    static mulberry32(a) {
+      return function () {
+        let t = a += 0x6D2B79F5;
+        t = Math.imul(t ^ (t >>> 15), t | 1);
+        t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+        return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+      };
+    }
+  }
+
+
+  class cameraRCV {
+    constructor(px = 10.5, py = 6.0, pz = 10.5, yaw = 0, pitch = 20, world) {
+      this.camPos = new Vec3(px, py, pz)
+      this.yaw = yaw
+      this.pitch = pitch
+      this.world = world
+      this.fovDeg = 40
+    }
+
+    update() {
+      this.camPos.x = Math2.clamp(this.camPos.x, 0.01, this.world.width - 0.01);
+      this.camPos.y = Math2.clamp(this.camPos.y, 0.01, this.world.height - 0.01);
+      this.camPos.z = Math2.clamp(this.camPos.z, 0.01, this.world.depth - 0.01);
+
+    }
+
+
+
+  }
+
+  class RendererRCV {
+    constructor(_currentCamera, _currentWorld, _canvas,_statsEl) {
+      this.currentCamera = _currentCamera
+      this.currentWorld = _currentWorld
+      this.canvas = _canvas
+      this.FPSstats = _statsEl
+      this.ctx = this.canvas.getContext('2d', { alpha: false, desynchronized: true })
+      this.lightDir = new Vec3(0.6, -0.8, 0.2).norm();
+      this.worldUp = new Vec3(0, 1, 0);
+    }
+
+    static raycastVoxel(dir, maxDistance = 90, maxSteps = 1024, _currentWorld, _camera) {
+      /* =========================
+       DDA レイキャスト（Amanatides & Woo）
+       ========================= */
+      /**
+       * @param {Vec3} origin ワールド座標
+       * @param {Vec3} dir    正規化方向
+       * @param {number} maxDistance 最大距離
+       * @param {number} maxSteps    ステップ上限
+       * @returns { hit:boolean, t:number, vox?:{x,y,z}, normal?:{x,y,z}, id?:number }
+       */
+
+      const _worldXYZ = _currentWorld.worldXYZ
+      const origin = _camera.camPos
+
+      let vx = Math.floor(origin.x), vy = Math.floor(origin.y), vz = Math.floor(origin.z);
+
+      // 各軸の進行符号
+      const stepX = dir.x > 0 ? 1 : (dir.x < 0 ? -1 : 0);
+      const stepY = dir.y > 0 ? 1 : (dir.y < 0 ? -1 : 0);
+      const stepZ = dir.z > 0 ? 1 : (dir.z < 0 ? -1 : 0);
+
+      // Δt（1ボクセル進むのに必要な t 増分）
+      const tDeltaX = stepX !== 0 ? Math.abs(1 / dir.x) : Infinity;
+      const tDeltaY = stepY !== 0 ? Math.abs(1 / dir.y) : Infinity;
+      const tDeltaZ = stepZ !== 0 ? Math.abs(1 / dir.z) : Infinity;
+
+      // tMax: 次の格子境界までの t
+      let tMaxX, tMaxY, tMaxZ;
+      if (stepX > 0) tMaxX = (Math.floor(origin.x) + 1 - origin.x) * tDeltaX;
+      else if (stepX < 0) tMaxX = (origin.x - Math.floor(origin.x)) * tDeltaX;
+      else tMaxX = Infinity;
+
+      if (stepY > 0) tMaxY = (Math.floor(origin.y) + 1 - origin.y) * tDeltaY;
+      else if (stepY < 0) tMaxY = (origin.y - Math.floor(origin.y)) * tDeltaY;
+      else tMaxY = Infinity;
+
+      if (stepZ > 0) tMaxZ = (Math.floor(origin.z) + 1 - origin.z) * tDeltaZ;
+      else if (stepZ < 0) tMaxZ = (origin.z - Math.floor(origin.z)) * tDeltaZ;
+      else tMaxZ = Infinity;
+
+      // 始点がブロック内→最初の境界を跨いでから判定（内部からの視点でも安定）
+      let t = 0;
+      let lastAxis = null;
+
+      for (let i = 0; i < maxSteps; i++) {
+        if (tMaxX < tMaxY) {
+          if (tMaxX < tMaxZ) { vx += stepX; t = tMaxX; tMaxX += tDeltaX; lastAxis = 'x'; }
+          else { vz += stepZ; t = tMaxZ; tMaxZ += tDeltaZ; lastAxis = 'z'; }
+        } else {
+          if (tMaxY < tMaxZ) { vy += stepY; t = tMaxY; tMaxY += tDeltaY; lastAxis = 'y'; }
+          else { vz += stepZ; t = tMaxZ; tMaxZ += tDeltaZ; lastAxis = 'z'; }
+        }
+        if (t > maxDistance) break;
+        if (!worldBlock.inBounds(vx, vy, vz, _currentWorld)) return { hit: false, t };
+
+        if (worldBlock.isSolid(vx, vy, vz, _currentWorld)) {
+          let nx = 0, ny = 0, nz = 0;
+          if (lastAxis === 'x') nx = -stepX;
+          else if (lastAxis === 'y') ny = -stepY;
+          else nz = -stepZ;
+          return { hit: true, t, vox: { x: vx, y: vy, z: vz }, normal: { x: nx, y: ny, z: nz }, id: _worldXYZ[vx][vy][vz] };
+        }
+      }
+      return { hit: false, t };
+    }
+
+    // 0=空気, 1=草土, 2=石, 3=木
+    // block ID data
+    getBlockColor(id, normal) {
+      // ブロックごとのベース色（sRGB→linearっぽく扱う簡易）
+      let c;
+      switch (id) {
+        case 1: // 草土
+          // 上面っぽく少し緑を強める
+          const g = 0.38 + 0.22 * Math2.clamp(normal.y, 0, 1);
+          c = [0.18, g, 0.12]; break;
+        case 2: // 石
+          c = [0.48, 0.50, 0.52]; break;
+        case 3: // 木
+          c = [0.40, 0.28, 0.14]; break;
+        default:
+          c = [0.8, 0.0, 0.8];
+      }
+      return c;
+    }
+
+    draw() {
+      let internalScale = 4; // 解像度縮小（1=フル, 2=1/2, 4=1/4）
+
+      let maxDistance = 90;
+      let maxSteps = 512;
+      let exposure = 1.10;
+      let showNormals = false;
+
+      const skyTop = [0.60, 0.78, 0.98];  // 空（上）
+      const skyHzn = [0.85, 0.92, 1.00];  // 空（地平）
+      const lightDir = this.lightDir // 太陽光
+      const ambient = 0.18;
+
+      const w = Math.floor(this.canvas.width / internalScale), h = Math.floor(this.canvas.height / internalScale);
+
+      const _img = this.ctx.getImageData(0, 0, this.canvas.width, this.canvas.height); // 直接フル解像度を塗る（拡大補間なし）
+      const data = _img.data;
+
+      // カメラ基底ベクトル
+      const dirForward = Vec3.fromYawPitch(this.currentCamera.yaw, this.currentCamera.pitch); // -Z基準ではなく、既に前方
+
+
+      // スクリーン座標系（右・上）
+      const worldUp = this.worldUp
+      const dirRight = dirForward.cross(worldUp).norm();
+      const dirUp = dirRight.cross(dirForward).norm();
+
+
+      const fov = this.currentCamera.fovDeg * Math.PI / 180;
+      const halfW = Math.tan(fov / 2);
+      const aspect = w / h;
+
+      // 画面の各ピクセルにレイ
+      const t0 = performance.now();
+      for (let py = 0; py < h; py++) {
+        const vy = (1 - 2 * (py + 0.5) / h) * halfW; // [-halfW, halfW]
+        for (let px = 0; px < w; px++) {
+          const vx = (2 * (px + 0.5) / w - 1) * halfW * aspect;
+
+          // レイ方向
+          const dir = new Vec3(
+            dirForward.x + dirRight.x * vx + dirUp.x * vy,
+            dirForward.y + dirRight.y * vx + dirUp.y * vy,
+            dirForward.z + dirRight.z * vx + dirUp.z * vy
+          ).norm();
+
+          const result = RendererRCV.raycastVoxel(dir, maxDistance, maxSteps, this.currentWorld, this.currentCamera);
+
+          let r, g, b;
+          if (result.hit) {
+            // 面法線
+            const n = result.normal;
+            // 色
+            let col = this.getBlockColor(result.id, n);
+            // 照明（ランバート）
+            const ndl = Math.max(0, -(n.x * lightDir.x + n.y * lightDir.y + n.z * lightDir.z));
+            let lit = ambient + (1 - ambient) * ndl;
+            // 距離フォグ
+            const fogT = Math2.clamp(result.t / maxDistance, 0, 1);
+            const sky = [
+              Math2.mix(skyHzn[0], skyTop[0], 0.5 - 0.5 * dir.y), // 視線が上なら空色を強く
+              Math2.mix(skyHzn[1], skyTop[1], 0.5 - 0.5 * dir.y),
+              Math2.mix(skyHzn[2], skyTop[2], 0.5 - 0.5 * dir.y)
+            ];
+
+            if (showNormals) {
+              // 法線可視化モード
+              col = [(n.x * 0.5 + 0.5), (n.y * 0.5 + 0.5), (n.z * 0.5 + 0.5)];
+              lit = 1.0;
+            }
+
+            r = Math2.mix(sky[0], col[0] * lit * exposure, (1 - fogT));
+            g = Math2.mix(sky[1], col[1] * lit * exposure, (1 - fogT));
+            b = Math2.mix(sky[2], col[2] * lit * exposure, (1 - fogT));
+          } else {
+            // スカイ
+            const t = 0.5 - 0.5 * dir.y; // 上ほど skyTop、下ほど skyHzn
+            r = Math2.mix(skyHzn[0], skyTop[0], t);
+            g = Math2.mix(skyHzn[1], skyTop[1], t);
+            b = Math2.mix(skyHzn[2], skyTop[2], t);
+          }
+
+          // 書き込み（内部縮小→スケール描画：最近傍）
+          // ここでは直接フル解像度に nearest 拡大して塗る
+          const x0 = px * internalScale | 0, y0 = py * internalScale | 0;
+          for (let oy = 0; oy < internalScale; oy++) {
+            let off = ((y0 + oy) * this.canvas.width + x0) * 4;
+            for (let ox = 0; ox < internalScale; ox++) {
+              data[off] = Math.max(0, Math.min(255, (r * 255) | 0));
+              data[off + 1] = Math.max(0, Math.min(255, (g * 255) | 0));
+              data[off + 2] = Math.max(0, Math.min(255, (b * 255) | 0));
+              data[off + 3] = 255;
+              off += 4;
+            }
+          }
+        }
+      }
+
+      this.ctx.putImageData(_img, 0, 0);
+      const t1 = performance.now();
+
+
+      // render FPS
+      const dt = (t1 - t0);
+      if (this.FPSstats) {
+
+        this.FPSstats.textContent = `
+        FPS: ${(1000 / dt).toFixed(1)} | 
+        render=${dt.toFixed(1)}ms | ${Math.floor(this.canvas.width / internalScale)}x${Math.floor(this.canvas.height / internalScale)} (scale ${internalScale}x)
+        pos=(${this.currentCamera.camPos.x.toFixed(2)}, ${this.currentCamera.camPos.y.toFixed(2)}, ${this.currentCamera.camPos.z.toFixed(2)}) 
+        yaw=${this.currentCamera.yaw.toFixed(1)} 
+        pitch=${this.currentCamera.pitch.toFixed(1)}`;
+      }
+    }
+
+  }
+
 
   
 </script>
@@ -3599,80 +3937,24 @@
 
 
 <script id="white canvas">
+
+
+// y-up physicSimulator
+class PhysicSimulator extends GameObject{
+  constructor(){}
+
+}
+
   const GM = new GameManager('pauseMenu_GM')
 
-  const sa = new SpriteAsset(0, 0, 0, 0.3, { tex: Lily32, size: 32, color: 'white' })
+  const testWorld = new worldBlock()
+  const testCamera = new cameraRCV()
+  testCamera.world = testWorld
+  const testRenderer = new RendererRCV(testCamera,testWorld,canvas0)
 
-  GM.addChild(new WorldArray())
-
-  const rcc = new RayCasterCamera()
-  rcc.tags.add(eventID.eventStop)
-  GM.addChild(rcc)
-  GM.addChild(new SpriteAsset(5, 5, 0))
-
-  GM.switchPauseByTag(eventID.eventStop, true, 0)
-  GM.switchPauseByTag(eventID.eventStop, true, 1)
-  GM._needsRebuild = true
-
-
-
-  GM.on('startGame', () => {
-    console.log('GM handle startGame')
-    GM.removeByTag('startMenu')
-    GM.switchPauseByTag(eventID.eventStop, false, 0)
-    GM.switchPauseByTag(eventID.eventStop, false, 1)
-    GM._needsRebuild = true
-    const p = new Player3DWithRotation()
-    p.tags.add('jumper').add(eventID.eventStop)
-    p.addChild(sa)
-    getEventHandler(p)
-    p.on(eventID.space, () => {
-      showHTML('player jump', 'playerChannel')
-      p.deltaZ = 0.08
-    })
-    GM.addChild(p)
-
-    GM._needsRebuild = true
-  })
-
-
-  GM.on(eventID.playerDie, () => {
-    GM.removeByTag('jumper')
-    GM.addChild(sm)
-    sm.msg = 'You DIE, do not try to swim in lava, Press SPACE to retry'
-  })
-
-  GM.on(eventID.playerGoal, () => {
-    GM.removeByTag('jumper')
-    GM.addChild(sm)
-    sm.msg = 'You WIN!!! Thank you for playing, Press Space to play again'
-  })
-
-  const sm = new GameObject('startmenu')
-  sm.msg = 'Press SPACE to Start'
-  getEventHandler(sm)
-  sm.tags.add('startMenu')
-  sm.draw = function () {
-    C.fillStyle = 'black'
-    C.fillRect(0, 0, W, H)
-    C.fillStyle = 'white'
-    C.fillText(this.msg, W / 2 - 100, H / 2)
-  }
-
-  sm.on(eventID.space, () => {
-    console.log('sm send startGame')
-    GM.pushEvent('startGame')
-
-  })
-
-
-
-  GM.addChild(sm)
-
-
-
-  GM.addChild(new ListShowerHTML())
-
+  GM.addChild(testCamera)
+  GM.addChild(testRenderer)
+  GM.addChild(new ListShower())
 
   gameLoop = function () {
 
