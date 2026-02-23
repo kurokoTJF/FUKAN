@@ -1,4 +1,3 @@
-
 <!doctype html>
 <html>
 
@@ -3836,13 +3835,13 @@
     }
 
     // just enjoy making static method. help me to figure out the coupling
-    static fillImageData(_canvas, _imgData, _internalScale, px, py, r, g, b) {
+    static fillImageData(_canvas, _imgData, _internalScale, px, py, r, g, b, a = 255) {
       // 書き込み（内部縮小→スケール描画：最近傍）
       // ここでは直接フル解像度に nearest 拡大して塗る
       const x0 = px * _internalScale | 0, y0 = py * _internalScale | 0;
-      for (let oy = 0; oy < _internalScale; oy++) {
-        let RGBAoffset = ((y0 + oy) * _canvas.width + x0) * 4;
-        for (let ox = 0; ox < _internalScale; ox++) {
+      for (let iy = 0; iy < _internalScale; iy++) {
+        let RGBAoffset = ((y0 + iy) * _canvas.width + x0) * 4;
+        for (let ix = 0; ix < _internalScale; ix++) {
           _imgData[RGBAoffset] = Math.max(0, Math.min(255, (r * 255) | 0));
           _imgData[RGBAoffset + 1] = Math.max(0, Math.min(255, (g * 255) | 0));
           _imgData[RGBAoffset + 2] = Math.max(0, Math.min(255, (b * 255) | 0));
@@ -3872,6 +3871,62 @@
       return c;
     }
 
+
+    static UVSamplingRGBA(tex, u, v, texSizeX, texSizeY = texSizeX) {
+      const U = Math.floor(u * texSizeX)
+      const V = Math.floor(v * texSizeY)
+      return {
+        r: tex[V * texSizeX + U],
+        g: tex[V * texSizeX + U + 1],
+        b: tex[V * texSizeX + U + 2],
+        a: 255,
+      }
+    }
+    static UVSamplingBWA(tex, u, v, texSizeX, texSizeY = texSizeX) {
+      const U = Math.floor(u * texSizeX)
+      const V = Math.floor(v * texSizeY)
+      const c = tex[V * texSizeX + U]
+      if (c >= 0) {
+        return {
+          r: c,
+          g: c,
+          b: c,
+          a: 255,
+        }
+      } else {
+        return {
+          r: 0,
+          g: 0,
+          b: 0,
+          a: 0,
+        }
+      }
+    }
+
+    // unfinished
+    static UVSamplePixel(
+      _canvas, _imgData,
+      _tex, _texSampleSize,
+      _x,
+      sx0, sx1, sy0, sy1,
+      x0, x1, y0, y1,
+      dotWidth = this.sample_width, dotHeight = this.sample_height
+    ) {
+      const drawHeight = sy1 - sy0
+      const drawWidth = sx1 - sx0
+      for (let iy = 0; iy < strandHeight; iy += dotHeight) {
+        const v = (sy0 + iy - y1) / (y0 - y1) // FIX!!!
+        for (let ix = 0; ix < drawWidth; ix += dotWidth) {
+          const u = (sx0 + ix - x1) / (x0 - x1) // FIX!!!
+          //          
+          const res = RendererRCV.UVSampling(_tex, u, v, _texSampleSize)
+          //          
+          RendererRCV.fillImageData(_canvas, _imgData, dotWidth, 'px', 'py', res.r, res.g, res.b, res.a)
+
+        }
+      }
+      // put Image Data
+    }
 
   }
 
