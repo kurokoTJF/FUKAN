@@ -39,11 +39,11 @@
 <script id="page basic setting">
   // ===== Canvas =====
   const canvas0 = document.getElementById('c');
-  const C = canvas0.getContext('2d', { alpha: false });
+  const C = canvas0.getContext('2d', { alpha: false, willReadFrequently: true });
   const W = canvas0.width, H = canvas0.height;
 
   const canvas1 = document.getElementById('c0');
-  const c2 = canvas1.getContext('2d', { alpha: false });
+  const c2 = canvas1.getContext('2d', { alpha: false, willReadFrequently: true });
   const w0 = canvas1.width, h0 = canvas1.height;
 
 
@@ -3586,15 +3586,28 @@
       this.pitch = pitch
       this.delta = new Vec3(0, 0, 0)
       this.nextDelta = new Vec3(0, 0, 0)
+      this.vecForward = new Vec3(0, 0, 0)
+      this.vecRight = new Vec3(0, 0, 0)
+      this.vecUp = new Vec3(0, 0, 0)
 
       this.world = world
       this.fovDeg = 40
       this.moveSpeed = 0.04
       this.rotSpeed = 1
 
+    
+
     }
 
     update() {
+
+      // update for rendering
+      this.vecForward = Vec3.fromYawPitch(this.yaw, this.pitch)
+      this.vecRight = this.vecForward.cross(new Vec3(0, 1, 0)).norm();
+      this.vecUp = this.vecRight.cross(this.vecForward)
+
+
+
       //controller
 
 
@@ -3662,7 +3675,7 @@
       this.currentWorld = _currentWorld
       this.canvas = _canvas
       this.FPSstats = _statsEl
-      this.ctx = this.canvas.getContext('2d', { alpha: false, desynchronized: true })
+      this.ctx = this.canvas.getContext('2d', { alpha: false, desynchronized: true, willReadFrequently: true })
       this.lightDir = new Vec3(0.6, -0.8, 0.2).norm();
       this.worldUp = new Vec3(0, 1, 0);
       this.renderStartTime = 0
@@ -3903,7 +3916,44 @@
       }
     }
 
-    // unfinished
+    static verticesProjection(v, sv, _cameraRCV) {
+
+      const camForward = _cameraRCV.vecForward
+      const camRight = _cameraRCV.vecRight
+      const camUp = _cameraRCV.vecUp
+
+      const vector = v.clone().sub(_cameraRCV.position)
+      // camera coord
+      const project = new Vec3(
+        vector.dot(camRight), vector.dot(camUp), vector.dot(camForward)
+      )
+
+      // 近すぎる
+      if (project.z <= 1e-6) return
+
+
+      // clip coord
+      const fov = _cameraRCV.fovDeg * Math.PI / 180;
+
+      const tanHalfY = Math.tan(fov * 0.5)
+      const tanHalfX = tanHalfY * W / H
+      project.set(
+        project.x / (tanHalfX * project.z),
+        project.y / (tanHalfY * project.z),
+        project.z)
+
+
+      // そのまま上書きする?
+      return sv.set(
+        (project.x * 0.5 + 0.5) * W,
+        (0.5 - project.y * 0.5) * H,
+        project.z)
+
+
+    }
+
+
+    // working on ... unfinished
     static UVSamplePixel(
       _canvas, _imgData,
       _tex, _texSampleSize,
@@ -4052,37 +4102,16 @@
   const testPoint = new GameObject('point!')
   testPoint.position.set(10, 5, 15)
   testPoint.screenPos = new Vec3(0, 0, 0)
+
+
   testPoint.update = function () {
+    RendererRCV.verticesProjection(this.position, this.screenPos, testCameraRCV)
 
-    const vector = this.position.clone().sub(testCameraRCV.position)
-    const camForward = Vec3.fromYawPitch(testCameraRCV.yaw, testCameraRCV.pitch)
-    const camRight = camForward.cross(new Vec3(0, 1, 0)).norm();
-    const camUp = camRight.cross(camForward)
-
-    const project = new Vec3(
-      vector.dot(camRight), vector.dot(camUp), vector.dot(camForward)
-    )
-
-    if (project.z <= 1e-6) return
-
-    const fov = testCameraRCV.fovDeg * Math.PI / 180;
-
-    const tanHalfY = Math.tan(fov * 0.5)
-    const tanHalfX = tanHalfY * W / H
-    project.set(
-      project.x / (tanHalfX * project.z),
-      project.y / (tanHalfY * project.z),
-      project.z)
-
-
-    this.screenPos.set(
-      (project.x * 0.5 + 0.5) * W,
-      (0.5 - project.y * 0.5) * H,
-      project.z)
   }
 
   testPoint.draw = function () {
 
+    // rendererRCV.renderRectangleSprite()
     if (!Math2.within(this.screenPos.x, 0, W) || !Math2.within(this.screenPos.y, 0, H)) {
       return
     }
