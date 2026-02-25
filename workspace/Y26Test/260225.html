@@ -1,0 +1,4170 @@
+<!doctype html>
+<html>
+
+<head>
+  <meta charset="utf-8">
+  <title>2D Ray Casting with Variable Heights (Fixed)</title>
+  <style>
+    body {
+      margin: 0;
+      background: #bdbdc2;
+      display: grid;
+      place-items: center;
+      height: 80vh;
+    }
+
+    canvas {
+
+      image-rendering: pixelated;
+      background: #8b8b8b;
+    }
+  </style>
+</head>
+
+<body>
+  <p>[canvas0: c(w,h)]</p>
+  <div id="fps"></div>
+  <canvas id="c" width="480" height="320"></canvas>
+  <p>[canvas1: c2(w0,h0)]</p>
+  <canvas id="c0" width="240" height="240"></canvas>
+  <p id="list"></p>
+
+
+</body>
+
+
+
+
+
+<script id="page basic setting">
+  // ===== Canvas =====
+  const canvas0 = document.getElementById('c');
+  const C = canvas0.getContext('2d', { alpha: false, willReadFrequently: true });
+  const W = canvas0.width, H = canvas0.height;
+
+  const canvas1 = document.getElementById('c0');
+  const c2 = canvas1.getContext('2d', { alpha: false, willReadFrequently: true });
+  const w0 = canvas1.width, h0 = canvas1.height;
+
+
+  function drawLine(ctx, x0, y0, x1, y1, color = 'red', thickness = 4) {
+    ctx.strokeStyle = color;
+    ctx.lineWidth = thickness
+    ctx.beginPath()
+    ctx.moveTo(x0, y0)
+    ctx.lineTo(x1, y1)
+    ctx.stroke()
+  }
+
+  function drawSimpleBG(color) {
+    C.fillStyle = color
+    C.fillRect(0, 0, W, H)
+  }
+
+  function drawGrid(cellSize = 50) {
+    const cols = Math.floor(W / cellSize); // 横方向のマス数
+    const rows = Math.floor(H / cellSize); // 縦方向のマス数
+
+    C.strokeStyle = 'rgba(0,0,0,0.2)';
+    C.lineWidth = 2
+    C.fillStyle = 'black'
+    C.font = '10px sans-serif' // フォント指定も忘れずに
+
+    for (let i = 0; i <= cols; i++) {
+      C.beginPath();
+      C.moveTo(i * cellSize, 0);
+      C.lineTo(i * cellSize, H);
+      C.stroke();
+      C.fillText(i * cellSize, i * cellSize, 10)
+    }
+
+    for (let j = 0; j <= rows; j++) {
+      C.beginPath();
+      C.moveTo(0, j * cellSize);
+      C.lineTo(W, j * cellSize);
+      C.stroke();
+      C.fillText(j * cellSize, 0, j * cellSize)
+    }
+  }
+</script>
+
+
+<script id="equipment & engine & utilities">
+
+  // key Maps > keys > Listener
+  document.addEventListener("keyup", (e) => {
+    const action = keyMap[e.key.toLowerCase()]
+    if (action) {
+      keys[action].pressed = false
+      if (onReleasehandlers[action]) {
+        if (keys[action].press) {
+          onReleasehandlers[action]()
+          keys[action].press = false
+        }
+      } else {
+        keys[action].press = false
+
+      }
+      e.preventDefault()
+    }
+  })
+
+  document.addEventListener("keydown", (e) => {
+    const action = keyMap[e.key.toLowerCase()]
+    if (action) {
+      keys[action].pressed = true
+      if (onPressHandlers[action]) {
+        if (!keys[action].press) {
+          onPressHandlers[action]()
+          keys[action].press = true
+        }
+      } else {
+        keys[action].press = true
+
+      }
+      e.preventDefault()  // ページスクロールなどを防止
+    }
+  })
+
+
+
+  // html button interface
+  keyPress = function (key) {
+    keys[key].pressed = true
+    keys[key].source = 'button'
+  }
+
+  // for (let _key in keys) keys[_key].pressed = false
+
+  // key container
+  const keys = new Proxy({}, {
+    get(target, prop) {
+      if (!(prop in target)) {
+        target[prop] = { press: false, pressed: false };
+      }
+      return target[prop];
+    }
+  });
+
+
+</script>
+<script id="equipment functions">
+  // 画面になにか
+  function showHTML(MSG, ID = 0) {
+    let el = document.getElementById(ID);
+
+    if (!el) {
+      el = document.createElement('div');
+      el.id = ID;
+
+      const body = document.body;
+      if (body.firstChild) {
+        body.insertBefore(el, body.firstChild); // ← 先頭に挿入
+      } else {
+        body.appendChild(el); // ← 最悪何もないときは普通に追加
+      }
+    }
+
+    el.innerText = MSG;
+  }
+
+
+  // render queueと一緒に使う、一気に変換
+  function cameraProjection(target, camera) {
+    //target.drawPosition.x = target.position.x
+    //target.drawPosition.y = target.position.y
+    C.save()
+
+    target.drawPosition.x = target.position.x - camera.position.x + W / 2
+    target.drawPosition.y = target.position.y - camera.position.y + H / 2
+
+    const scale = 1.5
+    C.scale(scale, scale)
+    // 左上がスケールの原点
+    // 真ん中の点を真ん中に戻せばいい
+    // 拡大したら、点の調整もスケールかけるので、最後に/scaleが必要
+    target.drawPosition.x -= ((scale - 1) * W / 2) / scale
+    target.drawPosition.y -= ((scale - 1) * H / 2) / scale
+
+    target.draw()
+
+    C.restore()
+
+
+  }
+
+  // 四角い判定ボックスと 予測型コリジョン判定用のやつ
+  // updateしないと、drawPositionも更新されない
+  function getCollision(target, draw = true, ctx = C) {
+    target.position = { x: 0, y: 0 }
+    target.deltaPosition = { x: 0, y: 0 }
+    target.drawPosition = { x: 0, y: 0 }
+    target.accelaration = { x: 0, y: 0 }
+    target.width = 32
+    target.height = 32
+    target.gravity = 1
+    target.direction = 1
+    target.maxSpeed = { x: 3, y: 10 }
+
+    target.checkSpeed = function () {
+      const vx = target.deltaPosition.x;
+      const vy = target.deltaPosition.y;
+      if (Math.abs(vx) > target.maxSpeed.x) {
+        target.deltaPosition.x = Math.sign(vx) * target.maxSpeed.x
+      }
+      if (Math.abs(vy) > target.maxSpeed.y) {
+        target.deltaPosition.y = Math.sign(vy) * target.maxSpeed.y
+      }
+    }
+
+    const _update = target.update.bind(target)
+    target.update = function () {
+      _update()
+      target.drawPosition.x = target.position.x
+      target.drawPosition.y = target.position.y
+    }
+
+    target.moveTo = function (x, y) {
+      target.position.x = x
+      target.position.y = y
+    }
+    target.updateDir = function () {
+      if (target.deltaPosition.x > 0) target.direction = 1
+      else if (target.deltaPosition.x < 0) target.direction = -1
+    }
+
+    target.drawRect = function (ctx = C) {
+      ctx.fillStyle = 'grey'
+      ctx.fillRect(target.drawPosition.x, target.drawPosition.y, this.width, this.height)
+    }
+    addMethodLast(target, 'draw', target, 'drawRect')
+
+
+    target.initialize = function (x, y, w, h) {
+      this.position = { x: x, y: y }
+      this.width = w
+      this.height = h
+    }
+
+    target.swapPosition = function () {
+      target.position.x += target.deltaPosition.x
+      target.position.y += target.deltaPosition.y
+    }
+
+    target.updateGravity = function () {
+      target.deltaPosition.y += target.gravity
+    }
+    target.applyFriction = function () {
+      const friction = 0.1;
+      const vx = target.deltaPosition.x;
+
+      if (Math.abs(vx) <= friction) {
+        target.deltaPosition.x = 0;
+      } else {
+        target.deltaPosition.x -= Math.sign(vx) * friction;
+      }
+    }
+
+    target.Ytop = function () {
+      return { now: this.position.y, next: this.position.y + this.deltaPosition.y }
+    }
+    target.Ybottom = function () {
+      return { now: this.position.y + this.height, next: this.position.y + this.height + this.deltaPosition.y }
+
+    }
+    target.Xleft = function () {
+      return { now: this.position.x, next: this.position.x + this.deltaPosition.x }
+
+    }
+    target.Xright = function () {
+      return { now: this.position.x + this.width, next: this.position.x + this.width + this.deltaPosition.x }
+
+    }
+
+    target.YLandOn = function (_ground) {
+      target.position.y = _ground - target.height
+      target.deltaPosition.y = 0
+    }
+    target.centerPosition = function () {
+      return { x: this.position.x + this.width / 2, y: this.position.y + this.height / 2 }
+    }
+
+
+
+  }
+
+  // the object to object hitTester
+  // not use this anymore in accessable block world
+  function getHitTester(_target) {
+    _target.hitTest = function (target) {
+      if (
+        target.Ybottom().next > this.Ytop().now &&
+        target.Ytop().next < this.Ybottom().now &&
+        target.Xright().next > this.Xleft().now &&
+        target.Xleft().next < this.Xright().now
+      ) {
+
+        const fromAbove = target.Ybottom().now <= this.Ytop().now
+        const fromBelow = target.Ytop().now >= this.Ybottom().now
+        const fromRight = target.Xleft().now >= this.Xright().now
+        const fromLeft = target.Xright().now <= this.Xleft().now
+        if (fromAbove) {
+          target.position.y = this.position.y - target.height
+          target.deltaPosition.y = 0
+          if (target.eventQueue) target.pushEvent('land')
+        } else if (fromBelow) {
+          target.position.y = this.position.y + this.height + 1
+          target.deltaPosition.y = 0
+
+        } else if (fromRight) {
+          target.position.x = this.position.x + this.width
+          target.deltaPosition.x = 0
+
+        } else if (fromLeft) {
+          target.position.x = this.position.x - target.width
+          target.deltaPosition.x = 0
+        } else {
+          console.log('?!')
+          const centerfromAbove = target.centerPosition().y <= this.position.y + this.height / 2;
+          const centerfromBelow = target.centerPosition().y >= this.position.y + this.height / 2;
+          const centerfromRight = target.centerPosition().x >= this.position.x + this.width / 2;
+          const centerfromLeft = target.centerPosition().x <= this.position.x + this.width / 2;
+          if (centerfromAbove) {
+
+            target.position.y = this.position.y - target.height
+            target.deltaPosition.y = 0
+            if (target.eventQueue) target.pushEvent('land')
+          } else if (centerfromBelow) {
+            target.position.y = this.position.y + this.height + 1
+            target.deltaPosition.y = 0
+
+          } else if (centerfromRight) {
+            target.position.x = this.position.x + this.width
+            target.deltaPosition.x = 0
+
+          } else if (centerfromLeft) {
+            target.position.x = this.position.x - target.width
+            target.deltaPosition.x = 0
+          } else {
+            console.log('bakana!')
+          }
+        }
+      }
+    }
+  }
+
+  // 2種類のProxyを実装する
+  // でも、正直Tagは使いたくないけどね
+  function getProxy(target) {
+    target.request = new Proxy({}, {
+      get: (target, prop) => {
+        const value = target[prop];
+        target[prop] = false; // 読んだら自動で false にする
+        return value ?? false;
+      }
+    });
+
+    // 未定義状態。自由に書き込める。デフォルト状態はfalse
+    target.Tag = new Proxy({}, {
+      get(target, prop) {
+        return prop in target ? target[prop] : false;
+      }
+    })
+  }
+
+  function getActiveTags(tagObj, separator = " ") {
+    return Object.entries(tagObj)
+      .filter(([_, v]) => v === true)
+      .map(([k]) => k)
+      .join(separator);
+  }
+
+
+
+  // Methodを結合する。returnのスコープを注意
+  function addMethodFirst(target, target_method, comp, method) {
+    const t = target[target_method].bind(target)// this = target
+    const c = comp[method].bind(comp)// this = comp
+    target[target_method] = function (...args) {
+      c(...args)
+      t(...args)
+    }
+  }
+
+  function addMethodLast(target, target_method, comp, method = target_method) {
+    const t = target[target_method].bind(target)
+    const c = comp[method].bind(comp)
+    target[target_method] = function () {
+      t()
+      c()
+    }
+  }
+
+  // 独自のupdateとDrawを持ったcomponentを内部に埋め込む
+  function joinComponent(cmpnt, trgt) {
+
+    addMethodLast(trgt, 'update', cmpnt)
+    addMethodLast(trgt, 'draw', cmpnt)
+
+    if (cmpnt.dealEvent && trgt.dealEvent) {
+      addMethodLast(trgt, 'dealEvent', cmpnt)
+    }
+
+    return cmpnt
+
+  }
+  // state Machine の初期化。これのDecoupleは…
+  // 外部データが必要
+  function getStateMachine(target) {
+    const initialState = target.data.state[target.data.initialState]
+    target.state = new ImportedState(target.data.initialState, initialState)
+    target.state.enter(target)
+
+    target.cst = function (stateName) {
+      target.state = new ImportedState(stateName, target.data.state[stateName])
+
+      target.counter.setEnd()// じゃないと前のカウンターの処理が裏で走ってしまう
+      target.state.enter(target)
+    }
+
+    const update_ = target.update.bind(target)
+    console.log('state machine joined ')
+
+    target.update = function () {
+      update_()
+      target.state.update(target)
+
+    }
+
+  }
+</script>
+
+
+<script>
+  class ImageLoader {
+    constructor(url) {
+      this.loaded = false
+      this.img = new Image()
+      this.img.src = url
+      this.img.onload = () => {
+        this.loaded = true
+      }
+    }
+    load(url) {
+      this.loaded = false
+      this.img.src = url
+      this.img.onload = () => {
+        this.loaded = true
+      }
+    }
+    draw() {
+      if (!this.loaded) return
+      C.drawImage(this.img, 0, 0, this.img.width, this.img.height, 0, 0, W, H)
+    }
+  }
+
+  // ここが大事。歯車
+  class Counter {
+    constructor({
+      endTime = 100,
+      pause = false,
+      end = false,
+      target = null,
+      msg = "__",
+      processCall = null,
+      endCall = () => { },
+      loop = false,
+    } = {}) {
+      this.time = 0
+      this.endTime = endTime
+      this.loop = loop
+      this.pause = pause
+      this.end = end
+      this.target = target
+      this.processCall = processCall
+      this.endCall = endCall
+      this.msg = msg
+    }
+    progress() {
+      return this.time / this.endTime
+    }
+    start() {
+      this.pause = false
+    }
+    stop() {
+      this.pause = true
+    }
+
+    setEnd() {
+      this.end = true
+    }
+    isEnd() {
+      return this.end
+    }
+
+    #endMethod() {
+      if (this.loop) {
+        this.time = 0
+        return
+      }
+      this.end = true
+      this.endCall?.()
+    }
+
+
+    update() {
+      if (this.time < this.endTime) {
+        this.processCall?.()
+        this.time++
+      } else this.#endMethod()
+    }
+  }
+
+  // 対象がCounterを持つようになる
+  // Counterを描画するための関数が追加される
+  function getCounterComponent(t, gm = GM) {
+    t.counter = this.addCounter({
+      endTime: 100,
+      target: t,
+      processCall: function () {
+        if (this.time == this.endTime - 1) {
+          this.time = 0
+        }
+      },
+      endCall: () => {
+        console.log('no chance to end')
+      }
+    })
+
+    t.drawCounter = function () {
+      C.fillStyle = 'red'
+      C.fillRect(t.drawPosition.x, t.drawPosition.y, 32 * t.counter.progress(), 10)
+    }
+
+    addMethodLast(t, 'draw', t, 'drawCounter')
+  }
+
+
+  // test 用のGameManagerObject
+  // cameraを入れたら、drawがcamera経由になる
+
+  // 本当は配列に入れたほうが、あとから消すことができるけどね
+  function joinGameLoop(target, gm = GM) {
+
+    if (target.dealEvent)
+      addMethodLast(gm, 'gameLoop_input', target, 'dealEvent')
+    if (target.check)
+      addMethodLast(gm, 'gameLoop_check', target, 'check')
+    if (target.update)
+      addMethodLast(gm, 'gameLoop_update', target, 'update')
+    if (target.draw)
+      addMethodLast(gm, 'draw', target, 'draw')
+  }
+
+  // ここに入れれば、繰り返し呼び出される
+  function gameLoop() {
+    console.log('define the [gameLoop],the KeyMap,gameManager,EventQueue,ListShowerHTML')
+  }
+
+  // ここが心臓部分
+  function update() {
+    gameLoop()
+    requestAnimationFrame(update)
+  }
+  update()
+</script>
+
+<script id="3D accessable world engine">
+  // マイクラ世界の醍醐味の一つ
+  // positionとwidth, height, blockSizeの定義も必須
+  // アクセスできる世界の情報で、好きなタイミングで checkができる。
+
+
+  function moveAxis(axis, delta, _player = player, _world = _player.world) {
+    _player[`v` + axis] = _world.moveAxisCheck_BottomType(_player.position, axis, delta, _player.size, _player)
+  }
+
+  // player.current を設定するだけ。
+  // and the player needs position, size, vx,vy,vz
+  // 完全透明。空のupdateとupdateListを入れることで、this.currentのupdateなどに二回アクセスするのを防ぐ
+  class PlayerProxy {
+    constructor(initial = null, name) {
+      this.current = initial;
+      this.name = name
+      this.objectList = []
+      return new Proxy(this, {
+        get: (target, prop, receiver) => {
+          if (prop in target) return Reflect.get(target, prop, receiver);
+          return target.current?.[prop];
+        },
+        set: (target, prop, value, receiver) => {
+          if (prop in target) return Reflect.set(target, prop, value, receiver);
+          if (target.current) target.current[prop] = value;
+          return true;
+        }
+      });
+    }
+
+    update() { }
+
+    setCurrent(obj) {
+      this.current = obj;
+    }
+    getCurrent() {
+      return this.current;
+    }
+  }
+
+
+
+  class EmptyObject {
+    constructor() {
+    }
+    //これは上書きしない
+    update() {
+      if (this.updatePause === true) return
+      this.update_self()
+    }
+    traverse(list, callback) {
+      for (const obj of list) {
+        callback(obj)
+        if (obj.objectList) {
+          this.traverse(obj.objectList, callback)
+        }
+      }
+    }
+
+    updateList_filter(ID) {
+      this.objectList = this.objectList.filter((c) => c.id != ID)
+    }
+    addChild(e, draw = true) {
+      this.objectList.push(e)
+      e.master = this
+      e.updatePause = false
+      if (draw) e.drawPause = false
+      else e.drawPause = true
+    }
+    update_self() {
+    }
+    destroy() {
+      console.log(`${this.constructor.name} destroyed`);
+    }
+
+    draw() {
+      console.log('Empty time')
+    }
+  }
+
+  //ゲーム世界の原子になる
+  //name for showList, id more like type
+  class GameObject {
+    constructor(name = 'Node', id = 'game_object') {
+      this.folded = false // toggle this to fold a folder group
+      this.id = id
+      this.name = name
+      this.deleted = false
+      this.objectList = []
+      this.drawList = []
+      this.tags = new Set()
+      this.drawPause = false
+      this.updatePause = false
+      this.position = new Vec3(0, 0, 0)
+    }
+
+    get size() {
+      return { x: this.sizex ?? 0, y: this.sizey ?? 0, z: this.sizez ?? 0 }
+    }
+
+    get rotation() {
+      return { x: 0, y: 0, z: this.angle ?? 0 }
+    }
+
+    get px() {
+      //return this.master?.px || 0 + this.localx
+      return (this.master?.px ?? 0) + this.localx
+    }
+    get py() {
+      return (this.master?.py ?? 0) + this.localy
+
+    }
+    get pz() {
+      return (this.master?.pz ?? 0) + this.localz
+    }
+
+    set px(v) {
+      this.localx = v
+    }
+
+    set py(v) {
+      this.localy = v
+    }
+
+    set pz(v) {
+      this.localz = v
+    }
+
+    //これは上書きしない
+    update() {
+      if (this.updatePause === true) return
+      this.update_self()
+    }
+    update_self() {
+    }
+
+    draw() {
+      //console.log('gameobject draw')
+    }
+    onAttach(master) {
+      this.master = master;
+    }
+    traverse(list, callback) {
+      for (const obj of list) {
+        callback(obj)
+        if (obj.objectList) {
+          this.traverse(obj.objectList, callback)
+        }
+      }
+    }
+
+    updateList_filter(ID) {
+      this.objectList = this.objectList.filter((c) => c.id != ID)
+    }
+    addChild(e, draw = true) {
+      this.objectList.push(e)
+      if (e.onAttach)
+        e.onAttach(this)
+      else
+        e.master = this
+      e.updatePause = false
+      e.gatherReference?.(this)
+
+      if (e.drawPause == true) return e
+      if (draw) e.drawPause = false
+      else e.drawPause = true
+
+      return e
+    }
+    destroy() {
+      if (this.deleted) return
+      this.deleted = true
+      console.log(`${this.constructor.name} destroyed`);
+    }
+
+  }
+
+
+  class ListShower {
+    constructor() {
+      this.text = []
+    }
+    update() {
+    }
+    draw() {
+      if (!this.master) return
+      const text = this.master.showList(this.master.objectList)
+
+      if (text != false) {
+        console.log('[when GM rebuild] list shower split the list')
+        const lines = text.split('\n')
+        this.text = lines
+        const startY = 0
+        const lineHeight = 20 // 行間。お好みで調整
+
+        C.fillStyle = 'rgba(0,0,0,0.5)'
+        C.fillRect(0, 0, W / 3, lineHeight * lines.length)
+
+        C.fillStyle = 'white'
+        C.font = '10px sans-serif' // フォント指定も忘れずに
+
+        lines.forEach((line, i) => {
+          C.fillText(line, 10, startY + 20 + i * lineHeight)
+        })
+      } else {
+
+        const lines = this.text
+        const startY = 0
+        const lineHeight = 20 // 行間。お好みで調整
+
+        C.fillStyle = 'rgba(0,0,0,0.5)'
+        C.fillRect(0, 0, W / 3, lineHeight * lines.length)
+
+        C.fillStyle = 'white'
+        C.font = '10px sans-serif' // フォント指定も忘れずに
+        lines.forEach((line, i) => {
+          C.fillText(line, 10, startY + 20 + i * lineHeight)
+        })
+      }
+    }
+  }
+
+
+  class ListShowerHTML extends GameObject {
+    constructor(name = 'ListShowerHTML') {
+      super(name)
+      this.text = []
+    }
+    update() {
+    }
+    draw() {
+      if (!this.master) return
+      const text = this.master.showList(this.master.objectList)
+
+      if (text) {
+        showHTML(text, 'list')
+
+      }
+    }
+  }
+
+
+
+
+  class BlockWorld extends GameObject {
+    constructor(x = 10, y = 10, z = 5, block_size = 32) {
+      super()
+      this.block_size = 50
+      this.world = []
+      this.worldSize = {
+        x: x,
+        y: y,
+        z: z
+      }
+
+      this.initialize()
+
+      this.blockImage = new ImageLoader('https://raw.githubusercontent.com/kurokoTJF/FUKAN/refs/heads/main/Sprites/Char/map/MCblock.png')
+
+    }
+
+    initialize() {
+      for (let x = 0; x < this.worldSize.x; x++) {
+        this.world[x] = []
+        for (let y = 0; y < this.worldSize.y; y++) {
+          this.world[x][y] = []
+          const height = Math.floor(Math.random() * (this.worldSize.z - 1)) + 1
+          for (let z = 0; z < height; z++) {
+            this.world[x][y][z] = 1
+
+            if (x > 1 && x < this.worldSize.x - 2 && y > 1 && y < this.worldSize.y - 2 && z > 0) {
+              this.world[x][y][z] = 0
+
+            }
+          }
+        }
+      }
+
+    }
+
+    moveAxisCheck_BottomType(pp, axis, delta, size, target = null) {
+      const block = this.block_size
+      const pw = size.x
+      const pd = size.y
+      const ph = size.z
+      const np = { x: pp.x, y: pp.y, z: pp.z }
+      np[axis] += delta
+      // この計算…一回だけでいいよね？
+      // いやだめだ、軸ごとにPositionの更新が入るので、引っかかるBlockも更新されるべき
+      const eps = 0.001// Math.floorは[0,1)なので、max側にくっつけた状態が良くない
+      const minX = Math.floor((np.x - pw / 2) / block)
+      const maxX = Math.floor((np.x + pw / 2 - eps) / block)
+      const minY = Math.floor((np.y - pd / 2) / block)
+      const maxY = Math.floor((np.y + pd / 2 - eps) / block)
+      const minZ = Math.floor((np.z) / block)
+      const maxZ = Math.floor((np.z + ph - eps) / block)
+
+      for (let bx = minX; bx <= maxX; bx++) {
+        for (let by = minY; by <= maxY; by++) {
+          for (let bz = minZ; bz <= maxZ; bz++) {
+            if (this.world[bx]?.[by]?.[bz]) {
+              // 衝突補正: 進行方向に応じて位置をブロックの端に揃える
+              if (axis === 'x') {
+                if (delta > 0) pp[axis] = bx * block - pw / 2;
+                if (delta < 0) pp[axis] = (bx + 1) * block + pw / 2
+              } else if (axis === 'y') {
+                if (delta > 0) pp[axis] = by * block - pd / 2;
+                if (delta < 0) pp[axis] = (by + 1) * block + pd / 2
+              } else if (axis === 'z') {
+                if (delta > 0) pp[axis] = bz * block - ph;       // top
+                if (delta < 0) {
+                  pp[axis] = (bz + 1) * block;
+                  target.pushEvent('land')
+
+
+                }  // landing
+
+              }
+              return 0; // 衝突したら移動終了
+            }
+          }
+        }
+      }
+
+      return delta
+    }
+
+
+    exportRenderQueue(camera) {
+      const worldSize = this.worldSize
+      const block_size = this.block_size
+      const world = this.world
+      const camera_angle = camera.rotation / 180 * Math.PI
+      const blockImage = this.blockImage
+
+      for (let x = 0; x < worldSize.x; x++) for (let y = 0; y < worldSize.y; y++) for (let z = 0; z < worldSize.z; z++) if (world[x][y][z]) {
+        const v_p = camera.projection({
+          x: x * block_size,
+          y: (y + 1) * block_size,
+          z: z * block_size
+        })
+        const v2_p = camera.projection({
+          x: x * block_size,
+          y: (y + 1) * block_size,
+          z: (z + 1) * block_size
+        })
+        const h1 = v2_p.y // top
+        const h2 = v_p.y // bottom
+
+        if (h1 < H && h2 > 0) if (h2 - h1 > 0)
+          // draw front height
+          camera.renderQueue.push({
+            depth: x + y + z + 1,
+            color: `hsla(${z / worldSize.z * 20 + y / worldSize.y * 20 + 200}, 50%, ${z / worldSize.z * 50 + y / worldSize.y * 50}%,
+                                0.2)`,
+            draw: function () {
+              let coord = null
+              if (!world[x][y][z + 1]) {
+
+                coord = { x: 3, y: 0 }
+              }
+              else {
+                coord = { x: 2, y: 0 }
+
+              }
+
+              if (blockImage.loaded) {
+                C.drawImage(
+                  blockImage.img,
+                  coord.x * 48,
+                  coord.y * 48,
+                  48,
+                  48,
+                  v2_p.x,
+                  v2_p.y,
+                  block_size,
+                  Math.ceil(h2 - h1) + 1)
+              }
+
+              C.fillStyle = this.color;
+              C.fillRect(
+                v2_p.x,
+                v2_p.y,
+                block_size,
+                Math.ceil(h2 - h1) + 1
+              );
+
+            }
+          })
+
+        // draw top!
+        if (!world[x][y][z + 1]) {
+          const vt_p = camera.projection({
+            x: x * block_size,
+            y: y * block_size,
+            z: (z + 1) * block_size
+          })
+          const vt2_p = camera.projection({
+            x: x * block_size,
+            y: (y + 1) * block_size,
+            z: (z + 1) * block_size
+          })
+          const h1 = vt_p.y // top
+          const h2 = vt2_p.y // bottom
+
+          if (h1 < H && h2 > 0) if (h2 - h1 > 0)
+
+            camera.renderQueue.push({
+              depth: x + y + z + 1,
+              color: `hsla(
+                                ${(z + 1) * 40 / worldSize.z}, 
+                                80%, 
+                                ${(z + 1) * 100 / worldSize.z}%,
+                                0.3)`,
+              draw: function () {
+
+
+                if (blockImage.loaded) {
+                  const coord = { x: 12, y: 12 }
+                  C.drawImage(
+                    blockImage.img,
+                    coord.x * 48,
+                    coord.y * 48,
+                    48,
+                    48,
+                    vt_p.x,
+                    vt_p.y,
+                    block_size,
+                    Math.ceil(h2 - h1) + 1)
+                }
+
+                C.fillStyle = this.color;
+                C.fillRect(
+                  vt_p.x,
+                  vt_p.y,
+                  block_size,
+                  Math.ceil(h2 - h1) + 1
+                )
+
+
+              }
+            })
+        }
+
+
+
+      }
+    }
+  }
+
+  class Camera2_5 extends GameObject {
+    constructor(target) {
+      super()
+      this.position = {
+        x: 0,
+        y: 0,
+        z: 0,
+
+      }
+      this.target = target
+      this.radius = 400 // cylinder effect
+      this.tilt = 0 // z axis rotation
+      this.rotation = 45 // x axis rotation
+      this.zoom = 1
+      this.speed = 0.04
+      this.drawList = []
+      this.drawListUI = []
+      this.renderQueue = []
+      this.objectList = []
+
+    }
+    update_self() {
+      if (this.target) {
+        const deltaX = this.target.position.x - this.position.x
+        const deltaY = this.target.position.y - this.position.y
+        const deltaZ = this.target.position.z - this.position.z
+        if (Math.abs(deltaX) > 1)
+          this.position.x += (deltaX) * this.speed
+        else
+          this.position.x = this.target.position.x
+        if (Math.abs(deltaY) > 1)
+          this.position.y += (deltaY) * this.speed
+        else
+          this.position.y = this.target.position.y
+        if (Math.abs(deltaZ) > 1)
+          this.position.z += (deltaZ) * this.speed
+        else
+          this.position.z = this.target.position.z
+      }
+    }
+
+    projection(position) {
+      const cp = this.position
+      const rad = this.rotation / 180 * Math.PI // angle in radius
+      const radius = this.radius
+      // my canvas XYZ to Maya XYZ
+      // the origin is left-top
+      const v1 = {
+        x: position.x - cp.x,
+        y: position.y - cp.y,
+        z: position.z - cp.z
+      }
+
+
+      //const k = Math.min(Math.abs(v1.y) / this.world.block_size/2, 1)
+      const k = 1
+      const theta = v1.y / radius
+      v1.y = v1.y * (1 - k) + k * (radius + position.z) * Math.sin(theta)
+      v1.z = v1.z * (1 - k) + k * (v1.z - (radius + position.z) * (1 - Math.cos(theta)))
+
+
+      const v2 = {
+        x: v1.x,
+        y: H - v1.y,
+        z: v1.z
+      }
+      // world to camera(in Maya XYZ)
+      // the dot production, to get the coords in new coordination
+      const v3 = {
+        x: v2.x,
+        y: v2.y * Math.cos(rad) + v2.z * Math.sin(rad),
+        z: v2.y * Math.sin(rad) - v2.z * Math.cos(rad)
+      }
+      // camera(Maya XYZ) to screen(invert the y)
+      // camera center! (x, h * Math.cos(rad))
+      const v4 = {
+        x: (v3.x) + W / 2,
+        y: (H * Math.cos(rad) - v3.y) + H / 2,
+        z: v3.z
+      }
+
+      //v.update_drawPosition(v4)
+      return v4
+    }
+
+    getDepth() { }
+
+    draw() {
+      this.getGMRenderQueue()
+
+      C.save(); // 現在の状態を保存
+      // 中心を回転の基準点に移動
+      C.translate(W / 2, H / 2);
+      C.rotate(this.tilt * Math.PI / 180);
+      C.scale(1 + (this.zoom - 1) * 2, this.zoom)
+      C.translate(-W / 2, -H / 2);
+      this.renderQueue.forEach(e => {
+        e.draw?.()
+      })
+      C.restore(); // 状態を元に戻す
+
+      this.renderQueue.length = 0 // こっちのほうがメモリー的に良いらしい
+
+      this.drawListUI.forEach(e => {
+        e.draw?.()
+      })
+      this.drawListUI = []
+    }
+    getGMRenderQueue() {
+      GM.traverse(GM.objectList, (e) => {
+        if (!e.drawPause)
+          if (e.exportRenderQueue)
+            e.exportRenderQueue(GM.camera)
+          else
+            this.drawListUI.push(e)
+
+
+      })
+      this.renderQueue.sort((a, b) => a.depth - b.depth)
+    }
+
+    getRenderQueue() {
+      // for loop the world, push something into renderqueue
+
+      // draw player!
+      this.drawList.forEach(e => {
+        if (!e.exportRenderQueue) return console.log('some object need the exportRenderQueue Method')
+        e.exportRenderQueue(this)
+      })
+      this.renderQueue.sort((a, b) => a.depth - b.depth)
+
+    }
+  }
+
+
+
+  // the player is defined by the world
+
+  class Collision3D extends GameObject {
+    constructor() {
+      super()
+      this.drawPause = false
+      EventHub.getEventHandler(this)
+      this.on('keydown', (target) => {
+        target.vy = 2
+      })
+      this.on('keyup', (target) => {
+        target.vy = -2
+      })
+      this.on('keyright', (target) => {
+        target.vx = 2
+      })
+      this.on('keyleft', (target) => {
+        target.vx = -2
+      })
+    }
+    update_self() {
+      const m = this.master
+      // get and chect the next, in just one code!
+
+      // self-check the delta 
+      m.vx = m.worldMove('x', m.vx)
+      m.vy = m.worldMove('y', m.vy)
+      m.vz = m.worldMove('z', m.vz)
+
+
+      m.position.x += m.vx
+      m.position.y += m.vy
+      m.position.z += m.vz
+
+      if (m.vx > 0) m.direction.x = 1
+      else if (m.vx < 0) m.direction.x = -1
+
+      if (m.vx != 0 || m.vy != 0) m.pushEvent('onMove')
+      else if (m.vx == 0 && m.vy == 0) m.pushEvent('onStop')
+
+      if (m.vz < 0) m.pushEvent('fall')
+
+      // 摩擦力未実装なのでとりあえず止める
+      m.vx = this.applyFriction(m.vx)
+      m.vy = this.applyFriction(m.vy)
+      m.vz -= 0.5
+
+    }
+
+    applyFriction(v) {
+      const friction = this.master.friction || 0.1;
+
+      if (Math.abs(v) <= friction) {
+        return 0;
+      } else {
+        return v - Math.sign(v) * friction;
+      }
+    }
+    applyGravity(v) {
+      const friction = this.master.friction || 0.1;
+      return v - 0.5
+    }
+
+    exportRenderQueue(camera) {
+      const m = this.master
+      const vp1 = camera.projection({
+        x: m.position.x - m.size.x / 2,
+        y: m.position.y - m.size.y / 2,
+        z: m.position.z + m.size.z
+      });
+      const vp2 = camera.projection({
+        x: m.position.x - m.size.x / 2,
+        y: m.position.y + m.size.y / 2,
+        z: m.position.z + m.size.z
+      });
+      const vp3 = camera.projection({
+        x: m.position.x - m.size.x / 2,
+        y: m.position.y + m.size.y / 2,
+        z: m.position.z
+      });
+      camera.renderQueue.push({
+        depth: (m.position.x + m.position.y + m.position.z) / m.world.block_size,
+        draw: () => {
+          C.fillStyle = 'yellow';
+          C.fillRect(
+            vp1.x,
+            vp1.y,
+            m.size.x,
+            (vp2.y - vp1.y)
+          );
+
+          C.fillStyle = 'red';
+          C.fillRect(
+            vp2.x,
+            vp2.y,
+            m.size.x,
+            (vp3.y - vp2.y),
+          );
+
+        }
+
+      });
+    }
+  }
+
+  class Player3D extends GameObject {
+    constructor(_world) {
+      super()
+      this.world = _world
+      this.color = 'yellow'
+      this.position = {
+        x: 300,
+        y: 100,
+        z: 300,
+      }
+      this.size = {
+        x: 20,
+        y: 20,
+        z: 20,
+      }
+      this.direction = {
+        x: 0,
+        y: 1,
+        z: 1,
+      }
+      this.vx = 0
+      this.vy = 0
+      this.vz = 0
+      this.objectList = []
+      this.drawPause = true
+      // to spread the event
+      //getEventManager(this)
+    }
+
+    moveTo(x, y, z) {
+      this.position.x = x
+      this.position.y = y
+      this.position.z = z
+    }
+
+    worldMove(Axis, delta) {
+      const d = this.world.moveAxisCheck_BottomType(this.position, Axis, delta, this.size, this)
+      return d
+    }
+
+    update_self() {
+      this.notifyEventToChildren()
+
+    }
+
+
+    exportRenderQueue(camera) {
+      const vp1 = camera.projection({
+        x: this.position.x - this.size.x / 2,
+        y: this.position.y - this.size.y / 2,
+        z: this.position.z + this.size.z
+      });
+      const vp2 = camera.projection({
+        x: this.position.x - this.size.x / 2,
+        y: this.position.y + this.size.y / 2,
+        z: this.position.z + this.size.z
+      });
+      const vp3 = camera.projection({
+        x: this.position.x - this.size.x / 2,
+        y: this.position.y + this.size.y / 2,
+        z: this.position.z
+      });
+      camera.renderQueue.push({
+        depth: (this.position.x + this.position.y + this.position.z) / this.world.block_size,
+        draw: () => {
+          C.fillStyle = this.color;
+          C.fillRect(
+            vp1.x,
+            vp1.y,
+            this.size.x,
+            (vp2.y - vp1.y)
+          );
+
+          C.fillStyle = 'rgba(160,0,100,1)';
+          C.fillRect(
+            vp2.x,
+            vp2.y,
+            this.size.x,
+            (vp3.y - vp2.y),
+          );
+
+        }
+
+      });
+    }
+
+  }
+
+
+  class Controller3D extends GameObject {
+    constructor() {
+      super()
+      this.id = 'controller3D'
+      onPressHandlers.attack = () => {
+        this.master.pushEvent('atk')
+      }
+      onPressHandlers.jump = () => {
+        //moveAxis('z', 8, this.target)
+        this.master.pushEvent('jump')
+
+      }
+      onPressHandlers.parry = () => {
+        //moveAxis('z', 8, this.target)
+        this.master.pushEvent('parry')
+
+      }
+
+
+    }
+    update_self() {
+
+      if (!this.master) return
+      const m = this.master
+      if (keys.down.pressed) {
+        m.pushEvent('keydown')
+      } else if (keys.up.pressed) {
+        m.pushEvent('keyup')
+      }
+
+      if (keys.left.pressed) {
+        m.pushEvent('keyleft')
+
+      } else if (keys.right.pressed) {
+        m.pushEvent('keyright')
+      }
+
+
+    }
+  }
+
+
+
+
+  class stateRenderer2_5 extends GameObject {
+    constructor(master) {
+      super()
+      this.master = master
+      this.spriteImage = null
+      this.currentFrame = 0
+
+    }
+
+    checkSprite() {
+      const n = this.master.activeState.name
+      const s = this.master.data.state[n]?.sprite
+      if (!s) return false
+      if (this.spriteName === n) return true
+
+      const path = this.master.data.spriteFolder + s.path
+
+      if (!this.spriteImage)
+        this.spriteImage = new ImageLoader(path)
+      else if (this.spriteImage.img.src != path)
+        this.spriteImage.load(path)
+
+      return true
+    }
+
+    update() {
+      if (!this.checkSprite()) {
+        this.spriteImage = null
+        return
+      }
+
+      const n = this.master.activeState.name
+      const s = this.master.data.state[n]?.sprite
+      const mc = this.master.counter
+      let FrameBuffer = mc.endTime / s.length
+      this.currentFrame = Math.floor(mc.time / FrameBuffer)
+      this.currentFrame = Math.min(this.currentFrame, s.length - 1)
+
+    }
+
+    exportSpriteDraw(camera) {
+      if (!this.spriteImage?.loaded) return false
+      const n = this.master.activeState.name
+      const s = this.master.data.state[n]?.sprite
+
+      const sw = this.spriteImage.img.width / s.length
+      const sh = this.spriteImage.img.height
+
+      const cropbox = {
+        position: {
+          x: sw * this.currentFrame,
+          y: 0,
+        },
+        width: sw,
+        height: sh,
+      }
+
+      if (this.offset) {
+        this.drawPosition.x += this.offset.x
+        this.drawPosition.y += this.offset.y
+      }
+
+      const target = this.master.master
+      const sizex = target.size.x * 2
+      const sizey = target.size.y * 2
+      const vp1 = camera.projection({
+        x: target.position.x,
+        y: target.position.y,
+        z: target.position.z + target.size.z / 2
+      });
+
+      let flip = 1
+      let flipX = vp1.x - sw / 2
+      if (target.direction.x <= 0) flip *= -1
+      if (s.flip) flip *= -1
+      if (flip <= 0) flipX = -(vp1.x + sw / 2)
+
+      const offsetx = s.offset ? s.offset.x : 0
+      const offsety = s.offset ? s.offset.y : 0
+
+      const drawObject = {
+        depth: (target.position.x + target.position.y + target.position.z) / target.world.block_size,
+
+        draw: () => {
+          C.save()
+          C.scale(flip, 1);
+          C.drawImage(
+            this.spriteImage.img,
+            cropbox.position.x,
+            cropbox.position.y,
+            cropbox.width,
+            cropbox.height,
+
+            flipX + offsetx,
+            vp1.y - sh / 2 + offsety,
+            sw,
+            sh,
+          )
+
+          C.restore()
+
+
+          showHTML(`${this.master.activeState.name}: ${Math.floor(this.master.counter?.progress() * 10) / 10},currentFrame:${this.currentFrame}`, 11)
+        }
+      }
+
+      return drawObject
+
+
+
+
+    }
+
+    draw() {
+      if (!this.spriteImage?.loaded) return
+      const n = this.master.activeState.name
+      const s = this.master.data.state[n]?.sprite
+
+      const sw = this.spriteImage.img.width / s.length
+      const sh = this.spriteImage.img.height
+
+      const cropbox = {
+        position: {
+          x: sw * this.currentFrame,
+          y: 0,
+        },
+        width: sw,
+        height: sh,
+      }
+
+      if (this.offset) {
+        this.drawPosition.x += this.offset.x
+        this.drawPosition.y += this.offset.y
+      }
+
+      C.drawImage(
+        this.spriteImage,
+        cropbox.position.x,
+        cropbox.position.y,
+        cropbox.width,
+        cropbox.height,
+
+        this.drawPosition.x,
+        this.drawPosition.y,
+        sw,
+        sh,
+      )
+    }
+
+
+    exportRenderQueue(camera) {
+      const ex = this.exportSpriteDraw(camera)
+      if (!ex) return
+      camera.renderQueue.push(ex);
+    }
+
+
+  }
+
+  // standard state unit
+  class Player3DState {
+    constructor(master) {
+      this.name = ''
+      this.data = master.data
+      this.master = master
+      this.target = master.master
+      EventHub.getEventHandler(this)
+
+    }
+
+    update() { }
+    draw() { }
+    enter() {
+      console.log(`${this.name} state is created`)
+    }
+  }
+
+  class Player3DImportedState extends Player3DState {
+    constructor(sname, master) {
+      super(master)
+      this.name = sname
+      console.log(`${this.name} state created`)
+      this.data = master.data.state[sname]
+      if (this.data.baseState) {
+        const n = this.data.baseState
+        this.data = master.data.state[n]
+      }
+      for (const [eventName, action] of Object.entries(this.data.on || {})) {
+        // setting up handlers
+        this.on(eventName, (target, EventData) => {
+          if (action.move) {
+            for (const m in action.move) {
+              if (action.move[m]) {
+                moveAxis(m, action.move[m], this.target)
+              }
+            }
+          }
+          if (action.log) console.log(action.log)
+          if (action.event) GM.pushEvent(action.event)
+          if (action.nextState)
+            this.master.cst2(action.nextState)
+        })
+      }
+
+      this.enter()
+    }
+
+    enter() {
+      const _counter = GM.addCounter({
+        msg: '[' + this.name + ']',
+        target: this.master,
+        endTime: this.data.duration,
+        endCall: () => {
+          this.target.pushEvent('onEnd')
+
+        }
+      })
+
+      const _counter0 = new Counter({
+        msg: '[' + this.name + ']',
+        target: this.master,
+        endTime: this.data.duration,
+        endCall: () => {
+          this.target.pushEvent('onEnd')
+
+        }
+      })
+
+      const loop = this.data.sprite.loop
+      const length = this.data.sprite.length
+      const duration = this.data.duration
+      if (loop) {
+        _counter.processCall = () => {
+          for (const step of this.data.steps || [])
+            if (_counter.time === step.time)
+              step.action(this.target)
+          if (_counter.time === duration - 1)
+            if (loop < length && duration > 0) {
+              _counter.time = Math.floor(loop / length * duration)
+            }
+        }
+      } else {
+        _counter.processCall = () => {
+          for (const step of this.data.steps || [])
+            if (_counter.time === step.time)
+              step.action(this.target)
+        }
+      }
+
+      // counter must be end
+      this.master.counter?.setEnd()
+      this.master.counter = _counter
+    }
+  }
+
+
+
+  class StateMachine extends GameObject {
+    constructor(data = Rock, name) {
+      super(name)
+      this.drawPause = true
+      this.data = data
+      this.counter = null
+
+    }
+
+    onAttach(master) {
+      console.log('onAttach')
+      this.master = master;
+      this.activeState = new Player3DImportedState(this.data.initialState, this);
+      this.addChild(new stateRenderer2_5(this))
+
+    }
+
+    // just interface
+    onRequest(eventName, target, ...args) {
+      return this.activeState.onRequest(eventName, target, ...args)
+    }
+
+    cst2(stateName) {
+      this.activeState = new Player3DImportedState(stateName, this)
+    }
+
+    update_self() {
+      this.activeState.update()
+    }
+
+    draw() {
+      if (this.drawPause) return
+      C.fillStyle = 'red'
+      C.fillRect(0, 0, W, H)
+    }
+
+    exportRenderQueue(camera) {
+      const sizex = this.master.size.x / 2
+      const sizey = this.master.size.y / 2
+      const vp1 = camera.projection({
+        x: this.master.position.x,
+        y: this.master.position.y + this.master.size.y / 2,
+        z: this.master.position.z + this.master.size.z / 2
+      });
+      camera.renderQueue.push({
+        depth: (this.master.position.x + this.master.position.y + this.master.position.z) / this.master.world.block_size,
+        draw: () => {
+          C.fillStyle = 'red';
+          C.fillRect(
+            vp1.x - sizex / 2,
+            vp1.y - sizey / 2,
+            sizex,
+            sizey
+          );
+        }
+
+      });
+    }
+  }
+
+
+  // SoundManager
+  // register and play
+  class SoundManager {
+    constructor() {
+      this.registry = new Map(); // name → path
+    }
+
+    // 音を登録
+    register(name, path) {
+      this.registry.set(name, path);
+    }
+
+    // 再生
+    play(name, volume = 1.0) {
+      const path = this.registry.get(name);
+      if (!path) {
+        console.warn(`Sound "${name}" is not registered.`);
+        return;
+      }
+      const audio = new Audio(path);
+      audio.volume = Math.max(0, Math.min(1, volume));
+      audio.play();
+    }
+  }
+
+
+
+  // ちいさいユーティリティ
+  const lerp = (a, b, t) => a + (b - a) * t;
+  const clamp01 = (t) => Math.max(0, Math.min(1, t));
+  // 代表的なEasing（必要な分だけ）
+  const ease = {
+    linear: t => t,
+    inQuad: t => t * t,
+    outQuad: t => t * (2 - t),
+    inOutQuad: t => (t < .5) ? 2 * t * t : -1 + (4 - 2 * t) * t,
+  };
+
+  // ========= Timeline2（内部クロック + 複数Track）=========
+  class Timeline {
+    constructor({ length = 120, loop = false } = {}) {
+      this.length = length;     // 総フレーム（or tick）
+      this.loop = loop;
+      this.time = 0;
+      this.paused = false;
+      this.tracks = [];
+      this.tags = new Set(["eventStopper"]); // 必要なら既存タグ運用に合わせる
+    }
+    onAttach(master) {        //addChild が呼んでくれる
+      this.master = master;
+    }
+    addTrack(track) { this.tracks.push(track); return this; }
+    reset() {
+      this.time = 0;
+      this.finished = false
+      this.tracks.forEach(e => {
+        e.reset()
+      })
+    }
+    update() {
+      if (this.paused) return;
+      this.time++;
+      if (this.time > this.length) {
+        if (this.loop) { this.time = 0; this.onLoop?.(); }
+        else {
+          this.time = this.length; this.onComplete?.();
+          this.destroy(); return
+        }
+      }
+
+      const t = this.time;
+      for (const tr of this.tracks) tr.update(t);
+    }
+    process() {
+      return this.time / this.length
+    }
+    draw() {
+      // draw time line process bar
+      const thickness = 14
+      const pos = Math.min(1, Math.sin(this.process() * Math.PI) * 8) * thickness
+      C.fillStyle = 'black'
+      C.fillRect(0, H - pos, W, thickness)
+      C.fillStyle = 'rgba(0,128,255,1)'
+      C.fillRect(0, H - pos, this.process() * W, thickness)
+    }
+    destroy() {
+      console.log('destroying')
+      if (this.finished) return;
+      this.finished = true;
+      // 親の updateList から自分を除去
+      const parent = this.master;
+      GM.setTagPause('CSStop', false)
+
+      parent.removeByTag('eventStopper')
+      /* sss */
+    }
+  }
+
+  // ========= KeyframeTrack（keys/steps対応）=========
+  // keys: [{t:0, v:100, ease:ease.outQuad}, {t:60, v:250}, {t:90, v:250, interpolation:'hold'}]
+  class KeyframeTrack {
+    // getter/setter か、target & path（"position.x"みたいな）を渡す
+    constructor({
+      getter, setter,
+      target = null, path = null,
+      keys = [],                 // 時間はtimeline基準のフレーム/カウント
+      defaultEase = ease.linear, // 未指定キーの補間
+    }) {
+      // アクセス方法を用意
+      if (!getter || !setter) {
+        if (!target || !path) throw new Error("KeyframeTrack: getter/setter か target+path を渡してね");
+        const parts = path.split(".");
+        getter = () => parts.reduce((o, k) => o[k], target);
+        setter = (val) => {
+          const last = parts.slice(0, -1).reduce((o, k) => o[k], target);
+          last[parts[parts.length - 1]] = val;
+        };
+      }
+      this.getter = getter;
+      this.setter = setter;
+      // キーを t 昇順に
+      this.keys = keys.slice().sort((a, b) => a.t - b.t);
+      this.defaultEase = defaultEase;
+      this._lastIndex = -1; // step/hook用で必要なら使う
+    }
+    reset() {
+      this._lastIndex = -1
+    }
+
+    update(t) {
+      if (this.keys.length === 0) return;
+
+      // 範囲外（前/後）
+      if (t <= this.keys[0].t) {
+        this.setter(this.keys[0].v, this.getter());
+        return;
+      }
+      const K = this.keys;
+      const last = K[K.length - 1];
+      if (t >= last.t) {
+        this.setter(last.v, this.getter());
+        return;
+      }
+
+      // 区間を探す（t_i <= t < t_{i+1}）
+      let i = (this._lastIndex >= 0 && this._lastIndex < K.length - 1) ? this._lastIndex : 0;
+
+      // 前フレームからの継続探索をするなら _lastIndex を使って微最適化も可
+      for (; i < K.length - 1; i++) {
+        if (t >= K[i].t && t < K[i + 1].t) break;
+      }
+
+      this._lastIndex = i
+
+      const key0 = K[i], key1 = K[i + 1];
+
+      // ステップ（hold）指定があれば v = k0.v で維持
+      if (key0.interpolation === "hold") {
+        this.setter(key0.v, this.getter());
+        return;
+      }
+
+      // 線形 or イージング補間
+      const ease = key0.ease || this.defaultEase;
+      const span = Math.max(1, (key1.t - key0.t)) // 0で割ることを防ぐ
+      let process = clamp01((t - key0.t) / span);
+      process = ease(process);
+
+      const v = lerp(key0.v, key1.v, process);
+      this.setter(v, this.getter());
+    }
+  }
+
+
+  scene = {
+    1: {
+      init: () => {
+        GM.reset()
+        console.log('scene 1 init')
+
+        const testEvent = {
+          update: function () {
+            console.log('now playing test event, all player should be stopped')
+          },
+
+
+        }
+
+        GM.registry.set("testWorld", new BlockWorld());
+
+        GM.registry.set("charA", new Player3D(GM.registry.get('testWorld')));
+        GM.registry.set("testControl", new Controller3D(GM.registry.get('charA')));
+
+        GM.registry.get('testControl').tags.add(eventID.eventStop)
+        GM.registry.get('charA').objectList.push(GM.registry.get('testControl'))
+
+        GM.registry.set('ccamera', new Camera2_5(GM.registry.get('charA')))
+        GM.registry.get('ccamera').drawList.push(GM.registry.get('testWorld'))
+        GM.registry.get('ccamera').drawList.push(GM.registry.get('charA'))
+
+        GM.objectList.push(GM.registry.get('testWorld'))
+        GM.objectList.push(GM.registry.get('ccamera'))
+        GM.objectList.push(GM.registry.get('charA'))
+
+        GM.drawList.push(GM.registry.get('ccamera'))
+
+
+
+
+      }
+    }
+  }
+
+</script>
+
+
+
+<script id="texture data">
+  // ===== Map (16x16) =====
+  const worldMap32 = [
+    1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+    1, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 1, 1, 1,
+    1, 0, 0, 0, 0, 3, 3, 1, 0, 0, -1, 0, 1, 1, 1, 1,
+    1, 0, 3, 3, 0, 0, 0, 1, 0, 1, -1, 0, 0, 0, 0, 1,
+    1, 0, 3, 0, 0, 0, 0, -1, 0, 0, -1, 0, 0, 0, 0, 1,
+    -2, 0, 3, 0, 0, -1, 0, -1, 0, 0, -1, 0, 0, 0, 0, 1,
+    -2, 0, 0, 0, 0, 0, 0, -1, 0, 0, -1, 0, 0, 0, 0, 1,
+    -2, 0, 0, 0, 0, 0, 0, -1, -1, -1, -1, 0, 0, 0, 1, 1,
+    -2, 0, 0, 0, 0, 0, -1, -1, -1, -1, -1, 0, 0, 0, 1, 1,
+    1, 0, 3, 3, 3, 0, -1, -1, -1, -1, -1, 0, 0, 0, 0, 1,
+    1, 0, 0, 0, 0, 0, 0, 0, 4, 0, 4, 0, 0, 0, 0, 3,
+    1, 0, 3, 3, 3, 0, 0, 2, 0, 0, 4, 0, 0, 0, 0, 3,
+    1, 0, 0, 0, 0, 0, 0, 0, 4, 0, -1, 0, 0, 0, 0, 4,
+    1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 4, 0, 0, 1, 1, 1,
+    1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 4, 0, 0, 1, 1, 1,
+    1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+  ];
+  const floor = [
+    1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+    1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1,
+    1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1,
+    1, 0, 1, 1, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1,
+    1, 0, 1, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1,
+    1, 0, 0, 0, 0, 1, 1, 0, 0, 0, 1, 0, 0, 0, 0, 1,
+    1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1,
+    1, 0, 0, 0, 0, 0, 0, 1, 0, 0, 1, 0, 0, 0, 0, 1,
+    1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1,
+    1, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1,
+    1, 0, 0, 0, 0, 0, 0, 0, 4, 4, 4, 0, 0, 0, 0, 1,
+    1, 0, 0, 0, 0, 0, 1, 0, 1, 0, 4, 0, 0, 1, 0, 1,
+    1, 0, 0, 0, 0, 0, 0, 0, 4, 0, 4, 0, 0, 0, 0, 1,
+    1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1,
+    1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1,
+    1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+  ];
+
+  const ceilMap16 = [
+    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+    0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+    0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0,
+    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+    0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0,
+    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 1, 1, 0,
+    0, 0, 0, 0, 1, 0, 1, 0, 0, 0, 0, 0, 1, 0, 1, 0,
+    0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0,
+    0, 0, 1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0,
+    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0,
+    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0,
+    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0,
+    0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0,
+    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0
+  ]
+
+  const floorMap16 = [
+    1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+    1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+    1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+    1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+    1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+    1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+    1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+    1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+    1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+    1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+    1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+    1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+    1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+    1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+    1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+    1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1
+  ]
+
+  const checkerTex = [
+    0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1,
+    0, 0, 0, 0, 0, 1, 1, 0, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1,
+    0, 0, 0, 1, 1, 1, 1, 0, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1,
+    1, 1, 1, 1, 1, 1, 1, 0, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1,
+    0, 0, 0, 1, 1, 1, 1, 0, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1,
+    0, 0, 0, 0, 0, 1, 1, 0, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1,
+    0, 0, 0, 0, 0, 1, 1, 0, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1,
+    0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1,
+
+    1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0,
+    1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0,
+    1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0,
+    1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0,
+    1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0,
+    1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0,
+    1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0,
+    1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0,
+
+    0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1,
+    0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1,
+    0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1,
+    0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1,
+    0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1,
+    0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1,
+    0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1,
+    0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1,
+
+    1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0,
+    1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0,
+    1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0,
+    1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0,
+    1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0,
+    1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0,
+    1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0,
+    1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0,
+
+
+  ]
+
+  const SPRITE32 = [
+    -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
+    -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
+    -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
+    -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
+    -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
+    -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
+    -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, 0, 0, 0, 0, 0, 0, 0, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
+    -1, -1, -1, -1, -1, -1, -1, -1, 0, 0, 1, 1, 1, 1, 1, 1, 0, 0, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
+    -1, -1, -1, -1, -1, -1, -1, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
+    -1, -1, -1, -1, -1, -1, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
+    -1, -1, -1, -1, -1, -1, 0, 1, 1, 1, 1, 0, 1, 1, 1, 1, 0, 1, 1, 1, 0, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
+    -1, -1, -1, -1, -1, -1, 1, 1, 1, 1, 1, 0, 1, 1, 1, 1, 0, 1, 1, 1, 0, 0, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
+    -1, -1, -1, -1, -1, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
+    -1, -1, -1, -1, -1, 0, 1, 1, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 1, 1, 0, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
+    -1, -1, -1, -1, -1, 0, 1, 1, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 1, 1, 0, 0, -1, -1, -1, -1, -1, -1, -1, -1, -1,
+    -1, -1, -1, -1, -1, 0, 1, 1, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 1, 1, 1, 0, -1, -1, -1, -1, -1, -1, -1, -1, -1,
+    -1, -1, -1, -1, -1, 0, 1, 1, 1, 0, 1, 1, 1, 1, 1, 1, 1, 0, 1, 1, 1, 1, 0, -1, -1, -1, -1, -1, -1, -1, -1, -1,
+    -1, -1, -1, -1, -1, 0, 1, 1, 1, 0, 1, 1, 1, 1, 1, 1, 1, 0, 1, 1, 1, 1, 0, -1, -1, -1, -1, -1, -1, -1, -1, -1,
+    -1, -1, -1, -1, -1, 0, 1, 1, 1, 1, 0, 0, 1, 1, 1, 1, 0, 1, 1, 1, 1, 1, 0, -1, -1, -1, -1, -1, -1, -1, -1, -1,
+    -1, -1, -1, -1, -1, 0, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
+    -1, -1, -1, -1, -1, -1, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
+    -1, -1, -1, -1, -1, -1, -1, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
+    -1, -1, -1, -1, -1, -1, -1, -1, -1, 0, 0, 1, 1, 1, 1, 1, 1, 1, 0, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
+    -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, 0, 0, 0, 0, 0, 0, 0, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
+    -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
+    -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
+    -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
+    -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
+    -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
+    -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
+    -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
+    -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1
+  ];
+
+  const Monitor16 = [
+    -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
+    -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
+    -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
+    -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
+    -1, -1, -1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, -1, -1, -1,
+    -1, -1, -1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, -1, -1, -1,
+    -1, -1, -1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, -1, -1, -1,
+    -1, -1, -1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, -1, -1, -1,
+    -1, -1, -1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, -1, -1, -1,
+    -1, -1, -1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, -1, -1, -1,
+    -1, -1, -1, -1, -1, -1, -1, 0, 0, -1, -1, -1, -1, -1, -1, -1,
+    -1, -1, -1, -1, -1, -1, 0, 0, 0, 0, -1, -1, -1, -1, -1, -1,
+    -1, -1, -1, -1, 0, 0, 0, 0, 0, 0, 0, 0, -1, -1, -1, -1,
+    -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
+    -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
+    -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1
+  ];
+
+  const Lily32 = [
+    -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1
+    - 1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1
+    - 1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
+    -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
+    -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
+    -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
+    -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
+    -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, 1, 1, 1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
+    -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, 1, 1, 0, 1, 1, 1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
+    -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, 1, 1, 0, 1, 1, 1, 1, 1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
+    -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, 1, 0, 1, 1, 1, 1, 1, 1, 1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
+    -1, -1, -1, -1, -1, -1, -1, -1, -1, 1, 1, 0, 1, 1, 1, 1, 1, 1, 1, 1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
+    -1, -1, -1, -1, -1, -1, -1, -1, -1, 1, 1, 0, 1, 0, 0, 1, 1, 0, 1, 1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
+    -1, -1, -1, -1, -1, -1, -1, -1, -1, 1, 1, 0, 1, 1, 0, 1, 1, 0, 1, 1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
+    -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, 1, 0, 1, 1, 0, 1, 1, 0, 1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
+    -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, 1, 0, 1, 1, 1, 1, 1, 1, 1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
+    -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, 1, 1, 0, 1, 1, 1, 0, 1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
+    -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, 1, 1, 1, 1, 1, 1, 1, 1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
+    -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, 1, 1, 1, 1, 1, 1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
+    -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, 1, 0, 0, 1, 1, 0, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
+    -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, 1, 1, 0, 0, 0, 0, 0, 1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
+    -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, 1, 1, 0, 0, 0, 0, 0, 1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
+    -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, 1, 1, 1, 0, 0, 0, 0, 0, 1, 0, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
+    -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, 0, 0, 1, 0, 0, 0, 0, 0, 1, 1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
+    -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, 0, 1, 1, 0, 0, 0, 0, 0, 1, 0, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
+    -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, 0, 0, -1, 1, 1, -1, 1, 1, 0, 0, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
+    -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, 0, -1, 1, 1, -1, 1, 1, -1, 0, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
+    -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, 0, 0, 0, -1, 0, 0, 0, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
+    -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, 0, 0, 0, 0, -1, 0, 0, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
+    -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, 0, 0, 0, 0, -1, 0, 0, 0, 0, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
+    -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, 0, 0, 0, -1, -1, 0, 0, 0, 0, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
+    -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, 0, 0, 0, -1, -1, 0, 0, 0, 0, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
+  ];
+
+  const window8 = [
+    0, 0, 0, 0, 0, 0, 0, 0,
+    0, 1, -1, -1, -1, 1, 0, 0,
+    0, -1, -1, -1, -1, -1, 0, 0,
+    0, 0, -1, -1, -1, -1, -1, 0,
+    0, 0, -1, -1, -1, -1, -1, 0,
+    0, -1, -1, -1, -1, -1, -1, 0,
+    0, 1, -1, -1, -1, -1, 1, 0,
+    0, 0, 0, 0, 0, 0, 0, 0
+  ]
+
+  const ceilLight8 = [
+    -1, -1, 0, 0, 0, 0, -1, -1,
+    -1, 0, 1, 1, 1, 1, 0, -1,
+    0, 1, 1, 1, 1, 1, 1, 0,
+    -1, 0, 1, 1, 1, 1, 0, -1,
+    -1, -1, 1, 1, 1, 1, -1, -1,
+    -1, -1, -1, -1, -1, -1, -1, -1,
+    -1, -1, -1, -1, -1, -1, -1, -1,
+    -1, -1, -1, -1, -1, -1, -1, -1
+  ]
+
+</script>
+
+
+<script id="2D rayCaster world engine">
+  class GameManager extends GameObject {
+    constructor(name = 'GM', id = 'GM') {
+      super(name, id)
+
+      this.flatUpdateList = []//そのままUpdateリスト。じゃないと毎回重い
+      this.flatDrawList = []//そのままDrawリスト
+      this._needsRebuild = true // render queue rebuild
+      this.camera = { // default scene camera 汚いかも
+        update: () => { },
+        draw: () => {
+          this.flatDrawList.forEach(e => {
+            e.draw?.()
+          })
+        },
+      }
+      this.counters = [] // 最初のUpdateListじゃないかな
+      this.register = new Map()//外部読み込み用
+      console.log('[SYSTEM]game manager instanced, equip the EventManager if needed')
+
+      this.eventHub = new EventHub()
+      EventHub.getEventHandler(this)
+    }
+
+    static emitEvent(_typeName, _sender, _data, _target = GM) {
+      if (!_target) return
+      _target.eventHub.emit(_typeName, _sender, _data)
+    }
+
+    update_self() {
+      if (this._needsRebuild) this._rebuildFlatLists();
+
+      this.camera.update()
+      // delayed event 
+      //this.dealEvent?.()
+      this.eventHub.dealEvent(this)
+      // counterはInputと同様、Eventの類
+      this.gameLoop_input?.()
+      // 予測型コリジョン判定用
+      this.gameLoop_check?.()
+      // 数値の適応と更新
+      this.gameLoop_update?.()
+
+      this.flatUpdateList.forEach(e => {
+        e.update?.()
+      })
+    }
+
+    draw() {
+      C.clearRect(0, 0, W, H)
+
+      //this.camera.draw()
+      this.flatDrawList.forEach(e => {
+        e.draw?.()
+      })
+
+      //showHTML(this.showEventQueue(), 'event')
+
+    }
+
+    _rebuildFlatLists() {
+      //console.clear()
+      console.log('[when GM rebuild] GM rebuild update and draw Lists')
+      this.objectListTXT = null
+      this.flatUpdateList.length = 0;
+      this.flatDrawList.length = 0;
+
+      const stack = []
+
+      // ルート配列は末尾→先頭の順で push（こうすると pop で先頭から処理される）
+      for (let i = this.objectList.length - 1; i >= 0; i--) {
+        stack.push(this.objectList[i]);
+      }
+
+      const drawStack = [...stack]
+
+      while (stack.length) {
+        const node = stack.pop();// ここで“正しい順番”に取り出される
+        if (!node.updatePause) {
+          this.flatUpdateList.push(node);
+
+          const ch = node.objectList;
+          if (ch && ch.length) {
+            // 子は「末尾から先頭へ」push していく
+            // → pop したときに先頭の子から処理され、結果として親→子の順を維持
+            for (let i = ch.length - 1; i >= 0; i--) stack.push(ch[i]);
+          }
+        }
+      }
+
+      while (drawStack.length) {
+        const node = drawStack.pop();// ここで“正しい順番”に取り出される
+        if (!node.drawPause) {
+          this.flatDrawList.push(node);
+          const ch = node.objectList;
+          if (ch && ch.length) {
+            // 子は「末尾から先頭へ」push していく
+            // → pop したときに先頭の子から処理され、結果として親→子の順を維持
+            for (let i = ch.length - 1; i >= 0; i--) drawStack.push(ch[i]);
+          }
+        }
+      }
+
+      this._needsRebuild = false;
+
+      console.log(`[when GM rebuild] gathering reference`)
+      //再構築するたびに下やるの？？
+      this.flatUpdateList.forEach(e => {
+        e.gatherReference?.(this)
+
+      })
+    }
+
+    showList(List, level = 0) {
+      if (level == 0)
+        if (!this._needsRebuild)
+          if (this.objectListTXT)
+            return false
+          else
+            console.log('[when GM rebuild] GM printed the updatedw list')
+
+
+      this.objectListTXT = 'txt'
+      let result = '';
+      if (!level) result = 'GM Root\n'
+      List.forEach(e => {
+        // インデント作成
+        let indent = '  | '
+
+        if (level) {
+
+          indent += '  | '.repeat(level - 1);
+        } else {
+          indent = '  | '.repeat(level)
+        }
+        if (e.updatePause) indent += 'x '
+        else indent += 'o '
+        if (e.drawPause) indent += 'x '
+        else indent += 'o '
+
+        indent += ' '
+        let tags = ''
+        if (e.tags)
+          tags = Array.from(e.tags).join(" | ")
+
+
+        // 自分を出力
+        result += `${indent}${e.name ? e.name : e.constructor.name}: ( ${tags} )\n`;
+
+        // 子リストがあれば再帰
+        if (!e.folded && e.objectList) {
+          result += this.showList(e.objectList, level + 1);
+        } else if (e.folded)
+          result += 'folded\n'
+      });
+
+      this.objectListTXT = result
+      return this.objectListTXT;
+    }
+
+    update_counters() {
+      // 
+      for (let _c of this.counters)
+        if (_c.pause === false)
+          _c.update()
+      this.counters = this.counters.filter((_c) => _c.end == false)
+    }
+    showCounters() {
+      let _table = ""
+      for (let _c of this.counters) {
+        _table += _c.msg + ":" + _c.time + "/" + _c.endTime + "\n"
+      }
+      return _table
+    }
+    addCounter({
+      msg = "[untitled]",
+      target = undefined,
+      endTime = 10,
+      loop = false,
+      processCall = null,
+      endCall = () => {
+        this.end = true
+      },
+
+    } = {}) {
+      let _temp = new Counter({
+        endTime: endTime,
+        target: target,
+        loop: loop,
+        msg: msg,
+        processCall: processCall,
+        endCall: endCall,
+      })
+      this.counters.push(_temp)
+      return _temp
+    }
+
+    // pause by tag
+    switchPauseByTag(tag, pause = true, type = 0, List = this.objectList) {
+      console.log(`set ${tag}.updatePause = ${pause}`)
+      const mapping = {
+        0: ["updatePause"],
+        1: ["drawPause"],
+        default: ["updatePause", "drawPause"]
+      };
+      this.traverse(List, (e) => {
+        if (e.tags?.has(tag)) {
+          (mapping[type] ?? mapping.default).forEach(key => {
+            e[key] = pause;
+          })
+        }
+      })
+
+      this._needsRebuild = true
+    }
+
+    removeByTag(tag, list = this.objectList) {
+      for (let i = list.length - 1; i >= 0; i--) { // 逆順で安全に削除
+        const obj = list[i];
+        if (!obj.tags) continue
+        if (obj.tags.has(tag)) {
+          obj.destroy?.()
+          list.splice(i, 1); // 該当オブジェクトを削除
+        }
+        else if (obj.objectList) {
+          // 子リストがある場合は再帰
+          this.removeByTag(tag, obj.objectList);
+        }
+      }
+      this._needsRebuild = true
+
+    }
+    reset() {
+      this.registry = new Map()
+      this.objectList.length = 0
+      this.drawList.length = 0
+      this.flatUpdateList.length = 0
+      this.flatDrawList.length = 0
+
+    }
+
+  }
+
+  class SpriteAsset extends GameObject {
+    constructor(px = 0, py = 0, pz = 0, height = 1, sprite = { tex: checkerTex, size: 32, color: 'white' }, inverted = false) {
+      super('sprite', 'sprite')
+      this.localx = px
+      this.localy = py
+      this.localz = pz
+      this.sprite = sprite
+      this.inverted = inverted
+      this.height = height
+    }
+
+    update_self() {
+
+    }
+    draw() {
+
+    }
+  }
+
+
+  class KanbanAsset extends GameObject {
+    constructor() {
+      super()
+      this.id = 'signs'
+      this.ax = 12
+      this.ay = 9    // 端点A
+      this.bx = 13
+      this.by = 9    // 端点B
+      this.floorZ = 0.0          // 下端高さ（床からのオフセット）
+      this.ceilZ = 0.6          // 上端高さ
+      this.oneSided = true       // 片面にする？
+      this.sprite = {
+        tex: Monitor16,
+        size: 16,
+        color: '#ffd54a'
+      }
+    }
+  }
+  // into GM!
+
+
+
+  // worldMap, ceilMap, floorMap,skyBoxが必要だなこれは
+  class WorldArray extends GameObject {
+    constructor(worldMap = { map: worldMap32, w: 16, ceilZ: 3 }, ceilMap = { map: ceilMap16, width: 16 }, floorMap = { map: floorMap16, w: 16 }, skyBox = {}) {
+      super('worldArray', 'worldArray')
+      //デフォルトTextureがほしいんよな
+      this.worldMap = worldMap
+      this.ceilMap = ceilMap
+      this.floorMap = floorMap
+      this.skyBox = skyBox
+
+      this.fogColor = [255, 255, 255]// 空色
+
+      this._floorZ = 0
+      this._ceilZ = worldMap.ceilZ//これでシーンの高さを変えれる
+
+      //this.tags.add('arrayWorld')
+    }
+
+    get map() {
+      return this.worldMap.map
+    }
+
+    get width() {
+      return this.worldMap.w
+    }
+    get height() {
+      return this.worldMap.h ?? this.worldMap.w
+    }
+
+
+    atPos(x, y) {
+      return (x < 0 || y < 0 || x >= this.width || y >= this.height) ? 0 : this.map[y * this.width + x] | 0
+    }
+  }
+
+  // draw ID: 'sprite'
+  // 2D Array world[][] 専用！
+  // Tag player
+  class RayCasterCamera extends GameObject {
+    constructor(_target = null, _world = null, show2D = true, texChecker) {
+      super('camera', '2DRayCamera')
+      this.px = 15
+      this.py = 4
+      this.pz = 0
+      this.angle = 0
+      this.eyeHeight = 0.4
+      this.eyeZ = 0.4
+      this.FOV = Math.PI / 3// angle of view
+
+      this.sample_width = 4//2 とかちょっと重たくなる
+      this.sample_height = 2
+      this.followSpeed = 0.04
+      this.followDist = 1
+      this.followOffset = 0.1
+      this.target = _target                // 目線高さ（床=0 からの相対）
+      this.world = _world // 見るするworld
+      this.sprite_list = []
+      this.show2D = show2D
+      this.hits = []// the result of rays
+
+
+      this.defaultTexInfo = {
+        tex: checkerTex,
+        size: 32,
+        wall: true,
+      }
+    }
+
+    gatherReference(gm) {
+      this.GM = gm
+      if (!this.target || this.target.deleted || !this.world || this.world.deleted) {
+        this.target = null
+        this.world = null
+        this.GM.objectList.forEach(e => {
+          if (e.id == 'worldArray' && !this.world) {
+            this.world = e
+            console.log('[camera] locate a world')
+          }
+          if (e.id == 'player' && !this.target) {
+            this.target = e
+            console.log('[camera] locate a target')
+          }
+
+        })
+      }
+
+    }
+
+    update() { // follow the target
+      if (!this.target || !this.world) {
+        this.updatePause = true
+        return showHTML('camera reference not enough', 'camera_channel')
+      }
+
+      if (this.target.angle == undefined) {
+        this.target.angle = 0
+        return showHTML('camera target need angle', 'camera_channel')
+      }
+
+      this.angle = this.target.angle
+      const
+        _dx = -Math.cos(this.angle),
+        _dy = -Math.sin(this.angle);
+
+      this.pz = this.target.pz
+      this.eyeZ = this.pz + this.eyeHeight
+      const
+        tx = this.target.px + _dx * this.followDist + _dy * this.followOffset,
+        ty = this.target.py + _dy * this.followDist - _dx * this.followOffset
+
+      const deltaX = tx - this.px
+      const deltaY = ty - this.py
+
+      if (Math.abs(deltaX) > 0.01)
+        this.px += (deltaX) * this.followSpeed
+      else
+        this.px = tx
+      if (Math.abs(deltaY) > 0.01)
+        this.py += (deltaY) * this.followSpeed
+      else
+        this.py = ty
+    }
+
+    draw() {
+
+      // target check
+      // draw BG
+      // z-buffer reset
+      // cast 2D ray for loop 
+      //    check and draw wall, ceil, floor
+      //    check and draw sprites  
+      if (!this.world) return
+
+      // draw canvas 2
+      if (this.show2D)
+        this.Render2DView()
+
+
+      const dot = (a, b) => a.x * b.x + a.y * b.y;
+      const sub = (a, b) => ({ x: a.x - b.x, y: a.y - b.y });
+      const cross = (a, b) => a.x * b.y - a.y * b.x;
+
+
+
+      // --- draw background ---
+
+      // z-buffer reset
+      if (!this.zbuf || this.zbuf.length !== W) this.zbuf = new Float32Array(W);
+      this.zbuf.fill(Infinity);
+
+      // FOV フレームごとに更新が必要
+      // FocalLengthは、画面と焦点の垂直距離?
+      const FocalLength = this.getFocalLength()
+
+      // draw World
+      for (let _x = -1/* 0だと中央がなぜかバグる */; _x < W; _x += this.sample_width) {
+
+
+        const ray_angle = (_x / W - 0.5) * this.FOV; // (-0.5~0.5) *FOV
+        const true_ray_angle = this.angle + ray_angle;
+        const
+          dx = Math.cos(true_ray_angle),
+          dy = Math.sin(true_ray_angle) // all in canvas coordination, inverted y!
+
+        // DDA the wall（原点オフセットで自己衝突回避）
+        const hit = this.raycast2D(this.px + dx * 1e-4, this.py + dy * 1e-4, dx, dy);
+
+        if (this.show2D) {
+          const sizew = w0 / this.world.width
+          const sizeh = h0 / this.world.height
+
+          drawLine(
+            c2,
+            sizew * (this.px + dx * 1e-4),
+            sizew * (this.py + dy * 1e-4),
+            sizew * (this.px + dx * hit.dist),
+            sizew * (this.py + dy * hit.dist),
+            'white', 1
+          )
+        }
+
+
+        // ⊥距離（魚眼補正 Ver
+        const perpDistance = Math.max(1e-6, hit.dist * Math.cos(ray_angle))
+
+
+        // 列が sample_width ピッチなので、該当する画面xに深度を入れておく
+        for (let _xi = _x; _xi < Math.min(W, _x + this.sample_width); _xi++) {
+          // 近いもの優先で最小を保持
+          if (perpDistance < this.zbuf[_xi]) this.zbuf[_xi] = perpDistance;
+        }
+
+        // ★ 正しい投影：上端/下端を別々に計算
+        const wallTop = (H / 2) - ((this.world._ceilZ - this.eyeZ) * FocalLength) / perpDistance;
+        const wallBot = (H / 2) + ((this.eyeZ - this.world._floorZ) * FocalLength) / perpDistance;
+
+        // クリップ
+        const y0 = Math.max(0, Math.min(H - 1, wallTop | 0));
+        const y1 = Math.max(0, Math.min(H, wallBot | 0));
+        const lineH = y1 - y0
+        if (lineH <= 0) continue;
+
+        const fog_depth = Math.min(1, hit.dist / 16)
+        const fog_color = this.world.fogColor
+
+
+        if (hit.hit) {
+          // 色（マテリアル）＋ 面向きで陰
+          // ここはまあ、Lightingもできればやってみたいけど
+
+          // 1. get the color 
+          // NdotL !!
+          const normal = {
+            x: hit.side ? 0 : (hit.dir.x > 0 ? -1 : 1),
+            y: hit.side ? (hit.dir.y > 0 ? -1 : 1) : 0,
+            z: 0
+          }
+          const shade = Math.max(0, (-dx * normal.x - dy * normal.y + 0 * normal.z))
+
+
+          let tex_info = { ...this.defaultTexInfo }
+          let col = [255, 200, 100];
+          if (hit.id == 4) {
+            tex_info.tex = window8
+            tex_info.size = 8
+          } else {
+            if (hit.id === 1) {
+              col = [0, 220, 220]
+            }
+            else if (hit.id === 2)
+              col = [230, 210, 30]
+            else if (hit.id === 3) {
+              col = [40, 160, 255]
+              tex_info.tex = Monitor16
+              tex_info.size = 16
+            }
+
+            C.fillStyle = `rgb(
+            ${(this.lerp(fog_depth, col[0] * shade, fog_color[0])) | 0},
+            ${(this.lerp(fog_depth, col[1] * shade, fog_color[1])) | 0},
+            ${(this.lerp(fog_depth, col[2] * shade, fog_color[2])) | 0})`;
+
+
+            // 2. fill Rectangle area
+            C.fillRect(_x, y0, this.sample_width, y1 - y0);
+
+          }
+
+          const _wx = this.px + dx * hit.dist; // ヒット世界座標
+          const _wy = this.py + dy * hit.dist;
+          const u =
+            hit.side ?
+              (hit.dir.y < 0 ? _wx - Math.floor(_wx) : 1 - _wx + Math.floor(_wx)) :
+              (hit.dir.x > 0 ? _wy - Math.floor(_wy) : 1 - _wy + Math.floor(_wy))
+
+          if (wallBot < wallTop) return
+          const blendFogColor = `rgb(
+                            ${this.lerp(fog_depth, col[0] * shade, fog_color[0])},
+                            ${this.lerp(fog_depth, col[1] * shade, fog_color[1])},
+                            ${this.lerp(fog_depth, col[2] * shade, fog_color[2])})`
+
+          this.UVSampleStrand(
+            tex_info.tex, tex_info.size, blendFogColor,
+            _x, y0, y1,
+            wallTop, wallBot,
+            u)
+        } // end of if hit.hit
+
+
+
+        // ====== ★ FLOOR CAST: 壁の下の床をサンプリング ======
+        // 逆投影の定数（列ごとに一定）
+        const Kfloor = (this.eyeZ - this.world._floorZ) * FocalLength; // eyeZから床までのスケール
+        if (Kfloor > 0) {
+
+          // 床は y1(=壁下端) から画面下端まで
+          // ⊥距離を求めて、実距離を出す、したらRayのVectorにのかってworld座標を出せる。
+          // Key: dist = (eyeZ-floorZ)*Focallength/denom
+          for (let _y = y1; _y < H; _y += this.sample_height) {
+            // 画面行 y → 垂直距離 d_perp
+
+            // 1. sample the color
+            const denom = (_y) - H / 2;  // ピクセル中心 (+0.5 推奨)
+            if (denom <= 0) continue;
+            const dPerpFloor = Kfloor / denom; // 
+            const dRay = dPerpFloor / Math.cos(ray_angle) // 画面⊥距離から実距離（魚眼補正逆変換）
+
+            // 世界座標（同じレイ方向）
+            const fx = this.px + dx * dRay;
+            const fy = this.py + dy * dRay;
+            // タイル繰り返しUV（0..1）
+            const u = fx - Math.floor(fx);
+            const v = fy - Math.floor(fy);
+            const on = this.UVSampling(checkerTex, u, v, 32)
+
+            const floorID = this.world.atPos(Math.floor(fx), Math.floor(fy))
+
+            let r = 255, g = 255, b = 133
+            if (floorID == 0) {
+
+              // 簡単なフォグ（距離で空色へ寄せる）
+              const fog = Math.min(1, dPerpFloor / 16);
+              r = on ? 0 : 10
+              g = on ? 0 : 80
+              b = on ? 0 : 122; // 地面のベース色
+              r = ((1 - fog) * r + fog * fog_color[0]) | 0;
+              g = ((1 - fog) * g + fog * fog_color[1]) | 0;
+              b = ((1 - fog) * b + fog * fog_color[2]) | 0;
+            } else if (floorID == -1) {
+              r = 255, g = 0, b = 0
+            } else if (floorID == -2) {
+
+            }
+
+            // 2. fill the rectangle
+            C.fillStyle = `rgb(${r},${g},${b})`;
+            C.fillRect(_x, _y, this.sample_width, this.sample_height);
+          }// end of draw floor 
+        }
+
+
+        // ====== ★ CEIL CAST: 天井をサンプリング ======
+        const CeilOffset = 0
+        const KCeil = (this.world._ceilZ + CeilOffset - this.eyeZ) * FocalLength; // eyeZから床までのスケール
+        if (KCeil > 0) {
+
+          for (let _y = y0 - this.sample_height; _y > 0; _y -= this.sample_height) {
+            // 画面行 y → 垂直距離 d_perp
+            const denom = H / 2 - (_y);             // ピクセル中心 
+            if (denom <= 0) continue;
+            const dPerpFloor = KCeil / denom; // Key: dist = (eyeZ-floorZ)*Focallength/(y-H/2)
+            const dRay = dPerpFloor / Math.cos(ray_angle) // 魚眼補正逆変換
+            //const dRay = dPerpFloor;          
+
+            // 世界座標（同じレイ方向）からタイル繰り返しUV（0..1）
+            const fx = this.px + dx * dRay;
+            const fy = this.py + dy * dRay;
+            const u = fx - Math.floor(fx)
+            const v = fy - Math.floor(fy)
+            const sampleCeil = this.UVSampling(ceilMap16, fx / 16, fy / 16, 16)
+            if (sampleCeil > 0) {
+
+              // 例：32x32のチェッカーからサンプル
+              const on = this.UVSampling(checkerTex, u, v, 32)
+
+              // 簡単なフォグ（距離で空色へ寄せる）
+              const fog = Math.min(1, dPerpFloor / 16);
+              const col = [10, 10, 10]
+              let r = on ? 122 : col[0], g = on ? 120 : col[1], b = on ? 80 : col[2]; // 地面のベース色
+              r = ((1 - fog) * r + fog * fog_color[0]) | 0;
+              g = ((1 - fog) * g + fog * fog_color[1]) | 0;
+              b = ((1 - fog) * b + fog * fog_color[2]) | 0;
+
+              C.fillStyle = `rgb(${r},${g},${b})`;
+              C.fillRect(_x, _y, this.sample_width, this.sample_height);
+            } else {
+            }
+          } // end of Draw ceiling for
+        }
+
+
+        // draw the sprite
+        if (_x == -1) {
+          this.sprite_list.length = 0
+          this.GM.flatDrawList?.forEach(spr => {
+            if (spr.id == 'sprite' || spr.id == 'signs') {
+              this.sprite_list.push(spr)
+            }
+          })
+        }
+
+        const hit_sprite = this.collectColumnSprites(_x, perpDistance, true_ray_angle, FocalLength)
+
+        const ZNew = this.renderColumnFromHits(_x, hit_sprite, perpDistance, wallTop, wallBot)
+
+
+
+      } // end of for render stripes
+
+
+
+
+    }
+
+
+    // only for billborads and signs
+
+
+    collectColumnSprites(screen_x, distWall/* 壁は描画されている */, true_ray_angle, FocalLength) {
+      this.hits.length = 0
+      const hits = this.hits
+
+      const
+        ca = Math.cos(this.angle),
+        sa = Math.sin(this.angle)
+      const
+        dir = { x: Math.cos(true_ray_angle), y: Math.sin(true_ray_angle) },
+        fwd = { x: Math.cos(this.angle), y: Math.sin(this.angle) }
+
+      // find sprite id from list every ray, kind expensive?
+      this.sprite_list.forEach(spr => {
+        if (spr.id == 'sprite') {
+          const
+            vx = spr.px - this.px,
+            vy = spr.py - this.py
+          const depth = vx * ca + vy * sa // dot to get depth
+          if (depth <= 1e-4 || depth >= distWall) return //1)out of depth range
+
+          const side = vx * (-sa) + vy * ca
+
+          // camera to screen (the origin is different)
+          const _ratio = FocalLength / depth
+
+          const billHeight = (spr.height || 1.0) * _ratio
+          const billWidth = billHeight * (spr.aspect || 1.0)
+
+          const sideX = W / 2 + side * _ratio
+          const
+            screen_x0 = sideX - billWidth / 2,
+            screen_x1 = sideX + billWidth / 2
+
+          if (screen_x < screen_x0 || screen_x > screen_x1) return //2) ray out of billborad range, 
+
+          let yBot, yTop, y0, y1
+          if (!spr.inverted) {
+            yBot = H / 2 + ((this.eyeZ - (spr.pz || 0)) * _ratio)
+            yTop = yBot - billHeight
+          } else {
+            yTop = H / 2 + ((this.eyeZ - (spr.pz || 0)) * _ratio)
+            yBot = yTop + billHeight
+            y0 = Math.max(0, Math.min(H - 1, yTop | 0));
+            y1 = Math.max(0, Math.min(H, yBot | 0));
+
+          }
+
+          const sprite = spr.sprite
+          const u = (screen_x - screen_x0) / (screen_x1 - screen_x0)
+          hits.push({
+            depth: depth,
+            kind: 'sprite',
+            sprite: spr.sprite,
+            yTop: yTop, yBot: yBot,
+            u: u
+          })
+
+        }// end of collect sprite
+        else if (spr.id == 'signs') {
+          const shite = { x: spr.bx - spr.ax, y: spr.by - spr.ay }
+          // if(s.oneSided)
+          const hitS = this.intersectRaySegment(
+            { x: this.px, y: this.py }, dir,
+            { x: spr.ax, y: spr.ay }, { x: spr.bx, y: spr.by }
+          )
+          if (!hitS.hit) return
+
+          //
+          const Px = this.px + hitS.t * dir.x, Py = this.py + hitS.t * dir.y
+          const depth = (Px - this.px) * fwd.x + (Py - this.py) * fwd.y
+          if (depth <= 1e-4) return
+
+          const yTop = H / 2 - ((spr.ceilZ - this.eyeZ) * FocalLength) / depth
+          const yBot = H / 2 + ((this.eyeZ - spr.floorZ) * FocalLength) / depth
+
+          const sprite = spr.sprite
+          const u = hitS.s
+          hits.push({
+            depth: depth,
+            kind: 'sign',
+            sprite: spr.sprite,
+            yTop: yTop, yBot: yBot,
+            u: u
+
+          })
+
+        }
+
+      })
+
+      return hits
+    }
+
+    renderColumnFromHits(screen_x, hits, zbufX, yTopWall, yBotWall) {
+      hits.sort((a, b) => b.depth - a.depth)
+
+
+      for (const hit of hits) {
+        if (hit.depth > zbufX) continue
+        let screen_y0 = Math.max(0, hit.yTop | 0);
+        let screen_y1 = Math.min(H, hit.yBot | 0);
+        if (screen_y1 <= screen_y0) continue
+
+        /*
+        const isFront = hit.depth < zbufX
+         if (!isFront) {
+ 
+          const A0 = y0, A1 = Math.min(y1, yTopWall | 0)
+          const B0 = Math.max(y0, yBotWall | 0), B1 = y1
+ 
+          if (A1 > A0) {
+            c.globalAlpha = hit.alpha
+            c.fillStyle = hit.color
+            c.fillRect(_x, A0, this.sample_width, A1 - A0)
+          }
+          if (B1 > B0) {
+            c.globalAlpha = hit.alpha
+            c.fillStyle = hit.color
+            c.fillRect(_x, B0, this.sample_width, B1 - B0)
+          }
+          continue
+        }// end of back */
+
+
+
+        this.UVSampleStrand(
+          hit.sprite?.tex || checkerTex, hit.sprite?.size || 32, hit.sprite?.color || 'white',
+          screen_x, screen_y0, screen_y1,
+          hit.yTop, hit.yBot,
+          hit.u
+        )
+
+        zbufX = hit.depth
+      }// end of h sample
+      return zbufX
+    }
+
+    // get full width focal length
+    getFocalLength() {
+      return (W / 2) / Math.tan(this.FOV / 2)  // 投影スケール
+    }
+
+    lerp(k, v1, v2) {
+      return (1 - k) * v1 + k * v2
+    }
+
+    intersectRaySegment(O, d, A, B) {
+      const cross = (a, b) => a.x * b.y - a.y * b.x;
+      const sub = (a, b) => ({ x: a.x - b.x, y: a.y - b.y }); /* これは独立させておきたい */
+      const e = sub(B, A);
+      const denom = cross(d, e);
+      if (Math.abs(denom) < 1e-9) return { hit: false };
+
+      const AO = sub(A, O);
+      const t = cross(AO, e) / denom;  // レイ側
+      const s = cross(AO, d) / denom;  // 線分側(0..1)
+      if (t > 1e-6 && s >= 0 && s <= 1) return { hit: true, t, s };
+
+      return { hit: false };
+    }
+
+    // u,v (0.0 to 1.0)
+    UVSampling(tex, u, v, texSizeX, texSizeY = texSizeX) {
+      const U = Math.floor(u * texSizeX)
+      const V = Math.floor(v * texSizeY)
+      return tex[V * texSizeX + U]
+    }
+
+    // draw strand from (_x,y0) to (_x,y1)
+    UVSampleStrand(
+      _tex, _texSize, _color,
+      _x, screen_y0, screen_y1,
+      yTop, yBot,
+      u,
+      dotWidth = this.sample_width, dotHeight = this.sample_height
+    ) {
+      const strandHeight = screen_y1 - screen_y0
+      for (let y = 0; y < strandHeight; y += dotHeight) {
+        const v = (screen_y0 + y - yTop) / (yBot - yTop) // FIX!!!
+        //const checkerU = Math.floor(u * 32)
+        //const checkerV = Math.floor(startV * 32)
+        C.save()
+        const on = this.UVSampling(_tex, u, v, _texSize)
+        if (on == 1) {
+          C.fillStyle = _color
+          C.fillRect(_x, screen_y0 + y, dotWidth, dotHeight)
+        }
+        else if (on == 0) {
+          C.fillStyle = 'black'
+          C.fillRect(_x, screen_y0 + y, dotWidth, dotHeight)
+        }
+
+        C.restore()
+      }
+    }
+
+
+    raycast2D(ox, oy, dx, dy, maxDist = 32) {
+      // start position in grid system
+      let mapX = Math.floor(ox), mapY = Math.floor(oy);
+      const
+        searchDirX = dx > 0 ? 1 : -1, // right or left
+        searchDirY = dy > 0 ? 1 : -1; // down or up
+      const
+        _nextBlockX = mapX + (searchDirX > 0 ? 1 : 0), // 0 for the right side
+        _nextBlockY = mapY + (searchDirY > 0 ? 1 : 0); // 0 for the bottom side
+
+      const eps = 1e-9,
+        invDx = 1 / (Math.abs(dx) < eps ? eps : dx),
+        invDy = 1 / (Math.abs(dy) < eps ? eps : dy);
+      const
+        tDeltaX = Math.abs(invDx),// 常に一定
+        tDeltaY = Math.abs(invDy);
+      let
+        nextBlockDistByX = (_nextBlockX - ox) * invDx, // tMaxX * Math.cos(ra) = (N-O)
+        nextBlockDistByY = (_nextBlockY - oy) * invDy;
+
+      // check if inside、これはいなくてもいいな
+      /* const id0 = this.world.atPos(mapX, mapY)
+      if (id0) return {
+        hit: true, dist: 0, id: id0,
+        side: 0, dir: { x: searchDirX, y: searchDirY },
+        cellX: mapX, cellY: mapY
+      }; */
+
+      let side = 0, dist = 0, hitId = 0;
+      for (let i = 0; i < 128; i++) {
+        // youtubeのは、XとY方向で全部終わってから比較する、こっちは交互でやる
+        // move the check block position, update the dist
+        if (nextBlockDistByX <= nextBlockDistByY) {
+          mapX += searchDirX;
+          dist = nextBlockDistByX;
+          nextBlockDistByX += tDeltaX;
+          side = 0;
+        }
+        else {
+          mapY += searchDirY;
+          dist = nextBlockDistByY;
+          nextBlockDistByY += tDeltaY;
+          side = 1;
+        }
+
+        if (dist > maxDist) break;
+
+        hitId = this.world.atPos(mapX, mapY)
+        if (hitId > 0 && dist > this.followDist)
+          return {
+            hit: true, dist, id: hitId,
+            side, dir: { x: searchDirX, y: searchDirY },
+            cellX: mapX, cellY: mapY
+          };
+      }
+
+      // no hit
+      return {
+        hit: false, dist: maxDist, id: 0,
+        side: 0, dir: { x: searchDirX, y: searchDirY },
+        cellX: -1, cellY: -1
+      };
+
+    }
+    Render2DView() {
+      let target_px = 0, target_py = 0, target_angle = 0
+      if (this.target) {
+        target_px = this.target.px
+        target_py = this.target.py
+        target_angle = this.target.angle
+      } else {
+        target_px = this.px
+        target_py = this.py
+        target_angle = this.angle
+      }
+      c2.fillStyle = 'grey'
+      c2.fillRect(0, 0, w0, h0)
+      const sw = w0 / this.world.width
+      const sh = h0 / this.world.height
+      for (let y = 0; y < this.world.height; y++) for (let x = 0; x < this.world.width; x++) {
+        const on = this.world.atPos(x, y)
+        if (on > 0) {
+          c2.fillStyle = 'black'
+          c2.fillRect(x * sw + 1, y * sh + 1, sw - 1, sh - 1)
+        } else if (on == -1) {
+          c2.fillStyle = 'red'
+          c2.fillRect(x * sw + 1, y * sh + 1, sw - 1, sh - 1)
+
+        } else if (on == -2) {
+          c2.fillStyle = 'yellow'
+          c2.fillRect(x * sw + 1, y * sh + 1, sw - 1, sh - 1)
+
+        }
+      }
+
+
+      const arraylength = 20
+      const targetsizex = 20 // なるべくDecouplingしたい！
+      c2.beginPath();
+      c2.arc(target_px * sw, target_py * sh, targetsizex / 2, 0, 2 * Math.PI)
+      c2.fillStyle = "red"
+      c2.fill()
+
+      c2.beginPath();
+      c2.arc(this.px * sw, this.py * sh, targetsizex / 2, 0, 2 * Math.PI)
+      c2.fillStyle = "yellow"
+      c2.fill()
+
+      this.GM.flatDrawList?.forEach(e => {
+        if (e.id == 'sprite') {
+          c2.beginPath();
+          c2.arc(e.px * sw, e.py * sh, targetsizex / 2, 0, 2 * Math.PI)
+          c2.fillStyle = "blue"
+          c2.fill()
+        }
+
+      })
+
+
+      drawLine(c2,
+        target_px * sw,
+        target_py * sh,
+        target_px * sw + arraylength * Math.cos(target_angle),
+        target_py * sh + arraylength * Math.sin(target_angle)
+      )
+
+    }
+
+  }
+
+  // need target to follow the angle
+  class PanoramaBG extends GameObject {
+    constructor(url, target) {
+      super('PanoramaBG', 'PanoramaBG')
+      this.iml = new ImageLoader(url)
+      this.startOffset = 0
+      this.drawLengthPropotion = 0.4
+      this.drawHeightPosition = 1
+      this.rotateAngle = 0
+      this.target = target
+      //this.drawPause = true
+    }
+    gatherReference(gm) {
+      if (!this.target) {
+        this.master.objectList.forEach(e => {
+          if (e.tags?.has('player')) {
+            this.target = e
+            console.log('[]locate a player')
+          }
+        })
+      }
+    }
+    update() {
+      if (this.target)
+        this.rotateAngle = this.target.angle
+
+    }
+    draw() {
+      if (!this.iml.loaded) return
+      const img = this.iml.img
+      const width = this.iml.img.width
+      const height = this.iml.img.height
+      const rotation_offset = this.rotateAngle * width / (Math.PI * 2)
+      const startPos = this.startOffset % width + rotation_offset
+
+      if (this.drawLengthPropotion < 0 || this.drawLengthPropotion > 1) return
+      const drawLength = width * this.drawLengthPropotion
+      if (startPos + drawLength > width) {
+        const drawLength1 = width - startPos
+        const drawEndPos1 = W * drawLength1 / drawLength
+        C.drawImage(
+          img,
+          startPos, 0,
+          drawLength1, height * this.drawHeightPosition,
+          0, 0,
+          drawEndPos1, H * this.drawHeightPosition)
+        C.drawImage(
+          img,
+          0, 0,
+          drawLength - drawLength1, height * this.drawHeightPosition,
+          drawEndPos1 - 1, 0,
+          W - drawEndPos1 + 1, H * this.drawHeightPosition)
+
+      } else {
+        C.drawImage(
+          img,
+          startPos, 0,
+          drawLength, height * this.drawHeightPosition,
+          0, 0,
+          W, H * this.drawHeightPosition)
+
+      }
+    }
+
+  }
+
+  // ゲーム世界がStopMotionなら、これがその「動かす手」になる
+
+  // xy平面の回転付きプレイヤー
+
+  class Player3DWithRotation extends GameObject {
+    constructor() {
+      super('player', 'player')
+      this.angle = Math.PI / 2
+      this.px = 13.5
+      this.py = 5.5
+      this.pz = 0
+      this.deltaX = 0
+      this.deltaY = 0
+      this.deltaZ = 0
+      this.sizex = 10
+      this.sizey = 10
+      this.moveSpeed = 0.01
+      this.rotSpeed = 0.02
+      this.world = null
+      //this.tags.add('player')
+    }
+
+    gatherReference(_root) {
+      this.GM = _root
+      if (!this.world) {
+        this.master.objectList.forEach(e => {
+          if (e.id == 'worldArray') {
+            console.log('[player]locate a world')
+            this.world = e
+          }
+        })
+      }
+    }
+    update_self() {
+      //const dt = Math.min(0.033, (now - last) * 0.001);
+      //last = now;
+      if (!this.world) {
+        this.updatePause = true
+        return console.log('player need world!')
+      }
+
+      if (this.angle < 0) {
+        this.angle *= -1
+        this.angle %= Math.PI * 2
+        this.angle = Math.PI * 2 - this.angle
+      } else {
+        this.angle %= Math.PI * 2
+      }
+      if (keys == undefined) return console.log('player waiting for key Event')
+      const
+        _fwdx = Math.cos(this.angle),
+        _fwdy = Math.sin(this.angle);
+      const
+        _rightx = Math.cos(this.angle + Math.PI / 2),
+        _righty = Math.sin(this.angle + Math.PI / 2);
+
+      let mx = 0, my = 0;
+      if (keys.up.pressed) { mx += _fwdx; my += _fwdy; }
+      if (keys.down.pressed) { mx -= _fwdx; my -= _fwdy; }
+      if (keys.left.pressed) { mx -= _rightx; my -= _righty; }
+      if (keys.right.pressed) { mx += _rightx; my += _righty; }
+
+      const mag = Math.hypot(mx, my) || 1;
+      mx /= mag;
+      my /= mag;
+
+      const step = this.moveSpeed * (keys['AltLeft'] ? 1.7 : 1.0) //* dt;
+
+      const npx = this.px + mx * step, npy = this.py + my * step;
+      const nwx = this.world.atPos(Math.floor(npx), Math.floor(this.py))
+      const nwy = this.world.atPos(Math.floor(this.px), Math.floor(npy))
+      if (nwx <= 0)
+        this.px = npx;
+
+      if (nwy <= 0)
+        this.py = npy;
+
+      if (nwx == -1 && this.pz == 0) {
+        GM.pushEvent(eventID.playerDie)
+      }
+      if (nwy == -1 && this.pz == 0) {
+        GM.pushEvent(eventID.playerDie)
+      }
+
+      if (nwx == -2 && this.pz == 0) {
+        GM.pushEvent(eventID.playerGoal)
+      }
+      if (nwy == -2 && this.pz == 0) {
+        GM.pushEvent(eventID.playerGoal)
+      }
+
+      const npz = this.pz + this.deltaZ
+      if (npz > 0) {
+        this.pz = npz
+        this.deltaZ -= 0.001
+      } else {
+        this.pz = 0
+        this.deltaZ = 0
+      }
+
+
+      if (keys.turnLeft.pressed) this.angle -= this.rotSpeed //* dt;
+      if (keys.turnRight.pressed) this.angle += this.rotSpeed //* dt;
+
+    }
+  }
+
+</script>
+
+
+<script id="3d rayCaster Voxel world engine">
+
+  // new Event System
+  class EventHub {
+    constructor() { this.eventQueue = [] }
+
+    emit(_typeName, _sender, _data) {
+      this.eventQueue.push({ typeName: _typeName, sender: _sender, data: _data, consumed: false })
+    }
+
+    dealEvent(_rootNode) {
+      const q = this.eventQueue
+      this.eventQueue = []
+      for (const ev of q) {
+        EventHub.broadcast(_rootNode, ev)
+      }
+    }
+
+    static broadcast(_node, _ev) {
+
+      if (!_node || _ev.consumed) return
+      _node.handle?.(_ev)
+      if (_ev.consumed) return
+
+      if (_node.objectList) {
+        for (const child of _node.objectList) {
+          EventHub.broadcast(child, _ev)
+          if (_ev.consumed) return
+        }
+      }
+
+    }
+
+    static getEventHandler(target) {
+      target.handlers = new Map()
+
+      target.on = function (_typeName, _fn) {
+        this.handlers.set(_typeName, _fn)
+        return this
+      }
+
+      target.handle = function (_ev) {
+        const fn = this.handlers.get(_ev.typeName)
+        if (!fn) return false
+        fn(_ev)
+        return true
+      }
+    }
+
+  }
+
+
+  /* =========================
+     ベクトル & 数学ユーティリティ
+     ========================= */
+  class Math2 {
+    constructor() { }
+    static clamp(v, a, b) { return Math.max(a, Math.min(b, v)); }
+    static mix(a, b, t) { return a + (b - a) * t; }
+    static within(v, a, b) { return v > a && v < b }
+
+  }
+
+  class Vec3 {
+    constructor(x = 0, y = 0, z = 0) { this.x = x; this.y = y; this.z = z; }
+    set(x, y, z) { this.x = x; this.y = y; this.z = z; return this; }
+    reset() { this.x = 0; this.y = 0; this.z = 0 }
+
+    add(v) { this.x += v.x; this.y += v.y; this.z += v.z; return this; }
+    sub(v) { this.x -= v.x; this.y -= v.y; this.z -= v.z; return this; }
+    mul(s) { this.x *= s; this.y *= s; this.z *= s; return this; }
+
+    dot(v) {
+      return this.x * v.x + this.y * v.y + this.z * v.z;
+    }
+    cross(v) {
+      return new Vec3(
+        this.y * v.z - this.z * v.y,
+        this.z * v.x - this.x * v.z,
+        this.x * v.y - this.y * v.x
+      );
+    }
+    len() { return Math.hypot(this.x, this.y, this.z); }
+    norm() { const l = this.len() || 1; this.x /= l; this.y /= l; this.z /= l; return this; }
+    clone() { return new Vec3(this.x, this.y, this.z); }
+
+    // static であれば、Instanceしなくてもいいか
+    // yaw:Left,Right ptich:up,down
+    static fromYawPitch(yawDeg, pitchDeg) {
+      const yaw = yawDeg * Math.PI / 180, pitch = pitchDeg * Math.PI / 180;
+      const cos_yaw = Math.cos(yaw), sin_yaw = Math.sin(yaw);
+      const cos_pitch = Math.cos(pitch), sin_pinch = Math.sin(pitch);
+      // 前方: XZ 平面をヨー、Y はピッチ
+      return new Vec3(sin_yaw * cos_pitch, -sin_pinch, cos_yaw * cos_pitch).norm();
+    }
+  }
+
+  /* =========================
+     ワールド（world[x][y][z]）
+     ========================= */
+  class worldBlock {
+    constructor(width = 48, height = 24, depth = 48) {
+      this.width = width
+      this.height = height
+      this.depth = depth
+      this.worldXYZ = worldBlock.createWorld(Math.random(), this.width, this.height, this.depth)
+    }
+    static createWorld(seed = Math.random(), _width, _height, _depth) {
+      const __W = _width
+      const __H = _height
+      const __D = _depth
+      // 三次元配列アクセスの見た目を保ちつつ、内部は1D配列で高速化
+      const data = new Uint8Array(__W * __H * __D);
+      const idx = (x, y, z) => (y * __D + z) * __W + x;
+
+      // y=0：地面（石）
+      for (let x = 0; x < __W; x++) for (let z = 0; z < __D; z++) data[idx(x, 0, z)] = 2;
+
+      // 簡易の高さマップ＋構造物
+      const rng = worldBlock.mulberry32(Math.floor(seed * 0x7fffffff));
+      // 起伏（草土）
+      for (let x = 0; x < __W; x++) {
+        for (let z = 0; z < __D; z++) {
+          const h = 1 + Math.floor(5 * worldBlock.noise2d(x * 0.12, z * 0.12, rng));
+          for (let y = 1; y < Math.min(__H, h + 1); y++) data[idx(x, y, z)] = 1;
+        }
+      }
+      // 柱や壁（石/木）
+      for (let i = 0; i < 220; i++) {
+        const x = 2 + Math.floor(rng() * (__W - 4));
+        const z = 2 + Math.floor(rng() * (__D - 4));
+        const ht = 3 + Math.floor(rng() * 8);
+        const id = (rng() < 0.7) ? 2 : 3;
+        for (let y = 1; y < Math.min(__H, ht); y++) data[idx(x, y, z)] = id;
+        // たまに横へ延ばす
+        if (rng() < 0.3 && x + 1 < __W) for (let y = 1; y < Math.min(__H, ht - 1); y++) data[idx(x + 1, y, z)] = id;
+        if (rng() < 0.3 && z + 1 < __D) for (let y = 1; y < Math.min(__H, ht - 1); y++) data[idx(x, y, z + 1)] = id;
+      }
+      // 空の広場
+      for (let x = 18; x < 30; x++) for (let z = 18; z < 30; z++) for (let y = 1; y < 6; y++) data[idx(x, y, z)] = 0;
+
+      // ラッパー：world[x][y][z] 風アクセスを提供
+      const wrapperXYZ = [];
+      for (let x = 0; x < __W; x++) {
+        wrapperXYZ[x] = [];
+        for (let y = 0; y < __H; y++) {
+          wrapperXYZ[x][y] = [];
+          for (let z = 0; z < __D; z++) {
+            Object.defineProperty(wrapperXYZ[x][y], z, {
+              get() { return data[idx(x, y, z)]; },
+              set(v) { data[idx(x, y, z)] = v | 0; },
+              enumerable: true
+            });
+          }
+        }
+      }
+      wrapperXYZ._data = data; wrapperXYZ._idx = idx;
+      return wrapperXYZ;
+    }
+
+    static noise2d(x, z, rng) {
+      // 簡易な値ノイズ（勾配なし）：タイル状に乱数→双線形補間
+      const xi = Math.floor(x), zi = Math.floor(z);
+      const xf = x - xi, zf = z - zi;
+      function hash(i, j) { // 位置依存の擬似乱数
+        const seed = ((i * 73856093) ^ (j * 19349663)) >>> 0;
+        const r = worldBlock.mulberry32(seed)();
+        return r;
+      }
+      const v00 = hash(xi, zi), v10 = hash(xi + 1, zi), v01 = hash(xi, zi + 1), v11 = hash(xi + 1, zi + 1);
+      const v0 = v00 + (v10 - v00) * xf;
+      const v1 = v01 + (v11 - v01) * xf;
+      return v0 + (v1 - v0) * zf;
+    }
+
+    static inBounds(x, y, z, _world) { return x >= 0 && x < _world.width && y >= 0 && y < _world.height && z >= 0 && z < _world.depth }
+
+    static isSolid(x, y, z, _world) {
+      return worldBlock.inBounds(x, y, z, _world) ? _world.worldXYZ[x][y][z] !== 0 : false;
+    }
+
+    static mulberry32(a) {
+      return function () {
+        let t = a += 0x6D2B79F5;
+        t = Math.imul(t ^ (t >>> 15), t | 1);
+        t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+        return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+      };
+    }
+
+    static moveAxisCheck_CenterType(_world, position3, axis, delta, size3, target = null) {
+      const block = 1
+      const pw = size3.x
+      const ph = size3.y
+      const pd = size3.z
+      const np = { x: position3.x, y: position3.y, z: position3.z }
+      np[axis] += delta
+      // この計算…一回だけでいいよね？
+      // いやだめだ、軸ごとにPositionの更新が入るので、引っかかるBlockも更新されるべき
+      const eps = 0.001// Math.floorは[0,1)なので、max側にくっつけた状態が良くない
+      const minX = Math.floor((np.x - pw / 2) / block)
+      const maxX = Math.floor((np.x + pw / 2 - eps) / block)
+      const minY = Math.floor((np.y - ph / 2) / block)
+      const maxY = Math.floor((np.y + ph / 2 - eps) / block)
+      const minZ = Math.floor((np.z - pd / 2) / block)
+      const maxZ = Math.floor((np.z + pd / 2 - eps) / block)
+
+      for (let bx = minX; bx <= maxX; bx++) {
+        for (let by = minY; by <= maxY; by++) {
+          for (let bz = minZ; bz <= maxZ; bz++) {
+            if (worldBlock.isSolid(bx, by, bz, _world)) {
+              // 衝突補正: 進行方向に応じて位置をブロックの端に揃える
+              if (axis === 'x') {
+                if (delta > 0) position3[axis] = bx * block - pw / 2;
+                if (delta < 0) position3[axis] = (bx + 1) * block + pw / 2
+              } else if (axis === 'y') {
+                if (delta > 0) position3[axis] = by * block - ph / 2;
+                if (delta < 0) position3[axis] = (by + 1) * block + ph / 2
+              } else if (axis === 'z') {
+                if (delta > 0) position3[axis] = bz * block - pd / 2;       // top
+                if (delta < 0) position3[axis] = (bz + 1) * block + pd / 2
+
+              }
+              return 0; // 衝突したら移動終了
+            }
+          }
+        }
+      }
+
+
+      position3[axis] += delta
+
+      return delta
+    }
+  }
+
+
+  class cameraRCV extends GameObject {
+    constructor(px = 10.5, py = 6.0, pz = 10.5, yaw = 0, pitch = -1, world) {
+      super('cameraRCV', 'cameraRCV')
+      this.position.set(px, py, pz)
+      this.yaw = yaw
+      this.pitch = pitch
+      this.delta = new Vec3(0, 0, 0)
+      this.nextDelta = new Vec3(0, 0, 0)
+      this.vecForward = new Vec3(0, 0, 0)
+      this.vecRight = new Vec3(0, 0, 0)
+      this.vecUp = new Vec3(0, 0, 0)
+
+      this.world = world
+      this.fovDeg = 40
+      this.moveSpeed = 0.04
+      this.rotSpeed = 1
+
+
+
+    }
+
+    update() {
+
+      // update for rendering
+      this.vecForward = Vec3.fromYawPitch(this.yaw, this.pitch)
+      this.vecRight = this.vecForward.cross(new Vec3(0, 1, 0)).norm();
+      this.vecUp = this.vecRight.cross(this.vecForward)
+
+
+
+      //controller
+
+
+      let PRes = 0 // acc-result of key pressing
+      if (keys.turnLeft.pressed) PRes--
+      if (keys.turnRight.pressed) PRes++
+      if (PRes > 0) {
+        this.yaw -= this.rotSpeed
+      } else if (PRes < 0) {
+        this.yaw += this.rotSpeed
+      }
+
+      PRes = 0
+      if (keys.turnDown.pressed) PRes--
+      if (keys.turnUp.pressed) PRes++
+      if (PRes > 0) {
+        this.pitch = Math2.clamp(this.pitch - this.rotSpeed, -89.5, 89.5)
+      } else if (PRes < 0) {
+        this.pitch = Math2.clamp(this.pitch + this.rotSpeed, -89.5, 89.5)
+      }
+
+
+
+      const dirForward = Vec3.fromYawPitch(this.yaw, 0); // -Z基準ではなく、既に前方
+      // スクリーン座標系（右・上）
+      const worldUp = new Vec3(0, 1, 0);
+      const dirRight = dirForward.cross(worldUp).norm();
+
+      // XZ軸では、摩擦力MAX設定
+      this.delta.x = 0
+      this.delta.z = 0
+
+      PRes = 0
+      if (keys.left.pressed) { PRes -= 1 }
+      if (keys.right.pressed) { PRes += 1 }
+      if (PRes > 0)
+        this.nextDelta = dirRight.mul(this.moveSpeed)
+      else if (PRes < 0)
+        this.nextDelta = dirRight.mul(-this.moveSpeed)
+      else { this.nextDelta.reset() }
+      this.delta.add(this.nextDelta)
+
+      PRes = 0
+      if (keys.up.pressed) { PRes += 1 }
+      if (keys.down.pressed) { PRes -= 1 }
+      if (PRes > 0)
+        this.nextDelta = dirForward.mul(this.moveSpeed)
+      else if (PRes < 0)
+        this.nextDelta = dirForward.mul(-this.moveSpeed)
+      else { this.nextDelta.reset() }
+      this.delta.add(this.nextDelta)
+
+      GameManager.emitEvent('ResolveMovement', this)
+
+
+    }
+
+
+
+  }
+
+  class RendererRCV {
+    constructor(_currentCamera, _currentWorld, _canvas, _statsEl) {
+      this.currentCamera = _currentCamera
+      this.currentWorld = _currentWorld
+      this.canvas = _canvas
+      this.FPSstats = _statsEl
+      this.ctx = this.canvas.getContext('2d', { alpha: false, desynchronized: true, willReadFrequently: true })
+      this.lightDir = new Vec3(0.6, -0.8, 0.2).norm();
+      this.worldUp = new Vec3(0, 1, 0);
+      this.renderStartTime = 0
+      this.zDepth = []
+    }
+
+    draw() {
+      let internalScale = 4; // 解像度縮小（1=フル, 2=1/2, 4=1/4）
+      let maxDistance = 90;
+      let maxSteps = 512;
+      let exposure = 1.10;
+      let showNormals = false;
+
+      const skyTop = [0.60, 0.78, 0.98];  // 空（上）
+      const skyHzn = [0.85, 0.92, 1.00];  // 空（地平）
+      const lightDir = this.lightDir // 太陽光
+      const ambient = 0.18;
+
+      const w = Math.floor(this.canvas.width / internalScale), h = Math.floor(this.canvas.height / internalScale);
+
+      // カメラ基底ベクトル
+      const dirForward = Vec3.fromYawPitch(this.currentCamera.yaw, this.currentCamera.pitch); // -Z基準ではなく、既に前方
+
+      // スクリーン座標系（右・上）
+      const worldUp = this.worldUp
+      const dirRight = dirForward.cross(worldUp).norm();
+      const dirUp = dirRight.cross(dirForward).norm();
+
+
+      const fov = this.currentCamera.fovDeg * Math.PI / 180;
+      const halfW = Math.tan(fov / 2);
+      const aspect = w / h;
+
+      // 画面の各ピクセルにレイ
+      if (this.FPSstats) this.renderStartTime = performance.now();
+      const _img = this.ctx.getImageData(0, 0, this.canvas.width, this.canvas.height); // 直接フル解像度を塗る（拡大補間なし）
+      for (let py = 0; py < h; py++) {
+        const vy = (1 - 2 * (py + 0.5) / h) * halfW; // [-halfW, halfW]
+        for (let px = 0; px < w; px++) {
+          const vx = (2 * (px + 0.5) / w - 1) * halfW * aspect;
+
+          // レイ方向
+          const dir = new Vec3(
+            dirForward.x + dirRight.x * vx + dirUp.x * vy,
+            dirForward.y + dirRight.y * vx + dirUp.y * vy,
+            dirForward.z + dirRight.z * vx + dirUp.z * vy
+          ).norm();
+
+          const result = RendererRCV.raycastVoxel(dir, maxDistance, maxSteps, this.currentWorld, this.currentCamera);
+
+          let r, g, b;
+          if (result.hit) {
+            // 面法線
+            const n = result.normal;
+            // 色
+            let col = RendererRCV.getBlockColor(result.id, n);
+            // 照明（ランバート）
+            const ndl = Math.max(0, -(n.x * lightDir.x + n.y * lightDir.y + n.z * lightDir.z));
+            let lit = ambient + (1 - ambient) * ndl;
+            // 距離フォグ
+            const fogT = Math2.clamp(result.t / maxDistance, 0, 1);
+            const sky = [
+              Math2.mix(skyHzn[0], skyTop[0], 0.5 - 0.5 * dir.y), // 視線が上なら空色を強く
+              Math2.mix(skyHzn[1], skyTop[1], 0.5 - 0.5 * dir.y),
+              Math2.mix(skyHzn[2], skyTop[2], 0.5 - 0.5 * dir.y)
+            ];
+
+            if (showNormals) {
+              // 法線可視化モード
+              col = [(n.x * 0.5 + 0.5), (n.y * 0.5 + 0.5), (n.z * 0.5 + 0.5)];
+              lit = 1.0;
+            }
+
+            r = Math2.mix(sky[0], col[0] * lit * exposure, (1 - fogT));
+            g = Math2.mix(sky[1], col[1] * lit * exposure, (1 - fogT));
+            b = Math2.mix(sky[2], col[2] * lit * exposure, (1 - fogT));
+          } else {
+            // スカイ
+            const t = 0.5 - 0.5 * dir.y; // 上ほど skyTop、下ほど skyHzn
+            r = Math2.mix(skyHzn[0], skyTop[0], t);
+            g = Math2.mix(skyHzn[1], skyTop[1], t);
+            b = Math2.mix(skyHzn[2], skyTop[2], t);
+          }
+
+
+          RendererRCV.fillImageData(this.canvas, _img.data, internalScale, px, py, r, g, b)
+        } // end for px
+      } // end for py
+
+      this.ctx.putImageData(_img, 0, 0);
+
+
+      // render FPS
+      if (this.FPSstats) {
+        const dt = (performance.now() - this.renderStartTime);
+        this.FPSstats.textContent = `
+        FPS: ${(1000 / dt).toFixed(1)} | 
+        render=${dt.toFixed(1)}ms | ${Math.floor(this.canvas.width / internalScale)}x${Math.floor(this.canvas.height / internalScale)} (scale ${internalScale}x)
+        pos=(${this.currentCamera.position.x.toFixed(2)}, ${this.currentCamera.position.y.toFixed(2)}, ${this.currentCamera.position.z.toFixed(2)}) 
+        yaw=${this.currentCamera.yaw.toFixed(1)} 
+        pitch=${this.currentCamera.pitch.toFixed(1)}`;
+      }
+    }
+
+    static raycastVoxel(dir, maxDistance = 90, maxSteps = 1024, _currentWorld, _camera) {
+      /* =========================
+       DDA レイキャスト（Amanatides & Woo）
+       ========================= */
+      /**
+       * @param {Vec3} origin ワールド座標
+       * @param {Vec3} dir    正規化方向
+       * @param {number} maxDistance 最大距離
+       * @param {number} maxSteps    ステップ上限
+       * @returns { hit:boolean, t:number, vox?:{x,y,z}, normal?:{x,y,z}, id?:number }
+       */
+
+      const _worldXYZ = _currentWorld.worldXYZ
+      const origin = _camera.position
+
+      let vx = Math.floor(origin.x), vy = Math.floor(origin.y), vz = Math.floor(origin.z);
+
+      // 各軸の進行符号
+      const stepX = dir.x > 0 ? 1 : (dir.x < 0 ? -1 : 0);
+      const stepY = dir.y > 0 ? 1 : (dir.y < 0 ? -1 : 0);
+      const stepZ = dir.z > 0 ? 1 : (dir.z < 0 ? -1 : 0);
+
+      // Δt（1ボクセル進むのに必要な t 増分）
+      const tDeltaX = stepX !== 0 ? Math.abs(1 / dir.x) : Infinity;
+      const tDeltaY = stepY !== 0 ? Math.abs(1 / dir.y) : Infinity;
+      const tDeltaZ = stepZ !== 0 ? Math.abs(1 / dir.z) : Infinity;
+
+      // tMax: 次の格子境界までの t
+      let tMaxX, tMaxY, tMaxZ;
+      if (stepX > 0) tMaxX = (Math.floor(origin.x) + 1 - origin.x) * tDeltaX;
+      else if (stepX < 0) tMaxX = (origin.x - Math.floor(origin.x)) * tDeltaX;
+      else tMaxX = Infinity;
+
+      if (stepY > 0) tMaxY = (Math.floor(origin.y) + 1 - origin.y) * tDeltaY;
+      else if (stepY < 0) tMaxY = (origin.y - Math.floor(origin.y)) * tDeltaY;
+      else tMaxY = Infinity;
+
+      if (stepZ > 0) tMaxZ = (Math.floor(origin.z) + 1 - origin.z) * tDeltaZ;
+      else if (stepZ < 0) tMaxZ = (origin.z - Math.floor(origin.z)) * tDeltaZ;
+      else tMaxZ = Infinity;
+
+      // 始点がブロック内→最初の境界を跨いでから判定（内部からの視点でも安定）
+      let t = 0;
+      let lastAxis = null;
+
+      for (let i = 0; i < maxSteps; i++) {
+        if (tMaxX < tMaxY) {
+          if (tMaxX < tMaxZ) { vx += stepX; t = tMaxX; tMaxX += tDeltaX; lastAxis = 'x'; }
+          else { vz += stepZ; t = tMaxZ; tMaxZ += tDeltaZ; lastAxis = 'z'; }
+        } else {
+          if (tMaxY < tMaxZ) { vy += stepY; t = tMaxY; tMaxY += tDeltaY; lastAxis = 'y'; }
+          else { vz += stepZ; t = tMaxZ; tMaxZ += tDeltaZ; lastAxis = 'z'; }
+        }
+        if (t > maxDistance) break;
+        if (!worldBlock.inBounds(vx, vy, vz, _currentWorld)) return { hit: false, t };
+
+        if (worldBlock.isSolid(vx, vy, vz, _currentWorld)) {
+          let nx = 0, ny = 0, nz = 0;
+          if (lastAxis === 'x') nx = -stepX;
+          else if (lastAxis === 'y') ny = -stepY;
+          else nz = -stepZ;
+          return { hit: true, t, vox: { x: vx, y: vy, z: vz }, normal: { x: nx, y: ny, z: nz }, id: _worldXYZ[vx][vy][vz] };
+        }
+      }
+      return { hit: false, t };
+    }
+
+    // just enjoy making static method. help me to figure out the coupling
+    static fillImageData(_canvas, _imgData, _internalScale, px, py, r, g, b, a = 255) {
+      // 書き込み（内部縮小→スケール描画：最近傍）
+      // ここでは直接フル解像度に nearest 拡大して塗る
+      const x0 = px * _internalScale | 0, y0 = py * _internalScale | 0;
+      for (let iy = 0; iy < _internalScale; iy++) {
+        let RGBAoffset = ((y0 + iy) * _canvas.width + x0) * 4;
+        for (let ix = 0; ix < _internalScale; ix++) {
+          _imgData[RGBAoffset] = Math.max(0, Math.min(255, (r * 255) | 0));
+          _imgData[RGBAoffset + 1] = Math.max(0, Math.min(255, (g * 255) | 0));
+          _imgData[RGBAoffset + 2] = Math.max(0, Math.min(255, (b * 255) | 0));
+          _imgData[RGBAoffset + 3] = 255;
+          RGBAoffset += 4;
+        }
+      }
+    }
+
+    // 0=空気, 1=草土, 2=石, 3=木
+    // block ID data
+    static getBlockColor(id, normal) {
+      // ブロックごとのベース色（sRGB→linearっぽく扱う簡易）
+      let c;
+      switch (id) {
+        case 1: // 草土
+          // 上面っぽく少し緑を強める
+          const g = 0.38 + 0.22 * Math2.clamp(normal.y, 0, 1);
+          c = [0.18, g, 0.12]; break;
+        case 2: // 石
+          c = [0.48, 0.50, 0.52]; break;
+        case 3: // 木
+          c = [0.40, 0.28, 0.14]; break;
+        default:
+          c = [0.8, 0.0, 0.8];
+      }
+      return c;
+    }
+
+
+    static UVSamplingRGBA(tex, u, v, texSizeX, texSizeY = texSizeX) {
+      const U = Math.floor(u * texSizeX)
+      const V = Math.floor(v * texSizeY)
+      return {
+        r: tex[V * texSizeX + U],
+        g: tex[V * texSizeX + U + 1],
+        b: tex[V * texSizeX + U + 2],
+        a: 255,
+      }
+    }
+    static UVSamplingBWA(tex, u, v, texSizeX, texSizeY = texSizeX) {
+      const U = Math.floor(u * texSizeX)
+      const V = Math.floor(v * texSizeY)
+      const c = tex[V * texSizeX + U]
+      if (c >= 0) {
+        return {
+          r: c,
+          g: c,
+          b: c,
+          a: 255,
+        }
+      } else {
+        return {
+          r: 0,
+          g: 0,
+          b: 0,
+          a: 0,
+        }
+      }
+    }
+
+    static verticesProjection(v, sv, _cameraRCV) {
+
+      const camForward = _cameraRCV.vecForward
+      const camRight = _cameraRCV.vecRight
+      const camUp = _cameraRCV.vecUp
+
+      const vector = v.clone().sub(_cameraRCV.position)
+      // camera coord
+      const project = new Vec3(
+        vector.dot(camRight), vector.dot(camUp), vector.dot(camForward)
+      )
+
+      // 近すぎる
+      if (project.z <= 1e-6) return
+
+
+      // clip coord
+      const fov = _cameraRCV.fovDeg * Math.PI / 180;
+
+      const tanHalfY = Math.tan(fov * 0.5)
+      const tanHalfX = tanHalfY * W / H
+      project.set(
+        project.x / (tanHalfX * project.z),
+        project.y / (tanHalfY * project.z),
+        project.z)
+
+
+      // そのまま上書きする?
+      return sv.set(
+        (project.x * 0.5 + 0.5) * W,
+        (0.5 - project.y * 0.5) * H,
+        project.z)
+
+
+    }
+
+    static UVTextureSample(_tex, u/*0.0~1.0*/, v/*0.0~1.0*/, _texSampleSize) {
+      const U = Math.floor(u * _texSampleSize)
+      const V = Math.floor(v * _texSampleSize)
+      return _tex[V * _texSampleSize + U]
+    }
+
+    // working on ... unfinished
+    static drawRectSprite(
+      _canvas, _imgData,
+      _tex, _texSampleSize,
+      sx0, sx1, sy0, sy1,/*screen coord*/
+      x0, x1, y0, y1,/*true screen coord*/
+      dotWidth = 4, dotHeight = 4
+    ) {
+      const drawHeight = sy1 - sy0
+      const drawWidth = sx1 - sx0
+      if (drawHeight <= 0 || drawWidth <= 0)
+        return
+      for (let iy = 0; iy < drawHeight; iy += 1) {
+        const v = (sy0 + iy - y0) / (y1 - y0) // FIX!!!
+        for (let ix = 0; ix < drawWidth; ix += 1) {
+          const u = (sx0 + ix - x0) / (x1 - x0) // FIX!!!
+          //          
+          const res = RendererRCV.UVTextureSample(_tex, u, v, _texSampleSize)
+          //          
+          RendererRCV.fillImageData(_canvas, _imgData, dotWidth, sx0 + ix, sy0 + iy, res, 0, 0)
+
+
+        }
+      }
+      // put Image Data
+    }
+
+  }
+
+
+
+</script>
+
+<script id="key mapping">
+  // EventID好きなだけ追加
+  // 使うのを忘れちゃうｗ
+  const eventID = new Proxy({}, (() => {
+    let currentID = 0;
+    const map = new Map();
+    return {
+      get(target, prop) {
+
+        if (typeof prop === "symbol") return undefined;
+        if (!map.has(prop)) {
+          map.set(prop, currentID++);
+        }
+        return map.get(prop);
+      },
+      ownKeys() {
+        return Array.from(map.keys());
+      },
+    };
+  })());
+
+  // if(keys.xxx.pressed)これをGameLoopに入れたら連続発火
+  // keyMap -> keys
+  const keyMap = {
+    'a': 'left',
+    'd': 'right',
+    'w': 'up',
+    's': 'down',
+    ' ': 'shot',
+    'j': 'turnLeft',
+    'l': 'turnRight',
+    'i': 'turnUp',
+    'k': 'turnDown',
+  }
+
+  // 必要なキーだけ登録すればOK
+  // onPress: 押した瞬間
+  const onPressHandlers = {
+    up: () => {
+    },
+    down: () => {
+    },
+    left: () => {
+    },
+    right: () => {
+    },
+    shot: () => {
+      //pl0.pushEvent('jump')
+      GameManager.emitEvent(eventID.space)
+    }
+  }
+
+  // onRelease: 離した瞬間
+  const onReleasehandlers = {
+    left: () => {
+    },
+    right: () => {
+    },
+    shot: () => {
+    }
+  }
+
+  // the event list
+
+
+</script>
+
+
+<script id="white canvas">
+
+
+  // y-up physicSimulator
+  class PhysicSimulator_BlockWorld extends GameObject {
+    constructor(_collisionWorld) {
+      super()
+      this.world = _collisionWorld
+      EventHub.getEventHandler(this)
+
+      this.on('ResolveMovement', (ev) => {
+        if (!this.world) return console.log('no world to resolve movement')
+        const t = ev.sender
+        t.delta.y -= 0.004
+        t.delta.x = worldBlock.moveAxisCheck_CenterType(this.world, t.position, 'x', t.delta.x, { x: 0.4, y: 1.6, z: 0.4 })
+        t.delta.z = worldBlock.moveAxisCheck_CenterType(this.world, t.position, 'z', t.delta.z, { x: 0.4, y: 1.6, z: 0.4 })
+        t.delta.y = worldBlock.moveAxisCheck_CenterType(this.world, t.position, 'y', t.delta.y, { x: 0.4, y: 1.6, z: 0.4 })
+
+        t.position.x = Math2.clamp(t.position.x, 0.01, this.world.width - 0.01);
+        t.position.y = Math2.clamp(t.position.y, 0.01, this.world.height - 0.01);
+        t.position.z = Math2.clamp(t.position.z, 0.01, this.world.depth - 0.01);
+
+      })
+    }
+  }
+
+  const GM = new GameManager('pauseMenu_GM')
+
+  const testWorld = new worldBlock()
+
+  const testCameraRCV = new cameraRCV()
+  testCameraRCV.world = testWorld
+
+  EventHub.getEventHandler(testCameraRCV)
+  testCameraRCV.on(eventID.space, () => {
+    testCameraRCV.delta.y = 0.1
+  })
+
+
+  const testRenderer = new RendererRCV(testCameraRCV, testWorld, canvas0, document.getElementById('fps'))
+  const testPhysicSimulator = new PhysicSimulator_BlockWorld(testWorld)
+
+
+  GM.addChild(testCameraRCV)
+  GM.addChild(testRenderer)
+  GM.addChild(testPhysicSimulator)
+
+
+  const testPoint = new GameObject('point!')
+  testPoint.position.set(10, 5, 15)
+  testPoint.screenPos = new Vec3(0, 0, 0) // true screen position
+
+
+  testPoint.update = function () {
+    RendererRCV.verticesProjection(this.position, this.screenPos, testCameraRCV)
+
+  }
+
+  testPoint.draw = function () {
+
+
+    // rendererRCV.renderRectangleSprite()
+    if (!Math2.within(this.screenPos.x, 0, W) || !Math2.within(this.screenPos.y, 0, H)) {
+      return
+    }
+    const _img = C.getImageData(0, 0, canvas0.width, canvas0.height); // 直接フル解像度を塗る（拡大補間なし）
+    const internalScale = 4
+    const
+      px =
+        Math.floor(this.screenPos.x / internalScale),
+      py =
+        Math.floor(this.screenPos.y / internalScale)
+
+    RendererRCV.fillImageData(canvas0, _img.data, internalScale, px, py, 255, 255, 0)
+
+
+    const sx0 = this.screenPos.x - 20, sx1 = this.screenPos.x + 20,
+      sy0 = this.screenPos.y - 20, sy1 = this.screenPos.y + 20
+
+
+    RendererRCV.fillImageData(canvas0, _img.data, internalScale, px + 10, py, 255, 255, 0)
+
+    RendererRCV.drawRectSprite(
+      canvas0, _img.data,
+      Lily32, 32,
+      0, 100, 0, 100,
+      sx0, sx1, sy0, sy1,
+      internalScale, internalScale)
+
+    C.putImageData(_img, 0, 0)
+
+  }
+
+
+  // GM.addChild(new ListShower())
+
+  GM.addChild(testPoint)
+
+  showHTML('WASD to move, SPACE to jump, IJKL to rotate')
+
+  gameLoop = function () {
+
+    GM.update()
+    GM.draw()
+  }
+
+</script>
+
+</html>
