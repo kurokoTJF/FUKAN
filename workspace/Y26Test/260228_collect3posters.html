@@ -3026,6 +3026,28 @@
 
   }
 
+  // y-up physicSimulator
+  class PhysicSimulator_BlockWorld extends GameObject {
+    constructor(_collisionWorld) {
+      super()
+      this.world = _collisionWorld
+      EventHub.getEventHandler(this)
+
+      this.on('ResolveMovement', (ev) => {
+        if (!this.world) return console.log('no world to resolve movement')
+        const t = ev.sender
+        t.delta.y -= 0.004
+        t.delta.x = worldBlock3D.moveAxisCheck_CenterType(this.world, t.position, 'x', t.delta.x, { x: 0.4, y: 1.6, z: 0.4 })
+        t.delta.z = worldBlock3D.moveAxisCheck_CenterType(this.world, t.position, 'z', t.delta.z, { x: 0.4, y: 1.6, z: 0.4 })
+        t.delta.y = worldBlock3D.moveAxisCheck_CenterType(this.world, t.position, 'y', t.delta.y, { x: 0.4, y: 1.6, z: 0.4 })
+
+        t.position.x = Math2.clamp(t.position.x, 0.01, this.world.width - 0.01)
+        t.position.y = Math2.clamp(t.position.y, 0.01, this.world.height - 0.01)
+        t.position.z = Math2.clamp(t.position.z, 0.01, this.world.depth - 0.01)
+
+      })
+    }
+  }
 
 
 </script>
@@ -3101,56 +3123,16 @@
 
 <script id="white canvas">
 
-
-  // y-up physicSimulator
-  class PhysicSimulator_BlockWorld extends GameObject {
-    constructor(_collisionWorld) {
-      super()
-      this.world = _collisionWorld
-      EventHub.getEventHandler(this)
-
-      this.on('ResolveMovement', (ev) => {
-        if (!this.world) return console.log('no world to resolve movement')
-        const t = ev.sender
-        t.delta.y -= 0.004
-        t.delta.x = worldBlock3D.moveAxisCheck_CenterType(this.world, t.position, 'x', t.delta.x, { x: 0.4, y: 1.6, z: 0.4 })
-        t.delta.z = worldBlock3D.moveAxisCheck_CenterType(this.world, t.position, 'z', t.delta.z, { x: 0.4, y: 1.6, z: 0.4 })
-        t.delta.y = worldBlock3D.moveAxisCheck_CenterType(this.world, t.position, 'y', t.delta.y, { x: 0.4, y: 1.6, z: 0.4 })
-
-        t.position.x = Math2.clamp(t.position.x, 0.01, this.world.width - 0.01)
-        t.position.y = Math2.clamp(t.position.y, 0.01, this.world.height - 0.01)
-        t.position.z = Math2.clamp(t.position.z, 0.01, this.world.depth - 0.01)
-
-      })
-    }
-  }
-
   const GM = new GameManager('pauseMenu_GM')
 
   const testWorld = new worldBlock3D()
-
   const testCameraRCV = new cameraRCV()
   testCameraRCV.world = testWorld
-
   EventHub.getEventHandler(testCameraRCV)
   testCameraRCV.on(eventID.space, () => {
     testCameraRCV.delta.y = 0.1
   })
-
-
   const testRenderer = new RendererRCV(testCameraRCV, testWorld, canvas0, document.getElementById('fps'))
-  const testPhysicSimulator = new PhysicSimulator_BlockWorld(testWorld)
-
-
-  GM.addChild(testCameraRCV)
-  GM.addChild(testRenderer)
-  GM.addChild(testPhysicSimulator)
-
-  class testObject {
-    constructor() { }
-    update() { }
-    draw() { }
-  }
 
   class raycastVoxelSprite extends GameObject {
     constructor(x = 10, y = 3, z = 15) {
@@ -3162,9 +3144,9 @@
 
       this.show = true
       this.showDot = false
-      this.state1 = new testObject()
-      this.state_near = new testObject()
-      this.state3 = new testObject()
+      this.state1 = {}
+      this.state_near = {}
+      this.state3 = {}
       this.currentState = this.state1
       this.state1.update = function (master) {
         if (Vec3.distsq(master.position, testCameraRCV.position) < 4) {
@@ -3188,7 +3170,7 @@
           master.showDot = false
         }
       }
-
+      this.state3.update=function(){}
       EventHub.getEventHandler(this)
       this.on('show_interact', () => {
         console.log('me too')
@@ -3242,23 +3224,12 @@
     }
   }
 
-
-
-
-  GM.addChild(new raycastVoxelSprite(10.5, 4, 15.5))
-  GM.addChild(new raycastVoxelSprite(20.5, 4, 25.5))
-  GM.addChild(new raycastVoxelSprite(30.5, 6, 35.5))
-
-
-
   const testGUI = new GameObject()
   testGUI.draw = function () {
     ctx0.fillStyle = 'red'
     ctx0.fillText('pree [E] to get the poster', 100, H / 2)
   }
   testGUI.tags.add('testgui')
-
-
 
   GM.on('show_interact', () => {
     GM.addChild(testGUI)
@@ -3269,9 +3240,18 @@
     console.log('got it end')
   })
 
+
+  
+  GM.addChild(testCameraRCV)
+  GM.addChild(testRenderer)
+  GM.addChild(new PhysicSimulator_BlockWorld(testWorld))
+  GM.addChild(new raycastVoxelSprite(10.5, 4, 15.5))
+  GM.addChild(new raycastVoxelSprite(20.5, 4, 25.5))
+  GM.addChild(new raycastVoxelSprite(30.5, 6, 35.5))
+
+  
   showHTML('WASD to move, SPACE to jump, IJKL to rotate')
   showHTML('Find 3 poster of Nicole!', 'title')
-
   //GM.addChild(new ListShower())
 
 
