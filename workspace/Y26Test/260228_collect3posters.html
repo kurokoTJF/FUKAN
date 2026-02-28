@@ -3170,7 +3170,7 @@
           master.showDot = false
         }
       }
-      this.state3.update=function(){}
+      this.state3.update = function () { }
       EventHub.getEventHandler(this)
       this.on('show_interact', () => {
         console.log('me too')
@@ -3183,8 +3183,8 @@
       const size = this.spriteSize / this.screenPos.z
       this.sx0 = this.screenPos.x - size
       this.sx1 = this.screenPos.x + size
-      this.sy0 = this.screenPos.y - size * 2
-      this.sy1 = this.screenPos.y
+      this.sy0 = this.screenPos.y - size
+      this.sy1 = this.screenPos.y + size
 
       this.currentState.update(this)
 
@@ -3241,7 +3241,7 @@
   })
 
 
-  
+
   GM.addChild(testCameraRCV)
   GM.addChild(testRenderer)
   GM.addChild(new PhysicSimulator_BlockWorld(testWorld))
@@ -3249,7 +3249,7 @@
   GM.addChild(new raycastVoxelSprite(20.5, 4, 25.5))
   GM.addChild(new raycastVoxelSprite(30.5, 6, 35.5))
 
-  
+
   showHTML('WASD to move, SPACE to jump, IJKL to rotate')
   showHTML('Find 3 poster of Nicole!', 'title')
   //GM.addChild(new ListShower())
