@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width">
+    <title>Candy Crush</title>
+</head>
+<style>
+    .grid {
+        height: 150px;
+        width: 150px;
+        border: 3px solid black;
+        display: flex;
+        flex-wrap: wrap;
+    }
+
+    .grid div {
+        height: 50px;
+        width: 50px;
+        font-size: 40px;
+        display: flex;
+        justify-content: center;
+    }
+</style>
+
+<body>
+    Candy Crush Game mini
+    <div class="grid"></div>
+    <p>Points:<span class="points">0</span></p>
+</body>
+
+</html>
+
+<script>
+
+    // CandyCrushの骨組みは：
+    // Swithできる。一個跨げない
+    // 一列になったら加点。縦横
+    // GameLoopはどうする？
+    // Canvasでやる？クリック判定とかはどうする？
+    // 模様
+    // 消えるエフェクト
+    // 落ちるエフェクト
+    // …
+    // 僕のやり方だと結構時間掛かりそうだな。
+
+
+
+    const grid = document.querySelector('.grid')
+    const points = document.querySelector('.points')
+    const squares = []
+
+    // このreturnの書き方も素晴らしい！
+    // EMOJIの使いかたもうまい
+    function getCandy() {
+        return ['☂', '💧', '🍬', '🍡'][Math.floor(Math.random() * 4)]
+    }
+
+    //一回きり生成
+    for (let i = 0; i < 9; i++) {
+        const square = document.createElement('div')// styleの設定で3x3のGrid配置になる
+        square.setAttribute('draggable', true)
+        square.setAttribute('id', i)
+        square.textContent = getCandy()
+        grid.appendChild(square)
+        squares.push(square)
+    }
+
+    // mini global variables...
+    let candyDragged, candyReplaced, idDragged, idReplaced
+
+    // interactのときだけに更新
+    squares.forEach((square) => {
+        square.addEventListener('dragstart', dragStart)
+        square.addEventListener('drop', dragDrop)
+        square.addEventListener('dragover', e => e.preventDefault())
+    })
+
+    function dragStart() {
+        candyDragged = this.textContent
+        idDragged = parseInt(this.id)
+    }
+
+    function dragDrop() {
+        candyReplaced = this.textContent
+        idReplaced = parseInt(this.id)
+        this.textContent = candyDragged
+        squares[idDragged].textContent = candyReplaced
+
+        for (i = 0; i <= 2; i++) {
+            if (squares[i].textContent == squares[i + 3].textContent &&
+                squares[i].textContent == squares[i + 6].textContent
+            ) {
+                points.textContent = parseInt(points.textContent) + 1
+                for (j = 0; j <= 6; j += 3) {
+                    squares[i + j].textContent = getCandy()
+                }
+            }
+        }
+    }
+
+</script>
