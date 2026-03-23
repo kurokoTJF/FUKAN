@@ -3379,9 +3379,10 @@
             super()
             this.world = world
             EventHub.getEventHandler(this)
-            this.idleState = new baseState()
+            this.idleState = new StateBase()
             this.idleState.on(eventID.space,()=>{
-                showHTML('yeah!!!!!')
+                showHTML('yeah!!!!!',10)
+                testCameraRCV.delta.y = 0.1
             })
             this.currentState=this.idleState
         }
@@ -3392,6 +3393,7 @@
 
         // boardcast receive
         handle(_ev) {
+            showHTML('I handle',10)
             const fn = this.currentState.handlers.get(_ev.typeName)
             if (!fn) return false
             fn(_ev)
@@ -3400,9 +3402,6 @@
     }
     const testCameraRCV = new t_cameraRCV(testWorld)
 
-    testCameraRCV.on(eventID.space, () => {
-        testCameraRCV.delta.y = 0.1
-    })
     const testRenderer = new RendererRCV(testCameraRCV, testWorld, canvas0, document.getElementById('fps'))
 
 
