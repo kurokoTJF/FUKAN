@@ -1907,7 +1907,11 @@
                                 if (delta > 0) position3[axis] = bx * block - pw / 2 - eps
                                 if (delta < 0) position3[axis] = (bx + 1) * block + pw / 2 + eps
                             } else if (axis === 'y') {
-                                if (delta > 0) position3[axis] = by * block - ph / 2 - eps
+                                if (delta > 0) {
+
+                                    position3[axis] = by * block - ph / 2 - eps
+                                    GameManager.emitEvent('land')
+                                }
                                 if (delta < 0) position3[axis] = (by + 1) * block + ph / 2 + eps
                             } else if (axis === 'z') {
                                 if (delta > 0) position3[axis] = bz * block - pd / 2 - eps;       // top
@@ -3365,7 +3369,8 @@
     const testWorld = new worldBlock3D()
 
     class StateBase {
-        constructor(){
+        constructor(master){
+            this.master=master
             EventHub.getEventHandler(this)
         }
         update(){}
@@ -3378,11 +3383,16 @@
         constructor(world) {
             super()
             this.world = world
-            EventHub.getEventHandler(this)
-            this.idleState = new StateBase()
+            this.idleState = new StateBase(this)
             this.idleState.on(eventID.space,()=>{
                 showHTML('yeah!!!!!',10)
-                testCameraRCV.delta.y = 0.1
+this.master.delta.y = 0.1
+this.master.currentState =this.master.airState
+            })
+            this.airState = new StateBase(this)
+            this.airState.on('land',()=>{
+                showHTML('land!!!',10)
+                this.master.currentState=this.master.idleState
             })
             this.currentState=this.idleState
         }
@@ -3393,7 +3403,6 @@
 
         // boardcast receive
         handle(_ev) {
-            showHTML('I handle',10)
             const fn = this.currentState.handlers.get(_ev.typeName)
             if (!fn) return false
             fn(_ev)
