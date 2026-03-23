@@ -347,6 +347,7 @@
 
 
 <script id="Core Engine & equipment functions">
+  // Tag x State x Event。
   //ゲーム世界の原子になる
   //name for showList, id more like type
   // need Vec3 class
@@ -358,7 +359,8 @@
       this.deleted = false
       this.objectList = []
       this.drawList = []
-      this.tags = new Set()
+      this.tags = new Set()//これで全部まとめてTagをつけれる
+      /*add,delete,_,has*/
       this.drawPause = false
       this.updatePause = false
       this.position = new Vec3(0, 0, 0)
@@ -693,6 +695,14 @@
   }
 
   // new Event System
+  /*生データ → 意味のある出来事 + 「瞬間」を定義する
+    // 物理
+    velocityY < 0 && collided
+
+    // ↓ 翻訳
+
+    emit('land')
+  */
   class EventHub {
     constructor() { this.eventQueue = [] }
 
@@ -1908,10 +1918,7 @@
                 if (delta < 0) position3[axis] = (bx + 1) * block + pw / 2 + eps
               } else if (axis === 'y') {
                 if (delta > 0) position3[axis] = by * block - ph / 2 - eps
-                if (delta < 0) {
-                  position3[axis] = (by + 1) * block + ph / 2 + eps
-                  GameManager.emitEvent('land')
-                }
+                if (delta < 0) position3[axis] = (by + 1) * block + ph / 2 + eps
               } else if (axis === 'z') {
                 if (delta > 0) position3[axis] = bz * block - pd / 2 - eps;       // top
                 if (delta < 0) position3[axis] = (bz + 1) * block + pd / 2 + eps
@@ -2897,9 +2904,13 @@
         t.delta.z = worldBlock3D.moveAxisCheck_CenterType(this.world, t.position, 'z', t.delta.z, { x: 0.4, y: 1.6, z: 0.4 })
         t.delta.y = worldBlock3D.moveAxisCheck_CenterType(this.world, t.position, 'y', t.delta.y, { x: 0.4, y: 1.6, z: 0.4 })
 
+        if (t.delta.y === 0 && t.tags.has('air'))
+          GameManager.emitEvent('land', this, t)
+
         t.position.x = Math2.clamp(t.position.x, 0.01, this.world.width - 0.01)
         t.position.y = Math2.clamp(t.position.y, 0.01, this.world.height - 0.01)
         t.position.z = Math2.clamp(t.position.z, 0.01, this.world.depth - 0.01)
+
 
       })
     }
@@ -3364,7 +3375,6 @@
   const GM = new GameManager('testGamer')
   gameLoop = function () { GM.update(); GM.draw() }
 
-
   const testWorld = new worldBlock3D()
 
   class StateBase {
@@ -3382,20 +3392,23 @@
     constructor(world) {
       super()
       this.world = world
+      this.stateSetup()
+
+    }
+
+    stateSetup() {
       this.idleState = new StateBase(this)
       this.idleState.on(eventID.space, () => {
-        showHTML('jump!!!!!', 10)
-        testCameraRCV.delta.y = 0.1
-        testCameraRCV.currentState = testCameraRCV.airState
+        this.tags.add('air')
+        this.delta.y = 0.1
+        this.currentState = this.airState
       })
       this.airState = new StateBase(this)
       this.airState.on('land', () => {
-        showHTML('land!!!', 10)
-        testCameraRCV.currentState = testCameraRCV.idleState
+        this.tags.delete('air')
+        this.currentState = this.idleState
       })
-      this.airState.on(eventID.space, () => {
-        showHTML('??????', 10)
-      })
+
       this.currentState = this.idleState
     }
 
@@ -3411,6 +3424,8 @@
       return true
     }
   }
+  
+  
   const testCameraRCV = new t_cameraRCV(testWorld)
 
   const testRenderer = new RendererRCV(testCameraRCV, testWorld, canvas0, document.getElementById('fps'))
@@ -3444,19 +3459,25 @@
         testWorld.clearBlock(p.x, p.y, p.z)
       }
       testWorld.set(20, 3, 20, 1)
-
       console.log('Exit opened!')
       showHTML('Exit opened! Go to the exit.', 'title')
 
       GM.addChild(new GoalChecker(testCameraRCV))
-    } else {
-      showHTML(`Posters: ${GM.testGoal}/3`, 'title')
-    }
+    } 
   })
 
   GM.on('clear', () => {
     GM.clearChildren()
-    GM.addChild(new ListShower())
+    const t = new GameObject('endScreen')
+    t.draw = function () {
+      ctx0.save()
+      ctx0.fillStyle = "rgba(255, 255, 255, 0.5)";
+      ctx0.font = "20px Arial";
+      ctx0.textAlign = "center";
+      ctx0.fillText("Thank you for playing!",W/2, H/2);
+      ctx0.restore()
+    }
+    GM.addChild(t)
   })
 
 
@@ -3482,7 +3503,7 @@
 
   class GoalChecker extends GameObject {
     constructor(camera) {
-      super('GoalChecker')
+      super('Goal_Checker')
       this.camera = camera
     }
 
@@ -3497,7 +3518,6 @@
 
       if (d2 < 1) {
         GM.cleared = true
-        showHTML('CLEAR!', 'title')
         console.log('CLEAR!')
         GameManager.emitEvent('clear')
 
@@ -3505,9 +3525,24 @@
     }
   }
 
+  let ref = null
+
+  ref = new GameObject('collector')
+  ref.draw = function(){
+    ctx0.save()
+      ctx0.fillStyle = "rgba(255, 255, 255, 0.5)";
+      ctx0.font = "10px Arial";
+      ctx0.textAlign = "center";
+      ctx0.fillText(GM.testGoal+'/3 Nicole Poster collected',W/6*5, H/6*5);
+      ctx0.restore()
+    
+  }
+
+  GM.addChild(ref)
+
+  ref = null
 
 
-  showHTML('Posters: 0/3', 'title')
   showHTML('WASD to move, SPACE to jump, IJKL to rotate')
   GM.addChild(new ListShower())
 
