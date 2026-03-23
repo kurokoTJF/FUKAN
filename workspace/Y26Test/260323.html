@@ -445,6 +445,7 @@
       this.eventQueue.push({ typeName: _typeName, sender: _sender, data: _data, consumed: false })
     }
 
+    // コピーを参照することで、途中で発生するEventを拾えるようになる
     dealEvent(_rootNode) {
       const q = this.eventQueue
       this.eventQueue = []
@@ -453,6 +454,8 @@
       }
     }
 
+    
+    // handle 関数の有無で判定する
     static broadcast(_node, _ev) {
 
       if (!_node || _ev.consumed) return
@@ -467,7 +470,6 @@
       }
 
     }
-
     static getEventHandler(target) {
       target.handlers = new Map()
 
