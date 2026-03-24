@@ -481,16 +481,12 @@
     update_self() {
       if (this._needsRebuild) this._rebuildFlatLists()
 
-      this.camera.update()
       // delayed event 
       //this.dealEvent?.()
       this.eventHub.dealEvent(this)
-      // counterはInputと同様、Eventの類
-      this.gameLoop_input?.()
-      // 予測型コリジョン判定用
-      this.gameLoop_check?.()
-      // 数値の適応と更新
-      this.gameLoop_update?.()
+      // counterはInputと同様、Eventの類 this.gameLoop_input?.()
+      // 予測型コリジョン判定用 this.gameLoop_check?.()
+      // 数値の適応と更新 this.gameLoop_update?.()
 
       this.flatUpdateList.forEach(e => {
         e.update?.()
@@ -706,6 +702,7 @@
   }
 
   // new Event System
+  // 「全部に流す」コストや責務の曖昧さが出るかもしれない。
   /*生データ → 意味のある出来事 + 「瞬間」を定義する
     // 物理
     velocityY < 0 && collided
