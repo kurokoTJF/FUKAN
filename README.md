@@ -31,3 +31,5 @@ GameManager
  │   └─ BlockWorld / eventID.ResolveMovement
  ├─ FPSInteractor
  └─ BlockBuilder
+
+なんかレイアウトが
