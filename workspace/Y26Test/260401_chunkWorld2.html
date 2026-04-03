@@ -1949,18 +1949,19 @@
             this.zw = Math.floor(_canvas.width / this.internalScale)
             this.zh = Math.floor(_canvas.height / this.internalScale)
             this.zBuffer = new Float32Array(this.zw * this.zh)
+
+            this.maxDistance = 100// Fogの強さにも影響
+            this.maxSteps = 30
+            this.showNormals = false
+            this.exposure = 0.95
+            this.skyTop = [0.35, 0.15, 0.25];
+            this.skyHzn = [1.00, 0.55, 0.35];
+            this.fogFactor = 0.5
+            this.ambient = 0.0
+
+
         }
         draw() {
-            let maxDistance = 1000 // Fogの強さにも影響
-            let maxSteps = 30
-            let showNormals = false
-
-            const fogFactor = 0.5
-            let exposure = 0.95
-            const skyTop = [0.35, 0.15, 0.25];
-            const skyHzn = [1.00, 0.55, 0.35];
-            const ambient = 0.0
-
             const w = Math.floor(this.canvas.width / this.internalScale), h = Math.floor(this.canvas.height / this.internalScale)
 
             // カメラ基底ベクトル
@@ -1971,11 +1972,9 @@
             const dirRight = dirForward.cross(worldUp).norm()
             const dirUp = dirRight.cross(dirForward).norm()
 
-
             const fov = this.currentCamera.fovDeg * Math.PI / 180
             const halfW = Math.tan(fov / 2)
             const aspect = w / h
-
 
             this.zBuffer.fill(Infinity)
 
@@ -1998,7 +1997,7 @@
 
                     const lightDir = dir // horror game light. no direct light!
 
-                    const result = RendererRCV.raycastVoxel_ChunkOnly(dir, maxDistance, maxSteps, this.currentWorld, this.currentCamera)
+                    const result = RendererRCV.raycastVoxel(dir, this.maxDistance, this.maxSteps, this.currentWorld, this.currentCamera)
 
                     let r, g, b
                     if (result.hit) {
@@ -2013,25 +2012,25 @@
 
                         // 照明（ランバート）
                         const ndl = Math.max(0, -(n.x * lightDir.x + n.y * lightDir.y + n.z * lightDir.z))
-                        let lit = ambient + (1 - ambient) * ndl
+                        let lit = this.ambient + (1 - this.ambient) * ndl
                         // 距離フォグ
-                        const fogT = Math2.clamp(result.t / maxDistance * fogFactor, 0, 1)
+                        const fogT = Math2.clamp(result.t / this.maxDistance * this.fogFactor, 0, 1)
                         const heightFogT = 0//Math2.clamp(result.hitPos.y / 20, 0, 1)
                         const sky = [
-                            Math2.mix(skyHzn[0], skyTop[0], 0.5 - 0.5 * dir.y), // 視線が上なら空色を強く
-                            Math2.mix(skyHzn[1], skyTop[1], 0.5 - 0.5 * dir.y),
-                            Math2.mix(skyHzn[2], skyTop[2], 0.5 - 0.5 * dir.y)
+                            Math2.mix(this.skyHzn[0], this.skyTop[0], 0.5 - 0.5 * dir.y), // 視線が上なら空色を強く
+                            Math2.mix(this.skyHzn[1], this.skyTop[1], 0.5 - 0.5 * dir.y),
+                            Math2.mix(this.skyHzn[2], this.skyTop[2], 0.5 - 0.5 * dir.y)
                         ]
 
-                        if (showNormals) {
+                        if (this.showNormals) {
                             // 法線可視化モード
                             col = [(n.x * 0.5 + 0.5), (n.y * 0.5 + 0.5), (n.z * 0.5 + 0.5)]
                             lit = 1.0
                         }
 
-                        r = Math2.mix(Math2.mix(col[0] * lit * exposure, sky[0], (fogT)), 1, (heightFogT)) * 255 | 0
-                        g = Math2.mix(Math2.mix(col[1] * lit * exposure, sky[1], (fogT)), 1, (heightFogT)) * 255 | 0
-                        b = Math2.mix(Math2.mix(col[2] * lit * exposure, sky[2], (fogT)), 1, (heightFogT)) * 255 | 0
+                        r = Math2.mix(Math2.mix(col[0] * lit * this.exposure, sky[0], (fogT)), 1, (heightFogT)) * 255 | 0
+                        g = Math2.mix(Math2.mix(col[1] * lit * this.exposure, sky[1], (fogT)), 1, (heightFogT)) * 255 | 0
+                        b = Math2.mix(Math2.mix(col[2] * lit * this.exposure, sky[2], (fogT)), 1, (heightFogT)) * 255 | 0
 
                         const cosTheta = dir.dot(dirForward)
                         const depthCam = result.t * cosTheta
@@ -2039,15 +2038,16 @@
                         RendererRCV.fillImageData_withDepth(this.canvas, _img.data,
                             this.zBuffer, this.zw, this.zh, depthCam,
                             this.internalScale, px_low, py_low, r, g, b)
-                    } else {
+                    }
+                    else {
                         // スカイ
                         const t = 0.5 - 0.5 * dir.y; // 上ほど skyTop、下ほど skyHzn
-                        r = Math2.mix(skyHzn[0], skyTop[0], t) * 255 | 0
-                        g = Math2.mix(skyHzn[1], skyTop[1], t) * 255 | 0
-                        b = Math2.mix(skyHzn[2], skyTop[2], t) * 255 | 0
+                        r = Math2.mix(this.skyHzn[0], this.skyTop[0], t) * 255 | 0
+                        g = Math2.mix(this.skyHzn[1], this.skyTop[1], t) * 255 | 0
+                        b = Math2.mix(this.skyHzn[2], this.skyTop[2], t) * 255 | 0
 
                         RendererRCV.fillImageData_withDepth(this.canvas, _img.data,
-                            this.zBuffer, this.zw, this.zh, maxDistance,
+                            this.zBuffer, this.zw, this.zh, this.maxDistance,
                             this.internalScale, px_low, py_low, r, g, b)
                     }
                 } // end for px
@@ -2067,6 +2067,54 @@
         pitch=${this.currentCamera.pitch.toFixed(1)}`
             }
         }
+
+
+        static _chunkHasSolidInCoarseCell = function (chunk, cgx, cgy, cgz) {
+            if (!chunk) return false
+
+            const coarseGrid = chunk.coarseGrid
+            if (
+                cgx < 0 || cgx >= coarseGrid ||
+                cgy < 0 || cgy >= coarseGrid ||
+                cgz < 0 || cgz >= coarseGrid
+            ) return false
+
+            const idx = cgx + cgy * coarseGrid + cgz * coarseGrid * coarseGrid
+            return chunk.coarseMask[idx] !== 0
+        }
+        static _getChunkCoordFromWorld = function (world, vx, vy, vz) {
+            const cs = world.chunkSize || 16
+            return {
+                cx: Math.floor(vx / cs),
+                cy: Math.floor(vy / cs),
+                cz: Math.floor(vz / cs),
+            }
+        }
+
+        static _getChunkLocalFromWorld = function (world, vx, vy, vz) {
+            const cs = world.chunkSize || 16
+
+            const lx = ((vx % cs) + cs) % cs
+            const ly = ((vy % cs) + cs) % cs
+            const lz = ((vz % cs) + cs) % cs
+
+            return { lx, ly, lz }
+        }
+
+        static _getChunkObjectAtVoxel = function (world, vx, vy, vz) {
+            const { cx, cy, cz } = RendererRCV._getChunkCoordFromWorld(world, vx, vy, vz)
+
+            if (typeof world.getChunk === 'function') {
+                return world.getChunk(cx, cy, cz)
+            }
+
+            if (world.chunks instanceof Map) {
+                return world.chunks.get(`${cx},${cy},${cz}`) ?? null
+            }
+
+            return null
+        }
+
 
         static _createGridDDA = function (origin, dir, cellSize) {
             let gx = Math.floor(origin.x / cellSize)
@@ -2113,6 +2161,185 @@
                 tDeltaX, tDeltaY, tDeltaZ,
                 tMaxX, tMaxY, tMaxZ,
             }
+        }
+        static _pickAxisStable = function (tx, ty, tz, eps = 1e-7) {
+            const m = Math.min(tx, ty, tz)
+
+            if (Math.abs(tx - m) <= eps) return 'x'
+            if (Math.abs(ty - m) <= eps) return 'y'
+            return 'z'
+        }
+
+        static _normalFromHitPos = function (hitPos, vox, dir, eps = 1e-5) {
+            const x0 = vox.x, x1 = vox.x + 1
+            const y0 = vox.y, y1 = vox.y + 1
+            const z0 = vox.z, z1 = vox.z + 1
+
+            const onX0 = Math.abs(hitPos.x - x0) <= eps
+            const onX1 = Math.abs(hitPos.x - x1) <= eps
+            const onY0 = Math.abs(hitPos.y - y0) <= eps
+            const onY1 = Math.abs(hitPos.y - y1) <= eps
+            const onZ0 = Math.abs(hitPos.z - z0) <= eps
+            const onZ1 = Math.abs(hitPos.z - z1) <= eps
+
+            // 境界に乗っていれば、その面を返す
+            if (onX0) return { x: -1, y: 0, z: 0 }
+            if (onX1) return { x: 1, y: 0, z: 0 }
+            if (onY0) return { x: 0, y: -1, z: 0 }
+            if (onY1) return { x: 0, y: 1, z: 0 }
+            if (onZ0) return { x: 0, y: 0, z: -1 }
+            if (onZ1) return { x: 0, y: 0, z: 1 }
+
+            // どうしても拾えないときだけ ray の逆向きから推定
+            const ax = Math.abs(dir.x)
+            const ay = Math.abs(dir.y)
+            const az = Math.abs(dir.z)
+
+            if (ax >= ay && ax >= az) return { x: dir.x > 0 ? -1 : 1, y: 0, z: 0 }
+            if (ay >= ax && ay >= az) return { x: 0, y: dir.y > 0 ? -1 : 1, z: 0 }
+            return { x: 0, y: 0, z: dir.z > 0 ? -1 : 1 }
+        }
+
+        static _raycastVoxel_InCoarseCell = function (
+            origin,
+            dir,
+            tStart,
+            tEnd,
+            maxDistance,
+            maxFineSteps,
+            world,
+            coarseMin,
+            coarseMax,
+            entryNormal = null
+        ) {
+            const EPS = 1e-6
+
+            const startT = Math.max(tStart, 0)
+            const start = {
+                x: origin.x + dir.x * (startT + EPS),
+                y: origin.y + dir.y * (startT + EPS),
+                z: origin.z + dir.z * (startT + EPS),
+            }
+
+            let vx = Math.floor(start.x)
+            let vy = Math.floor(start.y)
+            let vz = Math.floor(start.z)
+
+            const stepX = dir.x > 0 ? 1 : (dir.x < 0 ? -1 : 0)
+            const stepY = dir.y > 0 ? 1 : (dir.y < 0 ? -1 : 0)
+            const stepZ = dir.z > 0 ? 1 : (dir.z < 0 ? -1 : 0)
+
+            const tDeltaX = stepX !== 0 ? Math.abs(1 / dir.x) : Infinity
+            const tDeltaY = stepY !== 0 ? Math.abs(1 / dir.y) : Infinity
+            const tDeltaZ = stepZ !== 0 ? Math.abs(1 / dir.z) : Infinity
+
+            let tMaxX = stepX > 0
+                ? startT + (Math.floor(start.x) + 1 - start.x) * tDeltaX
+                : stepX < 0
+                    ? startT + (start.x - Math.floor(start.x)) * tDeltaX
+                    : Infinity
+
+            let tMaxY = stepY > 0
+                ? startT + (Math.floor(start.y) + 1 - start.y) * tDeltaY
+                : stepY < 0
+                    ? startT + (start.y - Math.floor(start.y)) * tDeltaY
+                    : Infinity
+
+            let tMaxZ = stepZ > 0
+                ? startT + (Math.floor(start.z) + 1 - start.z) * tDeltaZ
+                : stepZ < 0
+                    ? startT + (start.z - Math.floor(start.z)) * tDeltaZ
+                    : Infinity
+
+            let t = startT
+            let steps = 0
+            let lastNormal = entryNormal ?? { x: 0, y: 0, z: 0 }
+
+            while (t <= tEnd && t <= maxDistance && steps < maxFineSteps) {
+                steps++
+
+                if (
+                    vx >= coarseMin.x && vx <= coarseMax.x &&
+                    vy >= coarseMin.y && vy <= coarseMax.y &&
+                    vz >= coarseMin.z && vz <= coarseMax.z
+                ) {
+                    if (world.inBounds(vx, vy, vz) && world.isSolid(vx, vy, vz)) {
+                        const blockId = world.get(vx, vy, vz)
+                        const hitPos = {
+                            x: origin.x + dir.x * t,
+                            y: origin.y + dir.y * t,
+                            z: origin.z + dir.z * t,
+                        }
+
+                        const def = BlockDefs[blockId] ?? null
+                        const brick = typeof world.getBrick === 'function'
+                            ? world.getBrick(vx, vy, vz)
+                            : null
+
+                        if (brick) {
+                            const microHit = RendererRCV.rayCastVoxel_Micro(
+                                origin,
+                                dir,
+                                t,
+                                vx, vy, vz,
+                                brick,
+                                RendererRCV._normalFromHitPos(hitPos, { x: vx, y: vy, z: vz }, dir)
+                            )
+
+                            if (microHit && microHit.hit) {
+                                return microHit
+                            }
+
+                            // brickOnly は外殻を描かない
+                            if (def && def.renderMode === 'brickOnly') {
+                                // この block は見た目上「透明な入れ物」として扱う
+                                // ＝ここでは親 block hit を返さず、次の voxel へ進む
+                            } else {
+                                return {
+                                    hit: true,
+                                    t,
+                                    hitPos,
+                                    vox: { x: vx, y: vy, z: vz },
+                                    normal: RendererRCV._normalFromHitPos(hitPos, { x: vx, y: vy, z: vz }, dir),
+                                    id: blockId,
+                                    isMicro: false,
+                                }
+                            }
+                        } else {
+                            return {
+                                hit: true,
+                                t,
+                                hitPos,
+                                vox: { x: vx, y: vy, z: vz },
+                                normal: RendererRCV._normalFromHitPos(hitPos, { x: vx, y: vy, z: vz }, dir),
+                                id: blockId,
+                                isMicro: false,
+                            }
+                        }
+                    }
+                }
+
+                const axis = RendererRCV._pickAxisStable(tMaxX, tMaxY, tMaxZ)
+
+                if (axis === 'x') {
+                    vx += stepX
+                    t = tMaxX
+                    tMaxX += tDeltaX
+                    lastNormal = { x: -stepX, y: 0, z: 0 }
+                } else if (axis === 'y') {
+                    vy += stepY
+                    t = tMaxY
+                    tMaxY += tDeltaY
+                    lastNormal = { x: 0, y: -stepY, z: 0 }
+                } else {
+                    vz += stepZ
+                    t = tMaxZ
+                    tMaxZ += tDeltaZ
+                    lastNormal = { x: 0, y: 0, z: -stepZ }
+                }
+            }
+
+            return { hit: false, t: tEnd }
         }
         // micro voxel
         static rayCastVoxel_Micro(origin, dir, blockEnterT, bx, by, bz, brick, entryNormal) {
@@ -2173,11 +2400,19 @@
                 const microId = brick.get(vx, vy, vz)
                 if (microId !== 0) {
                     return {
+                        hit: true,
                         t,
-                        hitPos: { x: origin.x + dir.x * t, y: origin.y + dir.y * t, z: origin.z + dir.z * t },
-                        microId,
-                        microVox: { x: vx, y: vy, z: vz },
-                        normal: entryNormal
+                        hitPos: {
+                            x: origin.x + dir.x * t,
+                            y: origin.y + dir.y * t,
+                            z: origin.z + dir.z * t
+                        },
+                        id: microId,
+                        vox: { x: bx, y: by, z: bz },          // 親 block 座標
+                        microVox: { x: vx, y: vy, z: vz },     // micro voxel 座標
+                        normal: entryNormal,
+                        isMicro: true,
+                        parentBlockId: 4,
                     }
                 }
             }
@@ -2197,14 +2432,21 @@
                     else nz = -stepZ
 
                     return {
+                        hit: true,
                         t,
-                        hitPos: { x: origin.x + dir.x * t, y: origin.y + dir.y * t, z: origin.z + dir.z * t },
-                        microId,
+                        hitPos: {
+                            x: origin.x + dir.x * t,
+                            y: origin.y + dir.y * t,
+                            z: origin.z + dir.z * t
+                        },
+                        id: microId,
+                        vox: { x: bx, y: by, z: bz },
                         microVox: { x: vx, y: vy, z: vz },
-                        normal: { x: nx, y: ny, z: nz }
+                        normal: { x: nx, y: ny, z: nz },
+                        isMicro: true,
+                        parentBlockId: 4,
                     }
                 }
-
                 if (tMaxX < tMaxY) {
                     if (tMaxX < tMaxZ) { vx += stepX; t = tMaxX; tMaxX += tDeltaX; lastAxis = 'x' }
                     else { vz += stepZ; t = tMaxZ; tMaxZ += tDeltaZ; lastAxis = 'z' }
@@ -2252,80 +2494,10 @@
             return { tMin, tMax }
         }
 
-        static raycastVoxel_ChunkOnly = function (dir, maxDistance = 200, maxSteps = 1024, world, camera) {
-            if (!world || typeof world.getChunkState !== 'function') {
-                return { hit: false, t: maxDistance }
-            }
-
-            const origin = {
-                x: camera.position.x,
-                y: camera.position.y,
-                z: camera.position.z,
-            }
-
-            const cellSize = (world.chunkSize || 16) * (world.block_size || 1)
-            const chunkDDA = RendererRCV._createGridDDA(origin, dir, cellSize)
-
-            let t = 0
-            let steps = 0
-            let entryNormal = null
-
-            while (t <= maxDistance && steps < maxSteps) {
-                steps++
-
-                const cx = chunkDDA.gx
-                const cy = chunkDDA.gy
-                const cz = chunkDDA.gz
-
-                const tEnter = t
-                const chunkState = world.getChunkState(cx, cy, cz)
-
-                if (chunkState !== 'empty') {
-                    return {
-                        hit: true,
-                        t: tEnter,
-                        hitPos: {
-                            x: origin.x + dir.x * tEnter,
-                            y: origin.y + dir.y * tEnter,
-                            z: origin.z + dir.z * tEnter,
-                        },
-                        normal: entryNormal ?? { x: 0, y: 0, z: 0 },
-                        chunk: { x: cx, y: cy, z: cz },
-                        id: chunkState === 'full' ? 2 : 1,
-                        isChunkHit: true,
-                    }
-                }
-
-                if (chunkDDA.tMaxX < chunkDDA.tMaxY) {
-                    if (chunkDDA.tMaxX < chunkDDA.tMaxZ) {
-                        chunkDDA.gx += chunkDDA.stepX
-                        t = chunkDDA.tMaxX
-                        chunkDDA.tMaxX += chunkDDA.tDeltaX
-                        entryNormal = { x: -chunkDDA.stepX, y: 0, z: 0 }
-                    } else {
-                        chunkDDA.gz += chunkDDA.stepZ
-                        t = chunkDDA.tMaxZ
-                        chunkDDA.tMaxZ += chunkDDA.tDeltaZ
-                        entryNormal = { x: 0, y: 0, z: -chunkDDA.stepZ }
-                    }
-                } else {
-                    if (chunkDDA.tMaxY < chunkDDA.tMaxZ) {
-                        chunkDDA.gy += chunkDDA.stepY
-                        t = chunkDDA.tMaxY
-                        chunkDDA.tMaxY += chunkDDA.tDeltaY
-                        entryNormal = { x: 0, y: -chunkDDA.stepY, z: 0 }
-                    } else {
-                        chunkDDA.gz += chunkDDA.stepZ
-                        t = chunkDDA.tMaxZ
-                        chunkDDA.tMaxZ += chunkDDA.tDeltaZ
-                        entryNormal = { x: 0, y: 0, z: -chunkDDA.stepZ }
-                    }
-                }
-            }
-
-            return { hit: false, t: maxDistance }
-        }
-
+        /*
+        DDA は毎ステップ、tMaxX,tMaxY,tMaxZ の最小を選んで、
+        「次にどの軸境界を越えるか」を決めます。
+        */
         static raycastVoxel = function (dir, maxDistance = 90, maxSteps = 1024, world, camera) {
             if (!world || typeof world.getChunkState !== 'function' || typeof world.ensureChunk !== 'function') {
                 return RendererRCV._raycastVoxel_Block.call(RendererRCV, dir, maxDistance, maxSteps, world, camera)
@@ -2354,7 +2526,23 @@
                 const tExitChunk = Math.min(chunkDDA.tMaxX, chunkDDA.tMaxY, chunkDDA.tMaxZ)
                 const chunkState = world.getChunkState(cx, cy, cz)
 
-                if (chunkState !== 'empty') {
+                if (chunkState === 'full') {
+                    return {
+                        hit: true,
+                        t,
+                        hitPos: {
+                            x: origin.x + dir.x * t,
+                            y: origin.y + dir.y * t,
+                            z: origin.z + dir.z * t,
+                        },
+                        normal: entryNormal ?? { x: 0, y: 0, z: 0 },
+                        chunk: { x: cx, y: cy, z: cz },
+                        id: 2,
+                        isChunkHit: true,
+                    }
+                }
+
+                if (chunkState === 'mixed' || chunkState === 'missing') {
                     world.ensureChunk(cx, cy, cz)
 
                     const hit = RendererRCV.raycastVoxel_InChunk(
@@ -2371,35 +2559,35 @@
                     if (hit.hit) return hit
                 }
 
-                if (chunkDDA.tMaxX < chunkDDA.tMaxY) {
-                    if (chunkDDA.tMaxX < chunkDDA.tMaxZ) {
-                        chunkDDA.gx += chunkDDA.stepX
-                        t = chunkDDA.tMaxX
-                        chunkDDA.tMaxX += chunkDDA.tDeltaX
-                        entryNormal = { x: -chunkDDA.stepX, y: 0, z: 0 }
-                    } else {
-                        chunkDDA.gz += chunkDDA.stepZ
-                        t = chunkDDA.tMaxZ
-                        chunkDDA.tMaxZ += chunkDDA.tDeltaZ
-                        entryNormal = { x: 0, y: 0, z: -chunkDDA.stepZ }
-                    }
+                const axis = RendererRCV._pickAxisStable(
+                    chunkDDA.tMaxX,
+                    chunkDDA.tMaxY,
+                    chunkDDA.tMaxZ
+                )
+
+                if (axis === 'x') {
+                    chunkDDA.gx += chunkDDA.stepX
+                    t = chunkDDA.tMaxX
+                    chunkDDA.tMaxX += chunkDDA.tDeltaX
+                    entryNormal = { x: -chunkDDA.stepX, y: 0, z: 0 }
+                } else if (axis === 'y') {
+                    chunkDDA.gy += chunkDDA.stepY
+                    t = chunkDDA.tMaxY
+                    chunkDDA.tMaxY += chunkDDA.tDeltaY
+                    entryNormal = { x: 0, y: -chunkDDA.stepY, z: 0 }
                 } else {
-                    if (chunkDDA.tMaxY < chunkDDA.tMaxZ) {
-                        chunkDDA.gy += chunkDDA.stepY
-                        t = chunkDDA.tMaxY
-                        chunkDDA.tMaxY += chunkDDA.tDeltaY
-                        entryNormal = { x: 0, y: -chunkDDA.stepY, z: 0 }
-                    } else {
-                        chunkDDA.gz += chunkDDA.stepZ
-                        t = chunkDDA.tMaxZ
-                        chunkDDA.tMaxZ += chunkDDA.tDeltaZ
-                        entryNormal = { x: 0, y: 0, z: -chunkDDA.stepZ }
-                    }
+                    chunkDDA.gz += chunkDDA.stepZ
+                    t = chunkDDA.tMaxZ
+                    chunkDDA.tMaxZ += chunkDDA.tDeltaZ
+                    entryNormal = { x: 0, y: 0, z: -chunkDDA.stepZ }
                 }
             }
 
             return { hit: false, t: maxDistance }
         }
+
+
+        // 50行以内で解決してほしいな…
         static raycastVoxel_InChunk = function (
             origin,
             dir,
@@ -2411,122 +2599,165 @@
             entryNormal = null
         ) {
             const EPS = 1e-6
+            const CHUNK_SIZE = world.chunkSize || 16
+            const COARSE_SIZE = 4
+            const COARSE_GRID = CHUNK_SIZE / COARSE_SIZE   // 16 -> 4
+            const maxCoarseSteps = Math.max(16, Math.floor(maxSteps / 4))
+            const maxFineSteps = Math.max(32, maxSteps)
 
+            const startT = Math.max(tStart, 0)
             const start = {
-                x: origin.x + dir.x * (tStart + EPS),
-                y: origin.y + dir.y * (tStart + EPS),
-                z: origin.z + dir.z * (tStart + EPS),
+                x: origin.x + dir.x * (startT + EPS),
+                y: origin.y + dir.y * (startT + EPS),
+                z: origin.z + dir.z * (startT + EPS),
             }
 
-            let vx = Math.floor(start.x)
-            let vy = Math.floor(start.y)
-            let vz = Math.floor(start.z)
+            const startVoxel = {
+                x: Math.floor(start.x),
+                y: Math.floor(start.y),
+                z: Math.floor(start.z),
+            }
+
+            const chunkCoord = RendererRCV._getChunkCoordFromWorld(
+                world,
+                startVoxel.x,
+                startVoxel.y,
+                startVoxel.z
+            )
+
+            const chunkMin = {
+                x: chunkCoord.cx * CHUNK_SIZE,
+                y: chunkCoord.cy * CHUNK_SIZE,
+                z: chunkCoord.cz * CHUNK_SIZE,
+            }
+
+            const chunkMax = {
+                x: chunkMin.x + CHUNK_SIZE - 1,
+                y: chunkMin.y + CHUNK_SIZE - 1,
+                z: chunkMin.z + CHUNK_SIZE - 1,
+            }
+
+            const chunk = RendererRCV._getChunkObjectAtVoxel(
+                world,
+                startVoxel.x,
+                startVoxel.y,
+                startVoxel.z
+            )
+
+            if (!chunk) {
+                return { hit: false, t: tEnd }
+            }
+
+            // coarse cell 単位 DDA 用の開始位置
+            let cgx = Math.floor((startVoxel.x - chunkMin.x) / COARSE_SIZE)
+            let cgy = Math.floor((startVoxel.y - chunkMin.y) / COARSE_SIZE)
+            let cgz = Math.floor((startVoxel.z - chunkMin.z) / COARSE_SIZE)
 
             const stepX = dir.x > 0 ? 1 : (dir.x < 0 ? -1 : 0)
             const stepY = dir.y > 0 ? 1 : (dir.y < 0 ? -1 : 0)
             const stepZ = dir.z > 0 ? 1 : (dir.z < 0 ? -1 : 0)
 
-            const tDeltaX = stepX !== 0 ? Math.abs(1 / dir.x) : Infinity
-            const tDeltaY = stepY !== 0 ? Math.abs(1 / dir.y) : Infinity
-            const tDeltaZ = stepZ !== 0 ? Math.abs(1 / dir.z) : Infinity
+            const tDeltaX = stepX !== 0 ? Math.abs(COARSE_SIZE / dir.x) : Infinity
+            const tDeltaY = stepY !== 0 ? Math.abs(COARSE_SIZE / dir.y) : Infinity
+            const tDeltaZ = stepZ !== 0 ? Math.abs(COARSE_SIZE / dir.z) : Infinity
 
-            let tMaxX = stepX > 0
-                ? (Math.floor(start.x) + 1 - start.x) * tDeltaX
-                : stepX < 0
-                    ? (start.x - Math.floor(start.x)) * tDeltaX
-                    : Infinity
+            const localX = start.x - chunkMin.x
+            const localY = start.y - chunkMin.y
+            const localZ = start.z - chunkMin.z
 
-            let tMaxY = stepY > 0
-                ? (Math.floor(start.y) + 1 - start.y) * tDeltaY
-                : stepY < 0
-                    ? (start.y - Math.floor(start.y)) * tDeltaY
-                    : Infinity
+            const coarseBoundaryX = stepX > 0
+                ? (Math.floor(localX / COARSE_SIZE) + 1) * COARSE_SIZE
+                : Math.floor(localX / COARSE_SIZE) * COARSE_SIZE
 
-            let tMaxZ = stepZ > 0
-                ? (Math.floor(start.z) + 1 - start.z) * tDeltaZ
-                : stepZ < 0
-                    ? (start.z - Math.floor(start.z)) * tDeltaZ
-                    : Infinity
+            const coarseBoundaryY = stepY > 0
+                ? (Math.floor(localY / COARSE_SIZE) + 1) * COARSE_SIZE
+                : Math.floor(localY / COARSE_SIZE) * COARSE_SIZE
 
-            // まず chunk に入った直後の voxel を判定
-            if (world.inBounds(vx, vy, vz) && world.isSolid(vx, vy, vz)) {
-                const blockId = world.get(vx, vy, vz)
-                const hitPos = {
-                    x: origin.x + dir.x * tStart,
-                    y: origin.y + dir.y * tStart,
-                    z: origin.z + dir.z * tStart,
-                }
-                const normal = entryNormal ?? { x: 0, y: 0, z: 0 }
+            const coarseBoundaryZ = stepZ > 0
+                ? (Math.floor(localZ / COARSE_SIZE) + 1) * COARSE_SIZE
+                : Math.floor(localZ / COARSE_SIZE) * COARSE_SIZE
 
-                return {
-                    hit: true,
-                    t: tStart,
-                    hitPos,
-                    vox: { x: vx, y: vy, z: vz },
-                    normal,
-                    id: blockId,
-                    isMicro: false,
-                }
-            }
+            let tMaxX = stepX !== 0
+                ? startT + Math.abs((chunkMin.x + coarseBoundaryX - start.x) / dir.x)
+                : Infinity
 
-            let t = tStart
-            let steps = 0
-            let lastAxis = null
+            let tMaxY = stepY !== 0
+                ? startT + Math.abs((chunkMin.y + coarseBoundaryY - start.y) / dir.y)
+                : Infinity
 
-            while (t <= tEnd && t <= maxDistance && steps < maxSteps) {
-                steps++
+            let tMaxZ = stepZ !== 0
+                ? startT + Math.abs((chunkMin.z + coarseBoundaryZ - start.z) / dir.z)
+                : Infinity
 
-                if (tMaxX < tMaxY) {
-                    if (tMaxX < tMaxZ) {
-                        vx += stepX
-                        t = tStart + tMaxX
-                        tMaxX += tDeltaX
-                        lastAxis = 'x'
-                    } else {
-                        vz += stepZ
-                        t = tStart + tMaxZ
-                        tMaxZ += tDeltaZ
-                        lastAxis = 'z'
-                    }
-                } else {
-                    if (tMaxY < tMaxZ) {
-                        vy += stepY
-                        t = tStart + tMaxY
-                        tMaxY += tDeltaY
-                        lastAxis = 'y'
-                    } else {
-                        vz += stepZ
-                        t = tStart + tMaxZ
-                        tMaxZ += tDeltaZ
-                        lastAxis = 'z'
-                    }
+            let t = startT
+            let coarseSteps = 0
+            let currentEntryNormal = entryNormal ?? { x: 0, y: 0, z: 0 }
+
+            while (t <= tEnd && t <= maxDistance && coarseSteps < maxCoarseSteps) {
+                coarseSteps++
+
+                if (
+                    cgx < 0 || cgx >= COARSE_GRID ||
+                    cgy < 0 || cgy >= COARSE_GRID ||
+                    cgz < 0 || cgz >= COARSE_GRID
+                ) {
+                    break
                 }
 
-                if (t > tEnd || t > maxDistance) break
-                if (!world.inBounds(vx, vy, vz)) return { hit: false, t }
+                const coarseMin = {
+                    x: chunkMin.x + cgx * COARSE_SIZE,
+                    y: chunkMin.y + cgy * COARSE_SIZE,
+                    z: chunkMin.z + cgz * COARSE_SIZE,
+                }
 
-                if (world.isSolid(vx, vy, vz)) {
-                    let nx = 0, ny = 0, nz = 0
-                    if (lastAxis === 'x') nx = -stepX
-                    else if (lastAxis === 'y') ny = -stepY
-                    else if (lastAxis === 'z') nz = -stepZ
+                const coarseMax = {
+                    x: coarseMin.x + COARSE_SIZE - 1,
+                    y: coarseMin.y + COARSE_SIZE - 1,
+                    z: coarseMin.z + COARSE_SIZE - 1,
+                }
 
-                    const blockId = world.get(vx, vy, vz)
-                    const hitPos = {
-                        x: origin.x + dir.x * t,
-                        y: origin.y + dir.y * t,
-                        z: origin.z + dir.z * t,
-                    }
+                const nextT = Math.min(tMaxX, tMaxY, tMaxZ, tEnd, maxDistance)
 
-                    return {
-                        hit: true,
+                // coarse occupancy があるセルだけ fine DDA
+                if (RendererRCV._chunkHasSolidInCoarseCell(
+                    chunk,
+                    cgx,
+                    cgy,
+                    cgz
+                )) {
+                    const fineHit = RendererRCV._raycastVoxel_InCoarseCell(
+                        origin,
+                        dir,
                         t,
-                        hitPos,
-                        vox: { x: vx, y: vy, z: vz },
-                        normal: { x: nx, y: ny, z: nz },
-                        id: blockId,
-                        isMicro: false,
-                    }
+                        nextT,
+                        maxDistance,
+                        maxFineSteps,
+                        world,
+                        coarseMin,
+                        coarseMax,
+                        currentEntryNormal
+                    )
+
+                    if (fineHit.hit) return fineHit
+                }
+
+                const axis = RendererRCV._pickAxisStable(tMaxX, tMaxY, tMaxZ)
+
+                if (axis === 'x') {
+                    cgx += stepX
+                    t = tMaxX
+                    tMaxX += tDeltaX
+                    currentEntryNormal = { x: -stepX, y: 0, z: 0 }
+                } else if (axis === 'y') {
+                    cgy += stepY
+                    t = tMaxY
+                    tMaxY += tDeltaY
+                    currentEntryNormal = { x: 0, y: -stepY, z: 0 }
+                } else {
+                    cgz += stepZ
+                    t = tMaxZ
+                    tMaxZ += tDeltaZ
+                    currentEntryNormal = { x: 0, y: 0, z: -stepZ }
                 }
             }
 
@@ -3647,11 +3878,18 @@
             this.cy = cy
             this.cz = cz
             this.chunkSize = chunkSize
-            this.data = new Uint8Array(chunkSize * chunkSize * chunkSize) // 配列は持ってる
+            this.size = chunkSize
+
+            this.data = new Uint8Array(chunkSize * chunkSize * chunkSize)
 
             this._isEmpty = true
             this.isDirty = false
             this.lastAccessFrame = 0
+
+            this.state = 'empty'
+            this.coarseSize = 4
+            this.coarseGrid = this.size / this.coarseSize
+            this.coarseMask = new Uint8Array(this.coarseGrid * this.coarseGrid * this.coarseGrid)
         }
 
         index(lx, ly, lz) {
@@ -3668,16 +3906,45 @@
             if (id !== 0) this._isEmpty = false
         }
 
-        rebuildEmptyFlag() {
-            for (let i = 0; i < this.data.length; i++) {
-                if (this.data[i] !== 0) {
-                    this._isEmpty = false
-                    return false
+        rebuildSpatialCache() {
+            const s = this.size
+            const coarseSize = this.coarseSize
+            const coarseGrid = this.coarseGrid
+
+            this.coarseMask.fill(0)
+
+            let solidCount = 0
+            const total = s * s * s
+
+            for (let z = 0; z < s; z++) {
+                for (let y = 0; y < s; y++) {
+                    for (let x = 0; x < s; x++) {
+                        const id = this.get(x, y, z)
+                        if (id === 0) continue
+
+                        solidCount++
+
+                        const cgx = (x / coarseSize) | 0
+                        const cgy = (y / coarseSize) | 0
+                        const cgz = (z / coarseSize) | 0
+                        const idx = cgx + cgy * coarseGrid + cgz * coarseGrid * coarseGrid
+                        this.coarseMask[idx] = 1
+                    }
                 }
             }
-            this._isEmpty = true
-            return true
+
+            if (solidCount === 0) {
+                this.state = 'empty'
+            } else if (solidCount === total) {
+                this.state = 'full'
+            } else {
+                this.state = 'mixed'
+            }
+
+            this._isEmpty = (solidCount === 0)
         }
+
+
 
         isEmpty() {
             return this._isEmpty
@@ -3789,6 +4056,7 @@
             return y >= this.minY && y <= this.maxY
         }
 
+        // chunk management
         getChunk(cx, cy, cz) {
             return this.chunks.get(this.getChunkKey(cx, cy, cz)) ?? null
         }
@@ -3797,10 +4065,27 @@
             return this.chunks.has(this.getChunkKey(cx, cy, cz))
         }
 
+        rebuildChunkCache(cx, cy, cz) {
+            const chunk = this.getChunk(cx, cy, cz)
+            if (!chunk) return null
+
+            chunk.rebuildSpatialCache()
+
+            const key = this.getChunkKey(cx, cy, cz)
+            this.emptyChunkCache.set(key, chunk.state === 'empty')
+            return chunk
+        }
+
+        rebuildChunkCacheByWorldPos(x, y, z) {
+            const { cx, cy, cz } = this.worldToChunk(x, y, z)
+            return this.rebuildChunkCache(cx, cy, cz)
+        }
+
+
         registerChunk(chunk) {
             const key = this.getChunkKey(chunk.cx, chunk.cy, chunk.cz)
             this.chunks.set(key, chunk)
-            this.emptyChunkCache.set(key, chunk.isEmpty())
+            this.emptyChunkCache.set(key, chunk.state === 'empty')
         }
 
         unloadChunk(cx, cy, cz) {
@@ -3836,11 +4121,6 @@
 
 
         // empty, solid + missing
-        getChunkState(cx, cy, cz) {
-            const chunk = this.getChunk(cx, cy, cz)
-            if (chunk) return chunk.isEmpty() ? 'empty' : 'solid'
-            return this.isChunkDefinitelyEmpty(cx, cy, cz) ? 'empty' : 'missing'
-        }
 
         evaluateChunkOccupancy(cx, cy, cz) {
             const bounds = this.getChunkBounds(cx, cy, cz)
@@ -3881,7 +4161,7 @@
             const key = this.getChunkKey(cx, cy, cz)
 
             if (this.hasChunk(cx, cy, cz)) {
-                return this.getChunk(cx, cy, cz).isEmpty()
+                return this.getChunk(cx, cy, cz).state === 'empty'
             }
 
             if (this.emptyChunkCache.has(key)) {
@@ -3904,6 +4184,19 @@
             if (this.isChunkDefinitelyEmpty(cx, cy, cz)) return null
 
             chunk = this.generateChunk(cx, cy, cz)
+            this.registerChunk(chunk)
+            return chunk
+        }
+        ensureChunkForWrite(cx, cy, cz) {
+            let chunk = this.getChunk(cx, cy, cz)
+            if (chunk) return chunk
+
+            if (this.autoGenerate) {
+                chunk = this.generateChunk(cx, cy, cz)
+            } else {
+                chunk = new Chunk(cx, cy, cz, this.chunkSize)
+            }
+
             this.registerChunk(chunk)
             return chunk
         }
@@ -3956,9 +4249,12 @@
                 }
             }
 
-            chunk.rebuildEmptyFlag()
+            chunk.rebuildSpatialCache()
             return chunk
         }
+
+
+        // Voxel API
         get(x, y, z) {
             if (!this.inBounds(x, y, z)) return 0
 
@@ -3973,43 +4269,36 @@
             if (!this.inBounds(x, y, z)) return
 
             const { cx, cy, cz, lx, ly, lz } = this.toChunkCoords(x, y, z)
-
-            if (id === 0) {
-                const chunk = this.getChunk(cx, cy, cz)
-                if (!chunk) return
-
-                //
-                chunk.set(lx, ly, lz, 0)
-
-                // cleaned all block of the chunk?
-                if (chunk.rebuildEmptyFlag()) {
-                    this.unloadChunk(cx, cy, cz)
-                    this.emptyChunkCache.set(this.getChunkKey(cx, cy, cz), true)
-                } else {
-                    this.emptyChunkCache.set(this.getChunkKey(cx, cy, cz), false)
-                }
-                return
-            }
-
-            let chunk = this.ensureChunk(cx, cy, cz)
-            if (!chunk) {
-                chunk = new Chunk(cx, cy, cz, this.chunkSize)
-                this.registerChunk(chunk)
-            }
+            const chunk = this.ensureChunkForWrite(cx, cy, cz)
 
             chunk.set(lx, ly, lz, id)
-            this.emptyChunkCache.set(this.getChunkKey(cx, cy, cz), false)
+            this.rebuildChunkCache(cx, cy, cz)
         }
 
         clearBlock(x, y, z) {
-            this.set(x, y, z, 0)
-            this.setBrickRef(x, y, z, -1)
+            if (!this.inBounds(x, y, z)) return
+
+            const { cx, cy, cz, lx, ly, lz } = this.toChunkCoords(x, y, z)
+            const chunk = this.getChunk(cx, cy, cz)
+            if (!chunk) return
+
+            chunk.set(lx, ly, lz, 0)
+            this.rebuildChunkCache(cx, cy, cz)
         }
+
 
         isSolid(x, y, z) {
             return this.get(x, y, z) !== 0
         }
+        getChunkState(cx, cy, cz) {
+            const chunk = this.getChunk(cx, cy, cz)
+            if (chunk) return chunk.state
+            return this.isChunkDefinitelyEmpty(cx, cy, cz) ? 'empty' : 'missing'
+        }
 
+        // End of Voxel API
+
+        //
         getBrickRef(x, y, z) {
             if (!this.inBounds(x, y, z)) return -1
             return this.brickRefs.get(this.key(x, y, z)) ?? -1
@@ -4034,6 +4323,7 @@
             this.setBrickRef(x, y, z, ref)
         }
 
+        // Physic AABB
         moveAxisCheck_CenterType(position3, axis, delta, size3D, target = null) {
             const block = 1
             const pw = size3D.x
@@ -4076,7 +4366,9 @@
             position3[axis] += delta
             return delta
         }
-    }// GoalChecker
+
+    }
+
 
 
     // let ref = null
@@ -4507,8 +4799,6 @@
         autoGenerate: true,
     })
 
-    GM.var.testWorld.set(200, 0, 200, 2)
-    GM.var.testWorld.set(-50, 0, -50, 2)
     fillTestGround(GM.var.testWorld)
 
     GM.var.testCameraRCV = new PlayerCameraRCV(GM.var.testWorld)
