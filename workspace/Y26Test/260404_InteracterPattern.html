@@ -4905,6 +4905,9 @@
             this.dodgeDuration = 12;//
             this.dodgeCooldown = 0;
             this.invulnTimer = 0;
+            this.dodgeDistance = 1.6;
+            this.dodgeDir = new Vec3(0, 0, 1);
+            this.dodgeMoved = 0;
 
             this.hitStop = 0;
             this.globalTimeScale = 1.0;
@@ -4922,6 +4925,10 @@
 
             this.keyMapSetup()
             this.setupEnemies();
+        }
+
+        easeInOutSine(t) {
+            return -(Math.cos(Math.PI * t) - 1) * 0.5;
         }
 
         keyMapSetup() {
@@ -5103,21 +5110,21 @@
 
             return forward.clone().mul(z).add(right.clone().mul(x)).norm();
         }
-        tryDodge() {
-            if (this.dodgeCooldown > 0 || this.attackTimer > 0 || this.dodgeTimer > 0)
 
-                this.dodgeTimer = this.dodgeDuration;
+        tryDodge() {
+            if (this.dodgeCooldown > 0 || this.attackTimer > 0 || this.dodgeTimer > 0) return;
+
+            this.dodgeTimer = this.dodgeDuration;
             this.dodgeCooldown = 20;
             this.invulnTimer = 10;
 
-            const dodgeDir = this.getDodgeDirection();
-            this.player.delta.x += dodgeDir.x * 0.32;
-            this.player.delta.z += dodgeDir.z * 0.32;
+            this.dodgeDir = this.getDodgeDirection();   // さっきの入力方向版
+            this.dodgeMoved = 0;
 
             this.uiMessage = "DODGE";
             this.uiTimer = 14;
 
-            // perfect dodge check
+            // pecfect Dodge check!
             for (const enemy of this.enemies) {
                 if (enemy.tags.has("dead")) continue;
                 if (!enemy.combat) continue;
@@ -5172,11 +5179,20 @@
             }
         }
 
+
         updateDodge() {
             if (this.dodgeTimer <= 0) return;
 
-            this.player.delta.x *= this.moveMulDuringDodge;
-            this.player.delta.z *= this.moveMulDuringDodge;
+            const t = 1 - (this.dodgeTimer / this.dodgeDuration);   // 0 -> 1
+            const eased = this.easeInOutSine(t);
+            const targetMoved = this.dodgeDistance * eased;
+            // get the next frame move distance
+            const moveStep = targetMoved - this.dodgeMoved;
+
+            this.dodgeMoved = targetMoved;
+
+            this.player.delta.x += this.dodgeDir.x * moveStep;
+            this.player.delta.z += this.dodgeDir.z * moveStep;
         }
 
         resolveMeleeHit() {
