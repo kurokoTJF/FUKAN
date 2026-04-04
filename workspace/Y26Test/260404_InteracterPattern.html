@@ -1263,11 +1263,25 @@
 
         // static であれば、Instanceしなくてもいいか
         // yaw:Left,Right ptich:up,down
+        /* ルールの図解
+                    +Z
+                    ↑
+                    |
+             -X ←---+---→ +X
+                    |
+                    ↓
+                    -Z
+
+            yaw 0°   = +Z
+            yaw 90°  = +X
+            yaw 180° = -Z
+            yaw 270° = -X
+        */
         static fromYawPitch(yawDeg, pitchDeg) {
             const yaw = yawDeg * Math.PI / 180, pitch = pitchDeg * Math.PI / 180
             const cos_yaw = Math.cos(yaw), sin_yaw = Math.sin(yaw)
             const cos_pitch = Math.cos(pitch), sin_pinch = Math.sin(pitch)
-            // 前方: XZ 平面をヨー、Y はピッチ
+            // 前方: XZ 平面をヨー、YZ はピッチ
             return new Vec3(sin_yaw * cos_pitch, -sin_pinch, cos_yaw * cos_pitch).norm()
         }
     }
@@ -4414,6 +4428,22 @@
             this.cameraRadius = 0.18 // for collision
         }
 
+        applyCameraPose({ yaw, pitch, lookTarget, desired }) {
+            this.yaw = yaw;
+            this.pitch = pitch;
+
+            this.vecForward = Vec3.fromYawPitch(this.yaw, this.pitch);
+            this.vecRight = this.vecForward.cross(new Vec3(0, 1, 0)).norm();
+            this.vecUp = this.vecRight.cross(this.vecForward);
+
+            const fixed = this.resolveCameraPosition(lookTarget, desired);
+
+            this.position.x = lerp(this.position.x, fixed.x, this.smooth);
+            this.position.y = lerp(this.position.y, fixed.y, this.smooth);
+            this.position.z = lerp(this.position.z, fixed.z, this.smooth);
+        };
+
+        // include voxel hitTest
         resolveCameraPosition(origin, desired) {
             const dir = desired.clone().sub(origin)
             const dist = dir.len()
@@ -4897,15 +4927,15 @@
             keyMap[' '] = 'jump'
             keyMap['f'] = 'attack'
             onPressHandlers.attack = () => {
-                combat.tryAttack();
+                this.tryAttack();
             };
 
             onPressHandlers.lockon = () => {
-                combat.toggleLockOn();
+                this.toggleLockOn();
             };
 
             onPressHandlers.jump = () => {
-                combat.tryDodge();
+                this.tryDodge();
             };
         }
 
@@ -4924,25 +4954,10 @@
             this.camera.lockFollowDistance = 2.6;  // 通常より少し引く
             this.camera.lockSideOffset = 0.25;     // 少し肩越し
             this.camera.lockHeightBias = 0.15;
+            this.camera.lookTarget = null
 
-            this.camera.controller = function () {
-                this.vecForward = Vec3.fromYawPitch(this.yaw, this.pitch);
-                this.vecRight = this.vecForward.cross(new Vec3(0, 1, 0)).norm();
-                this.vecUp = this.vecRight.cross(this.vecForward);
-
-                // 手動回転入力
-                let PRes = 0;
-                if (keys.turnLeft.pressed) PRes--;
-                if (keys.turnRight.pressed) PRes++;
-                if (PRes > 0) this.yaw -= this.rotSpeed;
-                else if (PRes < 0) this.yaw += this.rotSpeed;
-                this.yaw = (this.yaw + 360) % 360;
-
-                PRes = 0;
-                if (keys.turnDown.pressed) PRes--;
-                if (keys.turnUp.pressed) PRes++;
-                if (PRes > 0) this.pitch = Math2.clamp(this.pitch - this.rotSpeed, -50, 65);
-                else if (PRes < 0) this.pitch = Math2.clamp(this.pitch + this.rotSpeed, -50, 65);
+            this.camera.getLockOnCameraPose = function () {
+                if (!this.lockTarget || this.lockTarget.tags?.has?.("dead")) return null;
 
                 const playerAnchor = new Vec3(
                     this.player.position.x,
@@ -4950,59 +4965,80 @@
                     this.player.position.z
                 );
 
-                let lookTarget = playerAnchor.clone();
-                let followDistance = this.followDistance;
-                let sideOffset = 0;
+                const enemyAnchor = new Vec3(
+                    this.lockTarget.position.x,
+                    this.lockTarget.position.y + (this.lockTarget.height || 1.6) * 0.6,
+                    this.lockTarget.position.z
+                );
 
-                // -------------------------
-                // lock-on camera
-                // -------------------------
-                if (this.lockTarget && !this.lockTarget.tags?.has?.("dead")) {
-                    const enemyAnchor = new Vec3(
-                        this.lockTarget.position.x,
-                        this.lockTarget.position.y + (this.lockTarget.height || 1.6) * 0.55,
-                        this.lockTarget.position.z
-                    );
+                const lookDir = enemyAnchor.clone().sub(playerAnchor);
+                lookDir.y = 0;
+                if (lookDir.len() < 0.0001) return null;
+                lookDir.norm();
 
-                    // player と enemy の中間より、やや enemy 寄りを見る
-                    lookTarget = playerAnchor.clone().mul(0.42).add(enemyAnchor.clone().mul(0.58));
-                    lookTarget.y += this.lockHeightBias;
+                const yaw = Math2.lerpAngleDeg(
+                    this.yaw,
+                    Math.atan2(lookDir.x, lookDir.z) * 180 / Math.PI,
+                    0.22
+                );
 
-                    followDistance = this.lockFollowDistance;
-                    sideOffset = this.lockSideOffset;
+                const pitch = Math2.mix(this.pitch, 12, 0.16);
 
-                    // 注視点へ向く yaw / pitch を自動補正
-                    const toLook = lookTarget.clone().sub(this.position);
-                    const flatLen = Math.hypot(toLook.x, toLook.z) || 0.0001;
+                const forward = Vec3.fromYawPitch(yaw, pitch);
+                const right = forward.cross(new Vec3(0, 1, 0)).norm();
 
-                    const targetYaw = Math.atan2(toLook.z, toLook.x) * 180 / Math.PI;
-                    const targetPitch = Math.atan2(toLook.y, flatLen) * 180 / Math.PI;
+                const lookTarget = playerAnchor.clone().mul(0.35).add(enemyAnchor.clone().mul(0.65));
 
-                    const yawDiff = ((targetYaw - this.yaw + 540) % 360) - 180;
-                    this.yaw += yawDiff * 0.18;
-                    this.pitch += (targetPitch - this.pitch) * 0.12;
-                    this.pitch = Math2.clamp(this.pitch, -35, 40);
-                }
+                const backDist = 2.6;
+                const camHeight = 1.2;
+                const sideOffset = 0.15;
 
-                // 向き更新後に基底を再計算
-                this.vecForward = Vec3.fromYawPitch(this.yaw, this.pitch);
-                this.vecRight = this.vecForward.cross(new Vec3(0, 1, 0)).norm();
-                this.vecUp = this.vecRight.cross(this.vecForward);
+                const desired = playerAnchor.clone()
+                    .sub(lookDir.clone().mul(backDist))
+                    .add(new Vec3(0, camHeight, 0))
+                    .add(right.clone().mul(sideOffset));
 
-                const backward = this.vecForward.clone().mul(-1);
+                return { yaw, pitch, lookTarget, desired };
+            };
+
+            this.camera.getFreeCameraPose = function () {
+                let yaw = this.yaw;
+                let pitch = this.pitch;
+
+                let PRes = 0;
+                if (keys.turnLeft.pressed) PRes--;
+                if (keys.turnRight.pressed) PRes++;
+                if (PRes > 0) yaw -= this.rotSpeed;
+                else if (PRes < 0) yaw += this.rotSpeed;
+                yaw = (yaw + 360) % 360;
+
+                PRes = 0;
+                if (keys.turnDown.pressed) PRes--;
+                if (keys.turnUp.pressed) PRes++;
+                if (PRes > 0) pitch = Math2.clamp(pitch - this.rotSpeed, -50, 65);
+                else if (PRes < 0) pitch = Math2.clamp(pitch + this.rotSpeed, -50, 65);
+
+                const forward = Vec3.fromYawPitch(yaw, pitch);
+
+                const playerAnchor = new Vec3(
+                    this.player.position.x,
+                    this.player.position.y + this.lookHeight,
+                    this.player.position.z
+                );
+
+                const lookTarget = playerAnchor.clone();
                 const desired = lookTarget.clone()
-                    .add(backward.mul(followDistance))
-                    .add(this.vecRight.clone().mul(sideOffset));
+                    .add(forward.clone().mul(-this.followDistance));
 
                 desired.y += this.heightOffset;
 
-                const fixed = this.resolveCameraPosition(lookTarget, desired);
+                return { yaw, pitch, lookTarget, desired };
+            };
 
-                this.position.x += (fixed.x - this.position.x) * this.smooth;
-                this.position.y += (fixed.y - this.position.y) * this.smooth;
-                this.position.z += (fixed.z - this.position.z) * this.smooth;
-            }
-
+            this.camera.controller = function () {
+                const pose = this.getLockOnCameraPose() || this.getFreeCameraPose();
+                this.applyCameraPose(pose);
+            };
         }
 
         setupEnemies() {
@@ -5496,13 +5532,6 @@
     GM.v.renderer = new RendererRCV(GM.v.camera, GM.v.world, canvas0, document.getElementById('fps'))
 
     GM.v.physic = new PhysicSimulator_BlockWorld(GM.v.world)
-
-
-
-
-
-
-
 
     // 描画順が更新順番に依存しているのが良くないな
     GM.addChild(GM.v.player, false)
