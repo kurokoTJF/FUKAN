@@ -4428,6 +4428,41 @@
             this.cameraRadius = 0.18 // for collision
         }
 
+        getFreeCameraPose() {
+            let yaw = this.yaw;
+            let pitch = this.pitch;
+
+            let PRes = 0;
+            if (keys.turnLeft.pressed) PRes--;
+            if (keys.turnRight.pressed) PRes++;
+            if (PRes > 0) yaw -= this.rotSpeed;
+            else if (PRes < 0) yaw += this.rotSpeed;
+            yaw = (yaw + 360) % 360;
+
+            PRes = 0;
+            if (keys.turnDown.pressed) PRes--;
+            if (keys.turnUp.pressed) PRes++;
+            if (PRes > 0) pitch = Math2.clamp(pitch - this.rotSpeed, -50, 65);
+            else if (PRes < 0) pitch = Math2.clamp(pitch + this.rotSpeed, -50, 65);
+
+            const forward = Vec3.fromYawPitch(yaw, pitch);
+
+            const playerAnchor = new Vec3(
+                this.player.position.x,
+                this.player.position.y + this.lookHeight,
+                this.player.position.z
+            );
+
+            const lookTarget = playerAnchor.clone();
+            const desired = lookTarget.clone()
+                .add(forward.clone().mul(-this.followDistance));
+
+            desired.y += this.heightOffset;
+
+            return { yaw, pitch, lookTarget, desired };
+        };
+
+
         applyCameraPose({ yaw, pitch, lookTarget, desired }) {
             this.yaw = yaw;
             this.pitch = pitch;
@@ -4469,39 +4504,7 @@
         }
 
         controller() {
-            this.vecForward = Vec3.fromYawPitch(this.yaw, this.pitch)
-            this.vecRight = this.vecForward.cross(new Vec3(0, 1, 0)).norm()
-            this.vecUp = this.vecRight.cross(this.vecForward)
-
-            let PRes = 0
-            if (keys.turnLeft.pressed) PRes--
-            if (keys.turnRight.pressed) PRes++
-            if (PRes > 0) this.yaw -= this.rotSpeed
-            else if (PRes < 0) this.yaw += this.rotSpeed
-            this.yaw = (this.yaw + 360) % 360
-
-            PRes = 0
-            if (keys.turnDown.pressed) PRes--
-            if (keys.turnUp.pressed) PRes++
-            if (PRes > 0) this.pitch = Math2.clamp(this.pitch - this.rotSpeed, -50, 65)
-            else if (PRes < 0) this.pitch = Math2.clamp(this.pitch + this.rotSpeed, -50, 65)
-
-            const target = new Vec3(
-                this.player.position.x,
-                this.player.position.y + this.lookHeight,
-                this.player.position.z
-            )
-            const backward = Vec3.fromYawPitch(this.yaw + 180, this.pitch)
-            const desired = target.clone().add(backward.mul(this.followDistance))
-            desired.y += this.heightOffset
-
-            const fixed = this.resolveCameraPosition(target, desired)
-            this.position.x = lerp(this.position.x, fixed.x, this.smooth)
-            this.position.y = lerp(this.position.y, fixed.y, this.smooth)
-            this.position.z = lerp(this.position.z, fixed.z, this.smooth)
-
-            const faceYaw = (Math.atan2(this.player.direction.x, this.player.direction.z) * 180 / Math.PI + 360) % 360
-            this.player.facingYaw = Math2.lerpAngleDeg(this.player.facingYaw || faceYaw, faceYaw, 0.25)
+         this.applyCameraPose(this.getFreeCameraPose())
         }
 
         update() {
@@ -4997,40 +5000,6 @@
                     .sub(lookDir.clone().mul(backDist))
                     .add(new Vec3(0, camHeight, 0))
                     .add(right.clone().mul(sideOffset));
-
-                return { yaw, pitch, lookTarget, desired };
-            };
-
-            this.camera.getFreeCameraPose = function () {
-                let yaw = this.yaw;
-                let pitch = this.pitch;
-
-                let PRes = 0;
-                if (keys.turnLeft.pressed) PRes--;
-                if (keys.turnRight.pressed) PRes++;
-                if (PRes > 0) yaw -= this.rotSpeed;
-                else if (PRes < 0) yaw += this.rotSpeed;
-                yaw = (yaw + 360) % 360;
-
-                PRes = 0;
-                if (keys.turnDown.pressed) PRes--;
-                if (keys.turnUp.pressed) PRes++;
-                if (PRes > 0) pitch = Math2.clamp(pitch - this.rotSpeed, -50, 65);
-                else if (PRes < 0) pitch = Math2.clamp(pitch + this.rotSpeed, -50, 65);
-
-                const forward = Vec3.fromYawPitch(yaw, pitch);
-
-                const playerAnchor = new Vec3(
-                    this.player.position.x,
-                    this.player.position.y + this.lookHeight,
-                    this.player.position.z
-                );
-
-                const lookTarget = playerAnchor.clone();
-                const desired = lookTarget.clone()
-                    .add(forward.clone().mul(-this.followDistance));
-
-                desired.y += this.heightOffset;
 
                 return { yaw, pitch, lookTarget, desired };
             };
