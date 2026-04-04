@@ -2481,7 +2481,7 @@
             this.zBuffer = new Float32Array(this.zw * this.zh)
 
             this.maxDistance = 100// Fogの強さにも影響
-            this.maxSteps = 30
+            this.maxSteps = 10
             this.showNormals = false
             this.exposure = 0.95
             this.skyTop = [0.35, 0.15, 0.25];
@@ -4504,7 +4504,7 @@
         }
 
         controller() {
-         this.applyCameraPose(this.getFreeCameraPose())
+            this.applyCameraPose(this.getFreeCameraPose())
         }
 
         update() {
@@ -5085,16 +5085,34 @@
             this.uiTimer = 20;
         }
 
-        tryDodge() {
-            if (this.dodgeCooldown > 0 || this.attackTimer > 0 || this.dodgeTimer > 0) return;
+        getDodgeDirection() {
+            const forward = Vec3.fromYawPitch(this.camera.yaw, 0).norm();
+            const right = new Vec3(-forward.z, 0, forward.x).norm();
 
-            this.dodgeTimer = this.dodgeDuration;
+            let x = 0;
+            let z = 0;
+
+            if (keys.left.pressed) x -= 1;
+            if (keys.right.pressed) x += 1;
+            if (keys.up.pressed) z += 1;
+            if (keys.down.pressed) z -= 1;
+
+            if (x === 0 && z === 0) {
+                return forward;
+            }
+
+            return forward.clone().mul(z).add(right.clone().mul(x)).norm();
+        }
+        tryDodge() {
+            if (this.dodgeCooldown > 0 || this.attackTimer > 0 || this.dodgeTimer > 0)
+
+                this.dodgeTimer = this.dodgeDuration;
             this.dodgeCooldown = 20;
             this.invulnTimer = 10;
 
-            const forward = Vec3.fromYawPitch(this.camera.yaw, 0).norm();
-            this.player.delta.x += forward.x * 0.32;
-            this.player.delta.z += forward.z * 0.32;
+            const dodgeDir = this.getDodgeDirection();
+            this.player.delta.x += dodgeDir.x * 0.32;
+            this.player.delta.z += dodgeDir.z * 0.32;
 
             this.uiMessage = "DODGE";
             this.uiTimer = 14;
