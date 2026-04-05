@@ -1,0 +1,204 @@
+<button id="pickBtn">フォルダを選んで変換</button>
+<input id="dirInput" type="file" webkitdirectory multiple hidden>
+<div id="status"></div>
+<button id="copyBtn">配列をコピー</button>
+<textarea id="output" style="width:100%; height:300px;"></textarea>
+<script>
+    const pickBtn = document.getElementById("pickBtn");
+    const dirInput = document.getElementById("dirInput");
+    const status = document.getElementById("status");
+
+    const canvas = document.createElement("canvas");
+    const ctx = canvas.getContext("2d", { willReadFrequently: true });
+
+    pickBtn.addEventListener("click", () => {
+        dirInput.click();
+    });
+
+    dirInput.addEventListener("change", async (e) => {
+        const files = [...e.target.files].filter(file => file.type.startsWith("image/"));
+
+        if (files.length === 0) {
+            status.textContent = "画像が見つからない";
+            return;
+        }
+
+        status.textContent = `変換中... ${files.length} files`;
+
+        try {
+            const code = await convertFilesToLibraryCode(files);
+            output.value = code;
+            status.textContent = `完了: ${files.length} files`;
+        } catch (error) {
+            console.error(error);
+            status.textContent = `失敗: ${error.message}`;
+        }
+
+        dirInput.value = "";
+    });
+
+    async function convertFilesToLibraryCode(files) {
+        const entries = [];
+
+        for (const file of files) {
+            const entry = await convertSingleFile(file);
+            entries.push(entry);
+        }
+
+        return buildLibraryCode(entries);
+    }
+
+    async function convertSingleFile(file) {
+        const bitmap = await createImageBitmap(file);
+
+        const width = bitmap.width;
+        const height = bitmap.height;
+
+        canvas.width = width;
+        canvas.height = height;
+        ctx.clearRect(0, 0, width, height);
+        ctx.drawImage(bitmap, 0, 0);
+
+        const imageData = ctx.getImageData(0, 0, width, height);
+        const dataArray = Array.from(imageData.data);
+
+        bitmap.close?.();
+
+        const rawName = file.name.replace(/\.[^.]+$/, "");
+        const safeName = toSafeKey(rawName);
+
+        return {
+            key: safeName,
+            originalName: file.name,
+            width,
+            height,
+            data: dataArray,
+        };
+    }
+    function toSafeKey(name) {
+        let safe = name.replace(/[^a-zA-Z0-9_$]/g, "_");
+
+        if (!/^[A-Za-z_$]/.test(safe)) {
+            safe = "_" + safe;
+        }
+
+        return safe;
+    }
+
+    function buildLibraryCode(entries) {
+        const usedKeys = new Set();
+        const lines = [];
+
+        lines.push("const ImageLibrary = {");
+
+        for (const entry of entries) {
+            const key = getUniqueKey(entry.key, usedKeys);
+            lines.push(`    ${key}: { width: ${entry.width}, height: ${entry.height}, data: new Uint8ClampedArray([${entry.data.join(", ")}]) },`);
+        }
+
+        lines.push("};");
+
+        return lines.join("\n");
+    }
+
+    function getUniqueKey(baseKey, usedKeys) {
+        if (!usedKeys.has(baseKey)) {
+            usedKeys.add(baseKey);
+            return baseKey;
+        }
+
+        let i = 2;
+        while (usedKeys.has(`${baseKey}_${i}`)) {
+            i++;
+        }
+
+        const uniqueKey = `${baseKey}_${i}`;
+        usedKeys.add(uniqueKey);
+        return uniqueKey;
+    }
+
+    function formatNumberArray(array, chunkSize = 12, indent = "") {
+        const lines = [];
+
+        for (let i = 0; i < array.length; i += chunkSize) {
+            const chunk = array.slice(i, i + chunkSize);
+            const suffix = i + chunkSize < array.length ? "," : "";
+            lines.push(`${indent}${chunk.join(", ")}${suffix}`);
+        }
+
+        return lines;
+    }
+
+    class ImageExporter {
+        static rgbToRgba(rgbData) {
+            const src = rgbData instanceof Uint8ClampedArray
+                ? rgbData
+                : new Uint8ClampedArray(rgbData);
+
+            const out = new Uint8ClampedArray((src.length / 3) * 4);
+
+            for (let i = 0, j = 0; i < src.length; i += 3, j += 4) {
+                out[j] = src[i];
+                out[j + 1] = src[i + 1];
+                out[j + 2] = src[i + 2];
+                out[j + 3] = 255;
+            }
+
+            return out;
+        }
+
+        static toRgba(data, format = "rgba") {
+            if (format === "rgba") {
+                return data instanceof Uint8ClampedArray
+                    ? data
+                    : new Uint8ClampedArray(data);
+            }
+
+            if (format === "rgb") {
+                return this.rgbToRgba(data);
+            }
+
+            throw new Error(`Unsupported format: ${format}`);
+        }
+
+        static downloadFromImageLibrary(imageName, imageLibrary) {
+            const image = imageLibrary[imageName];
+            if (!image) {
+                console.error(`Image not found: ${imageName}`);
+                return;
+            }
+
+            const rgba = this.toRgba(image.data, image.format ?? "rgba");
+
+            const canvas = document.createElement("canvas");
+            const ctx = canvas.getContext("2d");
+
+            canvas.width = image.width;
+            canvas.height = image.height;
+
+            const imageData = new ImageData(rgba, image.width, image.height);
+            ctx.putImageData(imageData, 0, 0);
+
+            const link = document.createElement("a");
+            link.download = `${imageName}.png`;
+            link.href = canvas.toDataURL("image/png");
+            link.click();
+        }
+    }
+
+
+
+    const copyBtn = document.getElementById("copyBtn");
+    const output = document.getElementById("output");
+
+    copyBtn.addEventListener("click", async () => {
+        try {
+            await navigator.clipboard.writeText(output.value);
+            console.log("copied");
+        } catch (error) {
+            console.error("copy failed", error);
+        }
+    });
+
+    //ImageExporter.downloadFromImageLibrary("phoebi", ImageLibrary);
+</script>
