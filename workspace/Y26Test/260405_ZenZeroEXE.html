@@ -4402,8 +4402,8 @@
             this.player = player
 
             this.followDistance = 1.8
-            this.lookHeight = 1.0
-            this.heightOffset = 0.2
+            this.lookHeight = 0.4
+            this.heightOffset = 0.0
             this.smooth = 0.22
 
             this.rotSpeed = 1
@@ -4923,15 +4923,15 @@
             keyMap[' '] = 'jump'
             keyMap['f'] = 'attack'
             onPressHandlers.attack = () => {
-                this.tryAttack();
+                this.Attack_handleEvent();
             };
 
             onPressHandlers.lockon = () => {
-                this.toggleLockOn();
+                this.LockOn_toggle();
             };
 
             onPressHandlers.jump = () => {
-                this.tryDodge();
+                this.Dodge_handleEvent();
             };
         }
 
@@ -5053,11 +5053,11 @@
                 this.comboStep = 0
             }
 
-            this.updateLockOn()
-            this.updatePlayerFacing()
-            this.updateAttack()
-            this.updateDodge()
-            this.updateEnemies(this.enemyTimeScale)
+            this.LockOn_update()
+            this.PlayerFacing_update()
+            this.Attack_update()
+            this.Dodge_update()
+            this.Enemies_update(this.enemyTimeScale)
         }
 
         draw() {
@@ -5066,7 +5066,7 @@
         // -------------------------
         // input entry points
         // -------------------------
-        tryAttack() {
+        Attack_handleEvent() {
             if (this.attackTimer > 0 || this.dodgeTimer > 0) return;
 
             this.comboStep = (this.comboStep % 3) + 1;
@@ -5078,7 +5078,7 @@
             this.uiTimer = 20;
         }
 
-        getDodgeDirection() {
+        Dodge_getDirection() {
             const forward = Vec3.fromYawPitch(this.camera.yaw, 0).norm();
             const right = new Vec3(-forward.z, 0, forward.x).norm();
 
@@ -5097,14 +5097,14 @@
             return forward.clone().mul(z).add(right.clone().mul(x)).norm();
         }
 
-        tryDodge() {
+        Dodge_handleEvent() {
             if (this.dodgeCooldown > 0 || this.attackTimer > 0 || this.dodgeTimer > 0) return;
 
             this.dodgeTimer = this.dodgeDuration;
             this.dodgeCooldown = 20;
             this.invulnTimer = 10;
 
-            this.dodgeDir = this.getDodgeDirection();   // さっきの入力方向版
+            this.dodgeDir = this.Dodge_getDirection();   // さっきの入力方向版
             this.dodgeMoved = 0;
 
             this.uiMessage = "DODGE";
@@ -5131,7 +5131,7 @@
             }
         }
 
-        toggleLockOn() {
+        LockOn_toggle() {
             const alive = this.enemies.filter(e => !e.tags.has("dead"));
             if (alive.length === 0) {
                 this.lockedEnemy = null;
@@ -5151,7 +5151,7 @@
         // -------------------------
         // player combat
         // -------------------------
-        updateAttack() {
+        Attack_update() {
             if (this.attackTimer <= 0) return;
 
             // move damping during attack
@@ -5161,28 +5161,12 @@
             const activeFrame = this.attackDuration - this.attackTimer;
             if (!this.attackHitDone && activeFrame >= 4) {
                 this.attackHitDone = true;
-                this.resolveMeleeHit();
+                this.Attack_resolveMeleeHit();
             }
         }
 
-
-        updateDodge() {
-            if (this.dodgeTimer <= 0) return;
-
-            const t = 1 - (this.dodgeTimer / this.dodgeDuration);   // 0 -> 1
-            const eased = this.easeInOutSine(t);
-            const targetMoved = this.dodgeDistance * eased;
-            // get the next frame move distance
-            const moveStep = targetMoved - this.dodgeMoved;
-
-            this.dodgeMoved = targetMoved;
-
-            this.player.delta.x += this.dodgeDir.x * moveStep;
-            this.player.delta.z += this.dodgeDir.z * moveStep;
-        }
-
-        resolveMeleeHit() {
-            const forward = this.getPlayerForward();
+        Attack_resolveMeleeHit() {
+            const forward = this.PlayerFacing_getPlayerForward();
             const origin = this.player.position;
 
             for (const enemy of this.enemies) {
@@ -5218,7 +5202,23 @@
             }
         }
 
-        updateLockOn() {
+
+        Dodge_update() {
+            if (this.dodgeTimer <= 0) return;
+
+            const t = 1 - (this.dodgeTimer / this.dodgeDuration);   // 0 -> 1
+            const eased = this.easeInOutSine(t);
+            const targetMoved = this.dodgeDistance * eased;
+            // get the deltaMove move distance@
+            const delta = targetMoved - this.dodgeMoved;
+
+            this.dodgeMoved = targetMoved;
+
+            this.player.delta.x += this.dodgeDir.x * delta;
+            this.player.delta.z += this.dodgeDir.z * delta;
+        }
+
+        LockOn_update() {
             if (this.lockedEnemy && this.lockedEnemy.tags.has("dead")) {
                 this.lockedEnemy = null;
             }
@@ -5231,7 +5231,7 @@
             this.camera.lockWeight = this.lockedEnemy ? 1.0 : 0.0;
         }
 
-        updatePlayerFacing() {
+        PlayerFacing_update() {
             if (!this.lockedEnemy) return;
             if (this.attackTimer > 0 || this.dodgeTimer > 0) return;
 
@@ -5244,7 +5244,7 @@
             // camera yaw 補正は camera 側に任せる
         }
 
-        getPlayerForward() {
+        PlayerFacing_getPlayerForward() {
             if (this.lockedEnemy) {
                 const dx = this.lockedEnemy.position.x - this.player.position.x;
                 const dz = this.lockedEnemy.position.z - this.player.position.z;
@@ -5262,7 +5262,7 @@
         // -------------------------
         // enemy combat
         // -------------------------
-        updateEnemies(dt) {
+        Enemies_update(dt) {
             for (const enemy of this.enemies) {
                 if (enemy.tags.has("dead")) continue;
                 if (!enemy.combat) continue;
