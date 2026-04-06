@@ -4892,6 +4892,8 @@
                 this.enemyTimeScale = 0.25  // 敵だけ遅い
             }
 
+            // udpate all Timers, 
+            // works like realtime tags
             if (this.comboTimer > 0) this.comboTimer -= this.playerTimeScale
             if (this.attackTimer > 0) this.attackTimer -= this.playerTimeScale
             if (this.dodgeTimer > 0) this.dodgeTimer -= this.playerTimeScale
@@ -4903,6 +4905,7 @@
                 this.comboStep = 0
             }
 
+            // update all features
             this.LockOn_update()
             this.PlayerFacing_update()
             this.Attack_update()
