@@ -1,0 +1,163 @@
+<input id="dirInput" type="file" webkitdirectory multiple hidden>
+<button id="pickBtn">フォルダを選んで16色変換</button>
+<button id="copyBtn">コピー</button>
+<textarea id="output" style="width:100%; height:400px;"></textarea>
+
+<script>
+const pickBtn = document.getElementById("pickBtn");
+const copyBtn = document.getElementById("copyBtn");
+const dirInput = document.getElementById("dirInput");
+const output = document.getElementById("output");
+
+const canvas = document.createElement("canvas");
+const ctx = canvas.getContext("2d", { willReadFrequently: true });
+
+pickBtn.addEventListener("click", () => {
+    dirInput.click();
+});
+
+copyBtn.addEventListener("click", async () => {
+    try {
+        await navigator.clipboard.writeText(output.value);
+        console.log("copied");
+    } catch (err) {
+        console.error(err);
+    }
+});
+
+dirInput.addEventListener("change", async (e) => {
+    const files = [...e.target.files].filter(file => file.type.startsWith("image/"));
+
+    if (files.length === 0) {
+        output.value = "// image file not found";
+        return;
+    }
+
+    try {
+        const entries = [];
+        for (const file of files) {
+            const entry = await convertImageFileToIndexed16(file);
+            entries.push(entry);
+        }
+
+        output.value = buildIndexedLibraryCode(entries);
+    } catch (err) {
+        console.error(err);
+        output.value = `// ERROR: ${err.message}`;
+    }
+
+    dirInput.value = "";
+});
+
+async function convertImageFileToIndexed16(file) {
+    const bitmap = await createImageBitmap(file);
+
+    const width = bitmap.width;
+    const height = bitmap.height;
+
+    canvas.width = width;
+    canvas.height = height;
+    ctx.clearRect(0, 0, width, height);
+    ctx.drawImage(bitmap, 0, 0);
+
+    const imageData = ctx.getImageData(0, 0, width, height);
+    const rgba = imageData.data;
+
+    bitmap.close?.();
+
+    const indexed = rgbaToIndexed16(width, height, rgba);
+
+    return {
+        key: toSafeKey(removeExt(file.name)),
+        width,
+        height,
+        palette: indexed.palette,
+        data: indexed.data
+    };
+}
+
+function rgbaToIndexed16(width, height, rgba) {
+    const palette = [[0, 0, 0]]; // index 0 = transparent
+    const colorToIndex = new Map();
+    colorToIndex.set("TRANSPARENT", 0);
+
+    const data = new Uint8Array(width * height);
+
+    for (let i = 0, p = 0; i < rgba.length; i += 4, p++) {
+        const r = rgba[i];
+        const g = rgba[i + 1];
+        const b = rgba[i + 2];
+        const a = rgba[i + 3];
+
+        if (a === 0) {
+            data[p] = 0;
+            continue;
+        }
+
+        const key = `${r},${g},${b}`;
+
+        let index = colorToIndex.get(key);
+
+        if (index == null) {
+            if (palette.length >= 16) {
+                throw new Error("16色を超えた画像があります");
+            }
+
+            index = palette.length;
+            palette.push([r, g, b]);
+            colorToIndex.set(key, index);
+        }
+
+        data[p] = index;
+    }
+
+    return { palette, data };
+}
+
+function buildIndexedLibraryCode(entries) {
+    const usedKeys = new Set();
+    const lines = [];
+
+    lines.push("const IndexedImageLibrary = {");
+
+    for (const entry of entries) {
+        const key = getUniqueKey(entry.key, usedKeys);
+
+        lines.push(
+            `    ${key}: { width: ${entry.width}, height: ${entry.height}, palette: [${entry.palette.map(rgb => `[${rgb.join(",")}]`).join(", ")}], data: new Uint8Array([${Array.from(entry.data).join(",")}]) },`
+        );
+    }
+
+    lines.push("};");
+
+    return lines.join("\n");
+}
+
+function removeExt(name) {
+    return name.replace(/\.[^.]+$/, "");
+}
+
+function toSafeKey(name) {
+    let safe = name.replace(/[^a-zA-Z0-9_$]/g, "_");
+    if (!/^[A-Za-z_$]/.test(safe)) {
+        safe = "_" + safe;
+    }
+    return safe;
+}
+
+function getUniqueKey(baseKey, usedKeys) {
+    if (!usedKeys.has(baseKey)) {
+        usedKeys.add(baseKey);
+        return baseKey;
+    }
+
+    let i = 2;
+    while (usedKeys.has(`${baseKey}_${i}`)) {
+        i++;
+    }
+
+    const key = `${baseKey}_${i}`;
+    usedKeys.add(key);
+    return key;
+}
+</script>
