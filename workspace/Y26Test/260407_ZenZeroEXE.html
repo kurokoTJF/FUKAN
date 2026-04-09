@@ -4908,8 +4908,9 @@
             // update all features
             this.LockOn_update()
             this.PlayerFacing_update()
-            this.Attack_update()
-            this.Dodge_update()
+
+            this.Attack_update(this.attackTimer,this.attackDuration)
+            this.Dodge_update(this.dodgeTimer,this.dodgeDuration)
             this.Enemies_update(this.enemyTimeScale)
         }
 
@@ -5004,14 +5005,14 @@
         // -------------------------
         // player combat
         // -------------------------
-        Attack_update() {
-            if (this.attackTimer <= 0) return;
+        Attack_update(timer,duration) {
+            if (timer <= 0) return;
 
             // move damping during attack
             this.player.delta.x *= this.moveMulDuringAttack;
             this.player.delta.z *= this.moveMulDuringAttack;
 
-            const activeFrame = this.attackDuration - this.attackTimer;
+            const activeFrame = duration - timer;
             if (!this.attackHitDone && activeFrame >= 4) {
                 this.attackHitDone = true;
                 this.Attack_resolveMeleeHit();
@@ -5056,10 +5057,10 @@
         }
 
 
-        Dodge_update() {
-            if (this.dodgeTimer <= 0) return;
+        Dodge_update(timer,duration) {
+            if (timer <= 0) return;
 
-            const t = 1 - (this.dodgeTimer / this.dodgeDuration);   // 0 -> 1
+            const t = 1 - (timer / duration);   // 0 -> 1
             const eased = this.easeInOutSine(t);
             const targetMoved = this.dodgeDistance * eased;
             // get the deltaMove move distance@
