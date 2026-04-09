@@ -1,0 +1,3356 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Robot Cockpit Prototype</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      font-family: "Segoe UI", sans-serif;
+      background: #06080c;
+      color: #e8eef7;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    html,
+    body {
+      margin: 0;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background:
+        radial-gradient(circle at top, rgba(25, 52, 84, 0.45), transparent 55%),
+        linear-gradient(180deg, #09111a 0%, #04070b 100%);
+    }
+
+    canvas {
+      display: block;
+      width: 100vw;
+      height: 100vh;
+    }
+
+    #divider {
+      position: fixed;
+      left: 0;
+      right: 0;
+      top: var(--top-view-split, 70%);
+      height: 2px;
+      background: linear-gradient(90deg, transparent, rgba(130, 220, 255, 0.85), transparent);
+      box-shadow: 0 0 16px rgba(80, 190, 255, 0.45);
+      pointer-events: none;
+    }
+
+    #hud {
+      position: fixed;
+      inset: 0;
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      pointer-events: none;
+    }
+
+    .panel {
+      max-width: min(520px, calc(100vw - 32px));
+      padding: 12px 14px;
+      border: 1px solid rgba(140, 195, 255, 0.3);
+      border-radius: 10px;
+      background: rgba(5, 10, 18, 0.62);
+      backdrop-filter: blur(6px);
+      line-height: 1.45;
+      font-size: 13px;
+      white-space: pre-wrap;
+    }
+
+    #deviceHintLayer {
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      z-index: 5;
+    }
+
+    #hpHudLayer {
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      z-index: 6;
+    }
+
+    .hp-bar-panel {
+      position: fixed;
+      left: 50%;
+      width: min(420px, calc(100vw - 48px));
+      transform: translateX(-50%);
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      padding: 8px 10px;
+      background: rgba(5, 10, 18, 0.55);
+      border: 1px solid rgba(140, 195, 255, 0.26);
+      border-radius: 12px;
+      backdrop-filter: blur(6px);
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.24);
+    }
+
+    .hp-bar-panel.enemy {
+      top: 14px;
+    }
+
+    .hp-bar-panel.player {
+      top: calc(var(--top-view-split, 70%) + 10px);
+    }
+
+    .hp-bar-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      color: #e9f6ff;
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+    }
+
+    .hp-bar-track {
+      height: 12px;
+      overflow: hidden;
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.08);
+      box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.08);
+    }
+
+    .hp-bar-fill {
+      height: 100%;
+      width: 100%;
+      border-radius: inherit;
+      transition: width 80ms linear;
+    }
+
+    .hp-bar-panel.enemy .hp-bar-fill {
+      background: linear-gradient(90deg, #ff8a66 0%, #ff4d4d 100%);
+      box-shadow: 0 0 14px rgba(255, 95, 95, 0.38);
+    }
+
+    .hp-bar-panel.player .hp-bar-fill {
+      background: linear-gradient(90deg, #72d7ff 0%, #39a8ff 100%);
+      box-shadow: 0 0 14px rgba(70, 170, 255, 0.34);
+    }
+
+    .device-hint {
+      position: absolute;
+      min-width: 180px;
+      max-width: 240px;
+      padding: 6px 8px;
+      transform: translate(-50%, -100%);
+    }
+
+    .device-hint.below {
+      transform: translate(-50%, 0);
+    }
+
+    .device-hint-title {
+      margin-bottom: 6px;
+      color: #e9f6ff;
+      font-size: 13px;
+      font-weight: 700;
+      letter-spacing: 0.03em;
+      white-space: nowrap;
+      text-shadow: 0 2px 8px rgba(0, 0, 0, 0.65);
+    }
+
+    .device-hint-lines {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+      align-items: center;
+    }
+
+    .device-hint-line {
+      color: #b9cde0;
+      font-size: 11px;
+      line-height: 1.35;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      text-align: center;
+      white-space: nowrap;
+      text-shadow: 0 2px 8px rgba(0, 0, 0, 0.65);
+    }
+
+    .inline-icon {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-width: 20px;
+      height: 20px;
+      padding: 0 6px;
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.14);
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
+      color: #ffffff;
+      font-size: 10px;
+      font-weight: 700;
+      line-height: 1;
+      text-shadow: none;
+    }
+
+    .arrow-icon {
+      min-width: 22px;
+      font-size: 12px;
+      background: rgba(120, 190, 255, 0.18);
+    }
+
+    .line-text {
+      display: inline-block;
+    }
+
+    .panel.bottom {
+      align-self: flex-end;
+      text-align: right;
+      margin-bottom: 40px;
+    }
+
+    #licenseNotice {
+      position: fixed;
+      right: 16px;
+      bottom: 16px;
+      max-width: min(420px, calc(100vw - 32px));
+      color: rgba(225, 236, 248, 0.78);
+      font-size: 10px;
+      line-height: 1.35;
+      text-align: right;
+      pointer-events: none;
+      z-index: 7;
+      text-shadow: 0 2px 8px rgba(0, 0, 0, 0.75);
+    }
+
+    .title {
+      color: #95d7ff;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      margin-bottom: 6px;
+    }
+  </style>
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "https://cdn.jsdelivr.net/npm/three@0.174.0/build/three.module.js"
+      }
+    }
+  </script>
+</head>
+<body>
+  <canvas id="app"></canvas>
+  <div id="divider"></div>
+  <div id="deviceHintLayer"></div>
+  <div id="hpHudLayer">
+    <div class="hp-bar-panel enemy" id="enemyHpPanel">
+      <div class="hp-bar-header">
+        <span>ENEMY HP</span>
+        <span id="enemyHpValue">100 / 100</span>
+      </div>
+      <div class="hp-bar-track"><div class="hp-bar-fill" id="enemyHpFill"></div></div>
+    </div>
+    <div class="hp-bar-panel player" id="playerHpPanel">
+      <div class="hp-bar-header">
+        <span>PLAYER HP</span>
+        <span id="playerHpValue">100 / 100</span>
+      </div>
+      <div class="hp-bar-track"><div class="hp-bar-fill" id="playerHpFill"></div></div>
+    </div>
+  </div>
+  <div id="hud">
+    <div class="panel" id="statusPanel"></div>
+    <div class="panel bottom" id="helpPanel"></div>
+  </div>
+  <div id="licenseNotice">
+    Uses three.js r174 under the MIT License<br>
+    Copyright © 2010-2026 three.js authors
+  </div>
+  <script type="module">
+import * as __threeNamespace from 'three';
+
+const __bundle = { __externals: { three: __threeNamespace } };
+
+// ./cockpitLayout.js
+(() => {
+  // Adjust these values to retune the cockpit arrangement and view split.
+  const VIEW_LAYOUT = {
+    topScreenRatio: 0.7,
+  };
+
+  const HAND_LAYOUT = {
+    leftStart: { x: -3.6, y: -1.15 },
+    rightStart: { x: 3.6, y: -1.15 },
+  };
+
+  const COCKPIT_DEVICE_LAYOUTS = [
+    {
+      id: 'missile',
+      kind: 'missile',
+      name: 'missile button',
+      anchor: { x: -5.1, y: 1.05, z: 0.45 },
+      baseSize: { x: 1.15, y: 0.42, z: 0.95 },
+      handleSize: { x: 0.26, y: 0.55, z: 0.26 },
+      handleLift: 0.38,
+      capRadius: 0.22,
+      capLift: 0.28,
+      rangeX: 0.16,
+      rangeY: 0.72,
+      axisX: false,
+      axisY: true,
+      baseColor: 0x24161a,
+      accentColor: 0xff6d6d,
+    },
+    {
+      id: 'missileArm1',
+      kind: 'toggle',
+      name: 'missile arm switch 1',
+      anchor: { x: -5.52, y: 1.96, z: 0.48 },
+      baseSize: { x: 0.34, y: 0.22, z: 0.34 },
+      handleSize: { x: 0.1, y: 0.42, z: 0.1 },
+      handleLift: 0.24,
+      capRadius: 0.08,
+      capLift: 0.18,
+      rangeX: 0.08,
+      rangeY: 0.55,
+      axisX: false,
+      axisY: true,
+      baseColor: 0x20252b,
+      accentColor: 0xffd57a,
+    },
+    {
+      id: 'missileArm2',
+      kind: 'toggle',
+      name: 'missile arm switch 2',
+      anchor: { x: -5.1, y: 1.96, z: 0.48 },
+      baseSize: { x: 0.34, y: 0.22, z: 0.34 },
+      handleSize: { x: 0.1, y: 0.42, z: 0.1 },
+      handleLift: 0.24,
+      capRadius: 0.08,
+      capLift: 0.18,
+      rangeX: 0.08,
+      rangeY: 0.55,
+      axisX: false,
+      axisY: true,
+      baseColor: 0x20252b,
+      accentColor: 0xffd57a,
+    },
+    {
+      id: 'missileArm3',
+      kind: 'toggle',
+      name: 'missile arm switch 3',
+      anchor: { x: -4.68, y: 1.96, z: 0.48 },
+      baseSize: { x: 0.34, y: 0.22, z: 0.34 },
+      handleSize: { x: 0.1, y: 0.42, z: 0.1 },
+      handleLift: 0.24,
+      capRadius: 0.08,
+      capLift: 0.18,
+      rangeX: 0.08,
+      rangeY: 0.55,
+      axisX: false,
+      axisY: true,
+      baseColor: 0x20252b,
+      accentColor: 0xffd57a,
+    },
+    {
+      id: 'leftPunch',
+      kind: 'punch',
+      name: 'left punch lever',
+      anchor: { x: -3.7, y: 0.38, z: 0.65 },
+      baseSize: { x: 1.2, y: 1.25, z: 1.1 },
+      handleSize: { x: 0.18, y: 0.9, z: 0.18 },
+      handleLift: 0.92,
+      capRadius: 0.18,
+      capLift: 0.4,
+      rangeX: 0.18,
+      rangeY: 0.95,
+      axisX: true,
+      axisY: true,
+      baseColor: 0x1b2129,
+      accentColor: 0x79ffae,
+    },
+    {
+      id: 'leftTurn',
+      kind: 'turn',
+      name: '方向転換',
+      anchor: { x: -1.75, y: -0.05, z: 0.42 },
+      baseSize: { x: 1.55, y: 0.42, z: 1.0 },
+      handleSize: { x: 0.95, y: 0.2, z: 0.24 },
+      handleLift: 0.42,
+      capRadius: 0.16,
+      capLift: 0.12,
+      rangeX: 0.85,
+      rangeY: 0.42,
+      axisX: true,
+      axisY: true,
+      baseColor: 0x1d2730,
+      accentColor: 0xffce7a,
+    },
+    {
+      id: 'move',
+      kind: 'move',
+      name: 'movement lever',
+      anchor: { x: 0, y: -0.55, z: 0.5 },
+      baseSize: { x: 1.5, y: 0.55, z: 1.4 },
+      handleSize: { x: 0.2, y: 0.95, z: 0.2 },
+      handleLift: 0.55,
+      capRadius: 0.22,
+      capLift: 0.44,
+      rangeX: 0.68,
+      rangeY: 0.9,
+      axisX: true,
+      axisY: true,
+      baseColor: 0x1d2730,
+      accentColor: 0x75caff,
+    },
+    {
+      id: 'rightTurn',
+      kind: 'turn',
+      name: '方向転換',
+      anchor: { x: 1.75, y: -0.05, z: 0.42 },
+      baseSize: { x: 1.55, y: 0.42, z: 1.0 },
+      handleSize: { x: 0.95, y: 0.2, z: 0.24 },
+      handleLift: 0.42,
+      capRadius: 0.16,
+      capLift: 0.12,
+      rangeX: 0.85,
+      rangeY: 0.42,
+      axisX: true,
+      axisY: true,
+      baseColor: 0x1d2730,
+      accentColor: 0xffce7a,
+    },
+    {
+      id: 'rightPunch',
+      kind: 'punch',
+      name: 'right punch lever',
+      anchor: { x: 3.7, y: 0.38, z: 0.65 },
+      baseSize: { x: 1.2, y: 1.25, z: 1.1 },
+      handleSize: { x: 0.18, y: 0.9, z: 0.18 },
+      handleLift: 0.92,
+      capRadius: 0.18,
+      capLift: 0.4,
+      rangeX: 0.18,
+      rangeY: 0.95,
+      axisX: true,
+      axisY: true,
+      baseColor: 0x1b2129,
+      accentColor: 0xff9d79,
+    },
+    {
+      id: 'gatling',
+      kind: 'gatling',
+      name: 'gatling lever',
+      anchor: { x: 5.45, y: 0.35, z: 0.62 },
+      baseSize: { x: 1.25, y: 0.48, z: 1.05 },
+      handleSize: { x: 0.18, y: 0.86, z: 0.18 },
+      handleLift: 0.56,
+      capRadius: 0.18,
+      capLift: 0.38,
+      rangeX: 0.16,
+      rangeY: 0.95,
+      axisX: false,
+      axisY: true,
+      baseColor: 0x1b1f2d,
+      accentColor: 0x7ad0ff,
+    },
+    {
+      id: 'gatlingCrank',
+      kind: 'crank',
+      name: 'gatling reload crank',
+      anchor: { x: 5.45, y: 1.82, z: 0.54 },
+      baseSize: { x: 1.05, y: 0.28, z: 0.55 },
+      handleSize: { x: 0.72, y: 0.12, z: 0.12 },
+      handleLift: 0.26,
+      capRadius: 0.11,
+      capLift: 0.0,
+      rangeX: 0.9,
+      rangeY: 0.9,
+      axisX: true,
+      axisY: true,
+      baseColor: 0x1f252e,
+      accentColor: 0x9fe8ff,
+    },
+  ];
+  __bundle['./cockpitLayout.js'] = { VIEW_LAYOUT, HAND_LAYOUT, COCKPIT_DEVICE_LAYOUTS };
+})();
+
+// ./tuning.js
+(() => {
+  const GAME_TUNING = {
+    arenaLimit: 15.5,
+    player: {
+      moveSpeed: 4.0,
+      turnSpeed: 0.6,
+      moveResponse: 9,
+      velocityDamping: 0.92,
+      guardKnockbackSpeed: 1.2,
+      guardImpactDuration: 0.18,
+      guardImpactShake: 0.08,
+      hitKnockbackSpeed: 5.8,
+      hitKnockbackDuration: 0.45,
+      punchStaminaMax: 10,
+      punchStaminaCost: 4,
+      punchChargedStaminaCost: 3,
+      punchStaminaRecoveryPerSecond: 1.0,
+      punchDuration: 0.42,
+      punchExtendSpeed: 3.1,
+      punchRetractSpeed: 3.8,
+      leftPunchEndCrossOffset: -1.0,
+      rightPunchEndCrossOffset: -1.0,
+      punchDamage: 3,
+      punchChargeFirstBeatDuration: 0.75,
+      punchChargeBeatDuration: 1.75,
+      punchChargeBeatCount: 4,
+      punchChargeAcceptEarlySeconds: 0.9,
+      punchChargeAcceptLateSeconds: 1.2,
+      punchChargeDisplayFlashSeconds: 0.9,
+      chargedPunchDamageMultiplier: 2,
+      chargedPunchDashSpeed: 6.6,
+      chargedPunchDashDuration: 0.42,
+      missileCooldown: 0.85,
+      healthRecoveryPerSecond: 1.4,
+    },
+    enemy: {
+      turnSpeed: 0.38,
+      jumpHeight: 0.8,
+      jumpDuration: 0.92,
+      jumpCooldown: 0.9,
+      smallReactHits: 20,
+      smallReactDuration: 0.4,
+      downLaunchDuration: 0.38,
+      downLieDuration: 1.05,
+      downRecoverDuration: 0.52,
+      downLaunchSpeed: 4.4,
+      downLaunchHeight: 0.95,
+      jumpForwardDistance: 2.8,
+      jumpRetreatDistance: 1.8,
+      preferredMinDistance: 5.5,
+      preferredMaxDistance: 8.8,
+      beamChargeDuration: 3.7,
+      beamFireDuration: 3.0,
+      beamCooldown: 7.2,
+      postBeamIdleDuration: 2.8,
+      beamRange: 18,
+      beamWidth: 1.25,
+      beamDamage: 2,
+      beamHitInterval: 0.14,
+      healthRecoveryPerSecond: 1.1,
+    },
+    missile: {
+      speed: 14,
+      ttl: 3.6,
+      damage: 18,
+      hitRadius: 1.15,
+    },
+    gatling: {
+      maxAmmo: 100,
+      ammoPerLamp: 10,
+      bulletsPerRotation: 10,
+      fireInterval: 0.05,
+      speed: 24,
+      ttl: 1.2,
+      damage: 2.4,
+      hitRadius: 0.38,
+      spread: 0.01,
+    },
+    combat: {
+      fistHitRadius: 1.45,
+      knockback: 2.2,
+      punchMaxHitsPerAttack: 6,
+      punchRepeatKnockbackMultiplier: 0.2,
+      punchActiveExtendThreshold: 0.2,
+      punchActiveRetractThreshold: 0.72,
+      punchVerticalAllowance: 2.2,
+      punchHitInterval: 0.05,
+      punchHitStopSeconds: 0.1,
+      chargedPunchStopDistance: 1.7,
+      chargedPunchCatchWidth: 1.35,
+      playerPushShare: 0.84,
+    },
+    debug: {
+      showCombatVolumes: false,
+    },
+  };
+  __bundle['./tuning.js'] = { GAME_TUNING };
+})();
+
+// ./cockpit.js
+(() => {
+  const THREE = __bundle.__externals.three;
+  const { COCKPIT_DEVICE_LAYOUTS, HAND_LAYOUT } = __bundle['./cockpitLayout.js'];
+  const { GAME_TUNING } = __bundle['./tuning.js'];
+  const HAND_MOVE_SPEED = 10;
+  const NAV_THRESHOLD = 0.55;
+  const NAV_RESET_THRESHOLD = 0.3;
+  const HAND_SIDES = ['left', 'right'];
+  const PUNCH_SIDES = HAND_SIDES;
+  const PUNCH_CHARGE_FIRST_BEAT_SECONDS = GAME_TUNING.player.punchChargeFirstBeatDuration
+    ?? GAME_TUNING.player.punchChargeBeatDuration;
+  const PUNCH_CHARGE_BEAT_COUNT = GAME_TUNING.player.punchChargeBeatCount;
+  const PUNCH_CHARGE_BEAT_DURATIONS = Array.from(
+    { length: PUNCH_CHARGE_BEAT_COUNT },
+    (_, index) => (index === 0 ? PUNCH_CHARGE_FIRST_BEAT_SECONDS : GAME_TUNING.player.punchChargeBeatDuration)
+  );
+  const PUNCH_CHARGE_THRESHOLDS = PUNCH_CHARGE_BEAT_DURATIONS.reduce((thresholds, duration) => {
+    const previousThreshold = thresholds.length > 0 ? thresholds[thresholds.length - 1] : 0;
+    thresholds.push(previousThreshold + duration);
+    return thresholds;
+  }, []);
+  const PUNCH_CHARGE_SECONDS = PUNCH_CHARGE_THRESHOLDS[PUNCH_CHARGE_THRESHOLDS.length - 1] ?? 0;
+  const PUNCH_CHARGE_ACCEPT_EARLY_SECONDS = GAME_TUNING.player.punchChargeAcceptEarlySeconds;
+  const PUNCH_CHARGE_ACCEPT_LATE_SECONDS = GAME_TUNING.player.punchChargeAcceptLateSeconds;
+  const PUNCH_CHARGE_MAX_SECONDS = PUNCH_CHARGE_SECONDS + PUNCH_CHARGE_ACCEPT_LATE_SECONDS;
+  const PUNCH_CHARGE_TRACK_MAX_SECONDS = PUNCH_CHARGE_MAX_SECONDS
+    + (PUNCH_CHARGE_BEAT_DURATIONS[PUNCH_CHARGE_BEAT_DURATIONS.length - 1] ?? 0);
+  const PUNCH_CHARGE_DISPLAY_FLASH_SECONDS = GAME_TUNING.player.punchChargeDisplayFlashSeconds;
+  const HAND_MATERIAL_CONFIG = {
+    left: { color: 0x62dbff },
+    right: { color: 0xffb36f },
+  };
+  const EMPTY_TURN_COMMAND = { turnTargetAngle: null, turnSpin: 0 };
+  const MISSILE_ARM_SWITCH_IDS = ['missileArm1', 'missileArm2', 'missileArm3'];
+  const GATLING_AMMO_PER_LAMP = GAME_TUNING.gatling.ammoPerLamp;
+  const GATLING_LAMP_COUNT = GAME_TUNING.gatling.maxAmmo / GATLING_AMMO_PER_LAMP;
+  const PUNCH_STAMINA_LAMP_COUNT = GAME_TUNING.player.punchStaminaMax;
+
+  function clamp(value, min, max) {
+    return Math.min(max, Math.max(min, value));
+  }
+
+  function damp(current, target, speed, dt) {
+    return THREE.MathUtils.lerp(current, target, 1 - Math.exp(-speed * dt));
+  }
+
+  function createChargeIndicatorLamps(device) {
+    if (!PUNCH_SIDES.includes(device.id.replace('Punch', ''))) {
+      return [];
+    }
+
+    const lamps = [];
+    const lampSpacing = 0.2;
+    const startZ = -device.baseSize.z * 0.28;
+    const sideOffset = device.id === 'leftPunch'
+      ? device.baseSize.x * 0.5 + 0.16
+      : -device.baseSize.x * 0.5 - 0.16;
+    for (let index = 0; index < 4; index += 1) {
+      const lampMaterial = new THREE.MeshStandardMaterial({
+        color: 0x1c2731,
+        emissive: 0x000000,
+        roughness: 0.38,
+        metalness: 0.3,
+      });
+      const lamp = new THREE.Mesh(new THREE.SphereGeometry(0.07, 12, 12), lampMaterial);
+      lamp.position.set(sideOffset, 0.18, startZ + lampSpacing * index);
+      device.mount.add(lamp);
+      lamps.push(lamp);
+    }
+
+    return lamps;
+  }
+
+  function createPunchStaminaLamps(device) {
+    if (!PUNCH_SIDES.includes(device.id.replace('Punch', ''))) {
+      return [];
+    }
+
+    const lamps = [];
+    const columns = 5;
+    const spacingX = 0.19;
+    const spacingY = 0.14;
+    const startX = -spacingX * ((columns - 1) * 0.5);
+    const startY = device.baseSize.y * 0.2;
+    const frontZ = device.baseSize.z * 0.56;
+    for (let index = 0; index < PUNCH_STAMINA_LAMP_COUNT; index += 1) {
+      const lampMaterial = new THREE.MeshStandardMaterial({
+        color: 0x162028,
+        emissive: 0x000000,
+        roughness: 0.36,
+        metalness: 0.28,
+      });
+      const lamp = new THREE.Mesh(new THREE.SphereGeometry(0.04, 12, 12), lampMaterial);
+      lamp.position.set(
+        startX + spacingX * (index % columns),
+        startY + spacingY * Math.floor(index / columns),
+        frontZ
+      );
+      lamp.scale.z = 0.72;
+      device.mount.add(lamp);
+      lamps.push(lamp);
+    }
+
+    return lamps;
+  }
+
+  function createMissileIndicatorLamps(device) {
+    if (device.id !== 'missile') {
+      return [];
+    }
+
+    const lamps = [];
+    const startX = -0.24;
+    const spacing = 0.24;
+    for (let index = 0; index < 3; index += 1) {
+      const lampMaterial = new THREE.MeshStandardMaterial({
+        color: 0x2b2016,
+        emissive: 0x000000,
+        roughness: 0.34,
+        metalness: 0.3,
+      });
+      const topLamp = new THREE.Mesh(new THREE.SphereGeometry(0.055, 12, 12), lampMaterial);
+      topLamp.position.set(startX + spacing * index, -0.02, device.baseSize.z * 0.34);
+      device.mount.add(topLamp);
+      lamps.push(topLamp);
+
+      const frontLamp = new THREE.Mesh(new THREE.SphereGeometry(0.05, 12, 12), lampMaterial.clone());
+      frontLamp.position.set(startX + spacing * index, -0.1, device.baseSize.z * 0.55);
+      frontLamp.scale.z = 0.75;
+      device.mount.add(frontLamp);
+      lamps.push(frontLamp);
+    }
+
+    return lamps;
+  }
+
+  function createGatlingIndicatorLamps(device) {
+    if (device.id !== 'gatling') {
+      return [];
+    }
+
+    const lamps = [];
+    const columns = 5;
+    const spacingX = 0.22;
+    const spacingY = 0.18;
+    const startX = -spacingX * ((columns - 1) * 0.5);
+    const startY = -0.08;
+    const frontZ = device.baseSize.z * 0.56;
+    for (let index = 0; index < GATLING_LAMP_COUNT; index += 1) {
+      const lampMaterial = new THREE.MeshStandardMaterial({
+        color: 0x182028,
+        emissive: 0x000000,
+        roughness: 0.34,
+        metalness: 0.32,
+      });
+      const lamp = new THREE.Mesh(new THREE.SphereGeometry(0.045, 12, 12), lampMaterial);
+      lamp.position.set(
+        startX + spacingX * (index % columns),
+        startY + spacingY * Math.floor(index / columns),
+        frontZ
+      );
+      lamp.scale.z = 0.7;
+      device.mount.add(lamp);
+      lamps.push(lamp);
+    }
+
+    return lamps;
+  }
+
+  function isChargedPunchWindow(chargeSeconds) {
+    return chargeSeconds >= PUNCH_CHARGE_SECONDS - PUNCH_CHARGE_ACCEPT_EARLY_SECONDS
+      && chargeSeconds <= PUNCH_CHARGE_SECONDS + PUNCH_CHARGE_ACCEPT_LATE_SECONDS;
+  }
+
+  function hasPunchChargeLampLit(chargeSeconds) {
+    return chargeSeconds >= (PUNCH_CHARGE_THRESHOLDS[0] ?? Number.POSITIVE_INFINITY);
+  }
+
+  function updateChargeIndicatorLamps(device, dt, disabled = false) {
+    if (device.chargeLamps.length === 0) {
+      return;
+    }
+
+    if (disabled) {
+      const blinkVisible = Math.sin(performance.now() * 0.018) > 0;
+      device.chargeLamps.forEach((lamp) => {
+        const targetIntensity = blinkVisible ? 0.22 : 0.04;
+        lamp.material.color.setHex(0x2a1b1b);
+        lamp.material.emissive.setHex(0x7a1f1f);
+        lamp.material.emissiveIntensity = damp(lamp.material.emissiveIntensity ?? 0, targetIntensity, 10, dt);
+      });
+      return;
+    }
+
+    const fourthBeatStart = PUNCH_CHARGE_SECONDS;
+    const fourthBeatBlinking = device.chargeSeconds >= fourthBeatStart
+      && device.chargeSeconds < fourthBeatStart + PUNCH_CHARGE_DISPLAY_FLASH_SECONDS;
+    const blinkVisible = Math.sin(performance.now() * 0.03) > 0;
+
+    device.chargeLamps.forEach((lamp, index) => {
+      const lampThreshold = PUNCH_CHARGE_THRESHOLDS[index] ?? PUNCH_CHARGE_SECONDS;
+      const isFourthLamp = index === device.chargeLamps.length - 1;
+      const isLit = isFourthLamp && fourthBeatBlinking
+        ? blinkVisible
+        : device.chargeSeconds >= lampThreshold;
+      const targetIntensity = isLit ? 1.8 : 0;
+      const nextIntensity = damp(lamp.material.emissiveIntensity ?? 0, targetIntensity, 12, dt);
+      lamp.material.color.setHex(isLit ? 0xbdefff : 0x1c2731);
+      lamp.material.emissive.setHex(isLit ? 0x48bfff : 0x000000);
+      lamp.material.emissiveIntensity = nextIntensity;
+    });
+  }
+
+  function updatePunchStaminaLamps(device, staminaValue, canPunch, disabled, dt) {
+    if (device.staminaLamps.length === 0) {
+      return;
+    }
+
+    if (disabled) {
+      const blinkVisible = Math.sin(performance.now() * 0.018) > 0;
+      device.staminaLamps.forEach((lamp) => {
+        lamp.material.color.setHex(0x221818);
+        lamp.material.emissive.setHex(0x7a1f1f);
+        lamp.material.emissiveIntensity = damp(lamp.material.emissiveIntensity ?? 0, blinkVisible ? 0.2 : 0.05, 10, dt);
+      });
+      return;
+    }
+
+    const litCount = Math.max(0, Math.min(device.staminaLamps.length, Math.floor(staminaValue + 0.0001)));
+    device.staminaLamps.forEach((lamp, index) => {
+      const isLit = index < litCount;
+      const litColor = canPunch ? 0xb7f4ff : 0xffb38a;
+      const emissiveColor = canPunch ? 0x39b7ff : 0xff6a1f;
+      const targetIntensity = isLit ? (canPunch ? 1.55 : 0.85) : (canPunch ? 0.03 : 0.18);
+      lamp.material.color.setHex(isLit ? litColor : 0x162028);
+      lamp.material.emissive.setHex(isLit || !canPunch ? emissiveColor : 0x000000);
+      lamp.material.emissiveIntensity = damp(lamp.material.emissiveIntensity ?? 0, targetIntensity, 12, dt);
+    });
+  }
+
+  function updateMissileIndicatorLamps(device, armedDevices, dt) {
+    if (device.indicatorLamps.length === 0) {
+      return;
+    }
+
+    device.indicatorLamps.forEach((lamp, index) => {
+      const armed = armedDevices[Math.floor(index / 2)]?.toggleOn === true;
+      const targetIntensity = armed ? 1.6 : 0;
+      lamp.material.color.setHex(armed ? 0xffd98a : 0x2b2016);
+      lamp.material.emissive.setHex(armed ? 0xffa12a : 0x000000);
+      lamp.material.emissiveIntensity = damp(lamp.material.emissiveIntensity ?? 0, targetIntensity, 12, dt);
+    });
+  }
+
+  function updateGatlingIndicatorLamps(device, ammoCount, dt) {
+    if (device.indicatorLamps.length === 0) {
+      return;
+    }
+
+    const litCount = Math.max(0, Math.min(device.indicatorLamps.length, Math.floor(ammoCount / GATLING_AMMO_PER_LAMP)));
+    device.indicatorLamps.forEach((lamp, index) => {
+      const isLit = index < litCount;
+      lamp.material.color.setHex(isLit ? 0xb8f0ff : 0x182028);
+      lamp.material.emissive.setHex(isLit ? 0x3aa8ff : 0x000000);
+      lamp.material.emissiveIntensity = damp(lamp.material.emissiveIntensity ?? 0, isLit ? 1.5 : 0, 12, dt);
+    });
+  }
+
+  function createDevice(scene, spec) {
+    const anchor = new THREE.Vector3(spec.anchor.x, spec.anchor.y, spec.anchor.z);
+    const baseSize = new THREE.Vector3(spec.baseSize.x, spec.baseSize.y, spec.baseSize.z);
+    const handleSize = new THREE.Vector3(spec.handleSize.x, spec.handleSize.y, spec.handleSize.z);
+    const baseMaterial = new THREE.MeshStandardMaterial({ color: spec.baseColor, roughness: 0.75, metalness: 0.15 });
+    const accentMaterial = new THREE.MeshStandardMaterial({ color: spec.accentColor, roughness: 0.55, metalness: 0.35, emissive: 0x000000 });
+
+    const mount = new THREE.Group();
+    mount.position.copy(anchor);
+
+    const pedestal = new THREE.Mesh(new THREE.BoxGeometry(baseSize.x, baseSize.y, baseSize.z), baseMaterial);
+    mount.add(pedestal);
+
+    const handle = new THREE.Group();
+    const stem = new THREE.Mesh(new THREE.BoxGeometry(handleSize.x, handleSize.y, handleSize.z), accentMaterial);
+    stem.position.y = spec.handleLift;
+    handle.add(stem);
+
+    const cap = new THREE.Mesh(new THREE.SphereGeometry(spec.capRadius, 18, 18), accentMaterial);
+    cap.position.y = spec.handleLift + spec.capLift;
+    handle.add(cap);
+
+    mount.add(handle);
+
+    const highlight = new THREE.Mesh(
+      new THREE.BoxGeometry(baseSize.x + 0.12, baseSize.y + 0.08, baseSize.z + 0.12),
+      new THREE.MeshStandardMaterial({ color: spec.accentColor, transparent: true, opacity: 0.12, roughness: 1 })
+    );
+    mount.add(highlight);
+
+    scene.add(mount);
+
+    return {
+      ...spec,
+      anchor,
+      baseSize,
+      handleSize,
+      mount,
+      handle,
+      highlight,
+      material: accentMaterial,
+      inputX: 0,
+      inputY: 0,
+      outputX: 0,
+      outputY: 0,
+      triggerLatched: false,
+      toggleLatched: false,
+      toggleOn: false,
+      toggleVisual: -1,
+      chargeLatched: false,
+      chargeSeconds: 0,
+      rotationAccumulator: 0,
+      lastAngle: null,
+      chargeLamps: [],
+      staminaLamps: [],
+      indicatorLamps: [],
+    };
+  }
+
+  function selectNearestDevice(devices, point, blockedDeviceId = null) {
+    let best = null;
+    let bestDistance = Infinity;
+    for (const device of devices) {
+      if (blockedDeviceId === device.id) {
+        continue;
+      }
+      const dx = point.x - device.anchor.x;
+      const dy = point.y - device.anchor.y;
+      const distance = Math.hypot(dx, dy);
+      if (distance < bestDistance) {
+        bestDistance = distance;
+        best = device;
+      }
+    }
+    return best;
+  }
+
+  function selectNextDevice(devices, fromPoint, direction, currentId, blockedDeviceId) {
+    let best = null;
+    let bestScore = -Infinity;
+
+    for (const device of devices) {
+      if (device.id === currentId || device.id === blockedDeviceId) {
+        continue;
+      }
+
+      const deltaX = device.anchor.x - fromPoint.x;
+      const deltaY = device.anchor.y - fromPoint.y;
+      const distance = Math.hypot(deltaX, deltaY);
+      if (distance < 0.001) {
+        continue;
+      }
+
+      const alignment = (deltaX / distance) * direction.x + (deltaY / distance) * direction.y;
+      if (alignment < 0.35) {
+        continue;
+      }
+
+      const score = alignment * 4 - distance;
+      if (score > bestScore) {
+        bestScore = score;
+        best = device;
+      }
+    }
+
+    return best;
+  }
+
+  function getDominantDirection(motion) {
+    if (Math.abs(motion.x) < NAV_THRESHOLD && Math.abs(motion.y) < NAV_THRESHOLD) {
+      return null;
+    }
+
+    if (Math.abs(motion.x) >= Math.abs(motion.y)) {
+      return { x: Math.sign(motion.x), y: 0 };
+    }
+
+    return { x: 0, y: Math.sign(motion.y) };
+  }
+
+  function getTurnCommand(turnInputX, turnInputY) {
+    if (Math.abs(turnInputX) < NAV_THRESHOLD && Math.abs(turnInputY) < NAV_THRESHOLD) {
+      return { turnTargetAngle: null, turnSpin: 0 };
+    }
+
+    if (Math.abs(turnInputX) >= Math.abs(turnInputY)) {
+      return {
+        turnTargetAngle: null,
+        turnSpin: turnInputX < 0 ? -1 : 1,
+      };
+    }
+
+    return {
+      turnTargetAngle: turnInputY > 0 ? 0 : Math.PI,
+      turnSpin: 0,
+    };
+  }
+
+  function describeHand(hand, deviceMap) {
+    if (hand.deviceId) {
+      return `gripping ${deviceMap.get(hand.deviceId).name}`;
+    }
+    if (hand.hoverId) {
+      return `ready on ${deviceMap.get(hand.hoverId).name}`;
+    }
+    return 'free';
+  }
+
+  function getDeviceHintContent(deviceId) {
+    const hintMap = {
+      move: {
+        title: '移動レバー',
+        instructionLines: ['{HAND} 倒す 移動'],
+      },
+      leftTurn: {
+        title: '方向転換',
+        instructionLines: ['{HAND} ←→ 旋回', '{HAND} ↑↓ 向き変更'],
+      },
+      rightTurn: {
+        title: '方向転換',
+        instructionLines: ['{HAND} ←→ 旋回', '{HAND} ↑↓ 向き変更'],
+      },
+      turn: {
+        title: '方向転換機',
+        instructionLines: ['{HAND} ←→ 旋回', '{HAND} ↑↓ 向き変更'],
+      },
+      leftPunch: {
+        title: '左パンチレバー',
+        instructionLines: ['L ↓ ためる', 'L ↑ パンチ', 'L → ガード'],
+      },
+      rightPunch: {
+        title: '右パンチレバー',
+        instructionLines: ['R ↓ ためる', 'R ↑ パンチ', 'R ← ガード'],
+      },
+      missile: {
+        title: 'ミサイルボタン',
+        instructionLines: ['{HAND} ↓ 発射'],
+      },
+      missileArm1: {
+        title: 'ミサイル解放1',
+        instructionLines: ['{HAND} ←→ 選択', '{HAND} ↓ オン'],
+      },
+      missileArm2: {
+        title: 'ミサイル解放2',
+        instructionLines: ['{HAND} ←→ 選択', '{HAND} ↓ オン'],
+      },
+      missileArm3: {
+        title: 'ミサイル解放3',
+        instructionLines: ['{HAND} ←→ 選択', '{HAND} ↓ オン'],
+      },
+      gatling: {
+        title: 'ガトリングレバー',
+        instructionLines: ['{HAND} ↓ 連射'],
+      },
+      gatlingCrank: {
+        title: '装填ハンドル',
+        instructionLines: ['{HAND} 回す 装填'],
+      },
+    };
+    return hintMap[deviceId] ?? { title: deviceId, instructionLines: [] };
+  }
+
+  function buildActiveDeviceHints(hands, deviceMap) {
+    const topPlacementIds = new Set(['missileArm1', 'missileArm2', 'missileArm3', 'gatlingCrank']);
+    const raisedBelowIds = new Set(['leftPunch', 'rightPunch', 'move']);
+    return HAND_SIDES.flatMap((side) => {
+      const hand = hands[side];
+      if (!hand.deviceId) {
+        return [];
+      }
+
+      const device = deviceMap.get(hand.deviceId);
+      const hint = getDeviceHintContent(device.id);
+      const handLabel = side === 'left' ? 'L' : 'R';
+      const placeAbove = topPlacementIds.has(device.id);
+      const offsetY = placeAbove
+        ? device.baseSize.y * 0.85 + 0.3
+        : raisedBelowIds.has(device.id)
+          ? -(device.baseSize.y * 0.28 + 0.04)
+          : -(device.baseSize.y * 0.85 + 0.28);
+      return [{
+        side,
+        deviceId: device.id,
+        title: hint.title,
+        instructionLines: (hint.instructionLines ?? []).map((line) => line.replaceAll('{HAND}', handLabel)),
+        worldPosition: {
+          x: device.anchor.x,
+          y: device.anchor.y + offsetY,
+          z: device.anchor.z,
+        },
+        placement: placeAbove ? 'above' : 'below',
+      }];
+    });
+  }
+
+  function getPunchDeviceId(side) {
+    return `${side}Punch`;
+  }
+
+  function getPunchOutputKey(side) {
+    return `${side}PunchFire`;
+  }
+
+  function getChargedPunchOutputKey(side) {
+    return `${side}ChargedPunchFire`;
+  }
+
+  function getPunchGuardOutputKey(side) {
+    return `${side}PunchGuard`;
+  }
+
+  function getPunchForwardHoldOutputKey(side) {
+    return `${side}PunchHoldForward`;
+  }
+
+  function getPunchBackPreviewOutputKey(side) {
+    return `${side}PunchBackPreview`;
+  }
+
+  function getPunchHoldOutputKey(side) {
+    return `${side}PunchHoldBack`;
+  }
+
+  function getOtherSide(side) {
+    return side === 'left' ? 'right' : 'left';
+  }
+
+  function setMissileArmSwitchState(device, nextOn) {
+    device.toggleOn = nextOn;
+  }
+
+  function resetMissileArmSwitches(devices) {
+    devices.forEach((device) => {
+      setMissileArmSwitchState(device, false);
+      device.toggleLatched = false;
+    });
+  }
+
+  function isMissileArmSwitchId(deviceId) {
+    return MISSILE_ARM_SWITCH_IDS.includes(deviceId);
+  }
+
+  function createPunchOutputs() {
+    return Object.fromEntries(
+      PUNCH_SIDES.flatMap((side) => [
+        [getPunchOutputKey(side), false],
+        [getChargedPunchOutputKey(side), false],
+        [getPunchGuardOutputKey(side), false],
+        [getPunchForwardHoldOutputKey(side), false],
+        [getPunchBackPreviewOutputKey(side), false],
+        [getPunchHoldOutputKey(side), false],
+      ])
+    );
+  }
+
+  function resetPunchCharge(device) {
+    device.triggerLatched = false;
+    device.chargeLatched = false;
+    device.chargeSeconds = 0;
+  }
+
+  function createHandState(side, material) {
+    const { x, y } = HAND_LAYOUT[`${side}Start`];
+    return {
+      side,
+      position: new THREE.Vector2(x, y),
+      targetPosition: new THREE.Vector2(x, y),
+      mesh: new THREE.Mesh(new THREE.SphereGeometry(0.18, 18, 18), material),
+      deviceId: null,
+      gripHeld: false,
+      hoverId: null,
+      navLatched: false,
+      motion: { x: 0, y: 0 },
+    };
+  }
+
+  function syncHandMeshPosition(hand) {
+    hand.mesh.position.set(hand.position.x, hand.position.y, 1.35);
+  }
+
+  function resetHandState(hand) {
+    const { x, y } = HAND_LAYOUT[`${hand.side}Start`];
+    hand.position.set(x, y);
+    hand.targetPosition.set(x, y);
+    hand.deviceId = null;
+    hand.gripHeld = false;
+    hand.hoverId = null;
+    hand.navLatched = false;
+    syncHandMeshPosition(hand);
+  }
+
+  function buildHandSummary(hands, mapper) {
+    return Object.fromEntries(HAND_SIDES.map((side) => [side, mapper(hands[side])]));
+  }
+
+  function createCockpit(cockpitScene) {
+    const root = new THREE.Group();
+    cockpitScene.add(root);
+
+    const shellMaterial = new THREE.MeshStandardMaterial({ color: 0x1a2027, roughness: 0.95, metalness: 0.06 });
+    const trimMaterial = new THREE.MeshStandardMaterial({ color: 0x2a3947, roughness: 0.8, metalness: 0.2 });
+
+    const panel = new THREE.Mesh(new THREE.BoxGeometry(12, 0.32, 3.6), shellMaterial);
+    panel.position.set(0, -1.9, 0.65);
+    panel.rotation.x = -0.08;
+    root.add(panel);
+
+    const dash = new THREE.Mesh(new THREE.BoxGeometry(11.5, 2.7, 0.45), trimMaterial);
+    dash.position.set(0, 0.15, -1.7);
+    root.add(dash);
+
+    const canopyFrame = new THREE.Mesh(new THREE.BoxGeometry(12.5, 0.24, 6.6), trimMaterial);
+    canopyFrame.position.set(0, 3.1, -0.2);
+    root.add(canopyFrame);
+
+    const devices = COCKPIT_DEVICE_LAYOUTS.map((layout) => createDevice(cockpitScene, layout));
+    for (const device of devices) {
+      device.chargeLamps = createChargeIndicatorLamps(device);
+      device.staminaLamps = createPunchStaminaLamps(device);
+      device.indicatorLamps = [
+        ...createMissileIndicatorLamps(device),
+        ...createGatlingIndicatorLamps(device),
+      ];
+    }
+
+    const deviceMap = new Map(devices.map((device) => [device.id, device]));
+    const turnDevices = devices.filter((device) => device.kind === 'turn');
+    const missileArmDevices = MISSILE_ARM_SWITCH_IDS.map((id) => deviceMap.get(id));
+
+    const handMaterials = Object.fromEntries(
+      HAND_SIDES.map((side) => [
+        side,
+        new THREE.MeshStandardMaterial({
+          color: HAND_MATERIAL_CONFIG[side].color,
+          roughness: 0.35,
+          metalness: 0.3,
+        }),
+      ])
+    );
+
+    const hands = Object.fromEntries(
+      HAND_SIDES.map((side) => [side, createHandState(side, handMaterials[side])])
+    );
+
+    for (const side of HAND_SIDES) {
+      syncHandMeshPosition(hands[side]);
+      cockpitScene.add(hands[side].mesh);
+    }
+
+    function releaseHand(hand) {
+      hand.deviceId = null;
+    }
+
+    function focusHandOnDevice(hand, device) {
+      if (!device) {
+        return;
+      }
+      hand.hoverId = device.id;
+      hand.targetPosition.copy(device.anchor);
+    }
+
+    function navigateHand(hand, motion, otherHand) {
+      const direction = getDominantDirection(motion);
+      if (!direction) {
+        if (Math.abs(motion.x) < NAV_RESET_THRESHOLD && Math.abs(motion.y) < NAV_RESET_THRESHOLD) {
+          hand.navLatched = false;
+        }
+        return;
+      }
+
+      if (hand.navLatched) {
+        return;
+      }
+
+      hand.navLatched = true;
+      const currentPoint = hand.hoverId ? deviceMap.get(hand.hoverId).anchor : hand.targetPosition;
+      const nextDevice = selectNextDevice(devices, currentPoint, direction, hand.hoverId, otherHand.deviceId);
+      if (nextDevice) {
+        focusHandOnDevice(hand, nextDevice);
+      }
+    }
+
+    function navigateMissileArmSwitch(hand, motion, otherHand) {
+      if (Math.abs(motion.x) < NAV_THRESHOLD) {
+        if (Math.abs(motion.x) < NAV_RESET_THRESHOLD) {
+          hand.navLatched = false;
+        }
+        return;
+      }
+
+      if (hand.navLatched) {
+        return;
+      }
+
+      const currentIndex = MISSILE_ARM_SWITCH_IDS.indexOf(hand.deviceId);
+      if (currentIndex === -1) {
+        return;
+      }
+
+      const direction = motion.x > 0 ? 1 : -1;
+      const nextIndex = currentIndex + direction;
+      const nextDeviceId = MISSILE_ARM_SWITCH_IDS[nextIndex];
+      if (!nextDeviceId || nextDeviceId === otherHand.deviceId) {
+        hand.navLatched = true;
+        return;
+      }
+
+      hand.navLatched = true;
+      const nextDevice = deviceMap.get(nextDeviceId);
+      hand.deviceId = nextDevice.id;
+      focusHandOnDevice(hand, nextDevice);
+    }
+
+    function updateHand(hand, motion, grip, otherHand, dt) {
+      if (hand.deviceId) {
+        const device = deviceMap.get(hand.deviceId);
+        if (isMissileArmSwitchId(hand.deviceId)) {
+          navigateMissileArmSwitch(hand, motion, otherHand);
+        }
+        hand.hoverId = hand.deviceId;
+        hand.targetPosition.copy(deviceMap.get(hand.deviceId).anchor);
+      } else {
+        navigateHand(hand, motion, otherHand);
+      }
+
+      if (grip && !hand.gripHeld) {
+        const target = hand.hoverId ? deviceMap.get(hand.hoverId) : selectNearestDevice(devices, hand.position, otherHand.deviceId);
+        hand.deviceId = target ? target.id : null;
+        if (target) {
+          focusHandOnDevice(hand, target);
+        }
+      }
+      if (!grip && hand.gripHeld) {
+        releaseHand(hand);
+      }
+      hand.gripHeld = grip;
+
+      hand.position.x = damp(hand.position.x, hand.targetPosition.x, HAND_MOVE_SPEED, dt);
+      hand.position.y = damp(hand.position.y, hand.targetPosition.y, HAND_MOVE_SPEED, dt);
+      syncHandMeshPosition(hand);
+
+      if (!hand.deviceId && !hand.hoverId) {
+        hand.hoverId = selectNearestDevice(devices, hand.position, otherHand.deviceId)?.id ?? null;
+      }
+    }
+
+    function updateDeviceState(device, dt, activeHands) {
+      let targetX = 0;
+      let targetY = 0;
+      let engaged = false;
+
+      for (const hand of activeHands) {
+        if (hand.deviceId !== device.id) {
+          continue;
+        }
+        engaged = true;
+        targetX = device.axisX ? clamp(hand.motion.x, -1, 1) : 0;
+        targetY = device.axisY ? clamp(hand.motion.y, -1, 1) : 0;
+      }
+
+      device.inputX = engaged ? targetX : 0;
+      device.inputY = engaged ? targetY : 0;
+
+      device.outputX = damp(device.outputX, engaged ? targetX : 0, engaged ? 18 : 10, dt);
+      device.outputY = damp(device.outputY, engaged ? targetY : 0, engaged ? 18 : 10, dt);
+
+      if (device.kind === 'move') {
+        device.handle.rotation.z = -device.outputX * 0.45;
+        device.handle.rotation.x = -device.outputY * 0.5;
+      } else if (device.kind === 'turn') {
+        device.handle.rotation.z = device.outputX * 0.55;
+        device.handle.rotation.x = -device.outputY * 0.35;
+      } else if (device.kind === 'missile') {
+        device.handle.position.y = device.outputY * 0.22;
+        device.handle.rotation.x = -device.outputY * 0.25;
+      } else if (device.kind === 'gatling') {
+        device.handle.position.y = device.outputY * 0.22;
+        device.handle.rotation.x = -device.outputY * 0.28;
+      } else if (device.kind === 'crank') {
+        const crankAngle = Math.atan2(device.outputY, device.outputX || 0.0001);
+        device.handle.rotation.z = crankAngle;
+        device.handle.rotation.y = Math.hypot(device.outputX, device.outputY) * 0.18;
+      } else if (device.kind === 'toggle') {
+        device.toggleVisual = damp(device.toggleVisual, device.toggleOn ? 1 : -1, 14, dt);
+        device.handle.position.y = 0.05 + device.toggleVisual * 0.06;
+        device.handle.rotation.x = -device.toggleVisual * 0.42;
+      } else {
+        device.handle.rotation.z = -device.outputX * 0.35;
+        device.handle.rotation.x = -device.outputY * 0.7;
+      }
+
+      const highlighted = engaged || hands.left.hoverId === device.id || hands.right.hoverId === device.id;
+      device.highlight.material.opacity = highlighted ? 0.28 : 0.1;
+      device.material.emissive.setHex(engaged ? device.accentColor : highlighted ? 0x1d2430 : 0x000000);
+
+      return engaged;
+    }
+
+    function updateMissileArmSwitch(device, engaged, index) {
+      const previousArmed = missileArmDevices.slice(0, index).every((armDevice) => armDevice.toggleOn === true);
+
+      if (!engaged) {
+        device.toggleLatched = false;
+        return;
+      }
+
+      if (device.outputY < -0.45 && !device.toggleLatched) {
+        if (previousArmed) {
+          setMissileArmSwitchState(device, true);
+        }
+        device.toggleLatched = true;
+        return;
+      }
+
+      if (Math.abs(device.outputY) < 0.2) {
+        device.toggleLatched = false;
+      }
+    }
+
+    function updateGatlingCrank(device, engaged) {
+      if (!engaged) {
+        device.lastAngle = null;
+        return 0;
+      }
+
+      const magnitude = Math.hypot(device.outputX, device.outputY);
+      if (magnitude < 0.45) {
+        device.lastAngle = null;
+        return 0;
+      }
+
+      const angle = Math.atan2(device.outputY, device.outputX);
+      if (device.lastAngle != null) {
+        const delta = Math.atan2(Math.sin(angle - device.lastAngle), Math.cos(angle - device.lastAngle));
+        device.rotationAccumulator += delta;
+      }
+      device.lastAngle = angle;
+
+      const fullTurns = Math.floor(Math.abs(device.rotationAccumulator) / (Math.PI * 2));
+      if (fullTurns <= 0) {
+        return 0;
+      }
+
+      device.rotationAccumulator -= Math.sign(device.rotationAccumulator) * fullTurns * Math.PI * 2;
+      return fullTurns * GAME_TUNING.gatling.bulletsPerRotation;
+    }
+
+    function updatePunchDevice(device, engaged, dt, punchOutputs, side, disabled) {
+      const outputKey = getPunchOutputKey(side);
+      const chargedOutputKey = getChargedPunchOutputKey(side);
+      const guardOutputKey = getPunchGuardOutputKey(side);
+      const forwardHoldOutputKey = getPunchForwardHoldOutputKey(side);
+      const backPreviewOutputKey = getPunchBackPreviewOutputKey(side);
+      const holdOutputKey = getPunchHoldOutputKey(side);
+      const guardDirection = side === 'left' ? 1 : -1;
+      const hasLampLit = hasPunchChargeLampLit(device.chargeSeconds);
+
+      if (disabled) {
+        resetPunchCharge(device);
+        return;
+      }
+
+      punchOutputs[guardOutputKey] = engaged && device.outputX * guardDirection > 0.35;
+      punchOutputs[forwardHoldOutputKey] = engaged && device.outputY > 0.35;
+      punchOutputs[holdOutputKey] = engaged && device.outputY < -0.35;
+      punchOutputs[backPreviewOutputKey] = engaged && device.outputY > 0.35 && !hasLampLit;
+
+      if (engaged && device.outputY < -0.45) {
+        if (!device.chargeLatched && !hasLampLit) {
+          device.chargeSeconds = 0;
+        }
+        device.chargeLatched = true;
+      }
+
+      if (device.chargeLatched) {
+        device.chargeSeconds = Math.min(device.chargeSeconds + dt, PUNCH_CHARGE_TRACK_MAX_SECONDS);
+      }
+
+      if (!engaged) {
+        device.triggerLatched = false;
+        return;
+      }
+
+      if (device.outputY > 0.35 && !hasLampLit) {
+        device.chargeLatched = false;
+        device.chargeSeconds = 0;
+      }
+
+      if (device.outputY > 0.45 && device.chargeLatched && hasPunchChargeLampLit(device.chargeSeconds) && !device.triggerLatched) {
+        punchOutputs[outputKey] = true;
+        punchOutputs[chargedOutputKey] = isChargedPunchWindow(device.chargeSeconds);
+        device.triggerLatched = true;
+        device.chargeLatched = false;
+        device.chargeSeconds = 0;
+        return;
+      }
+
+      if (device.outputY < 0.15) {
+        device.triggerLatched = false;
+      }
+    }
+
+    function resetHands() {
+      for (const side of HAND_SIDES) {
+        resetHandState(hands[side]);
+      }
+
+      for (const side of HAND_SIDES) {
+        const otherSide = getOtherSide(side);
+        const initialDevice = selectNearestDevice(devices, hands[side].position, hands[otherSide].deviceId);
+        focusHandOnDevice(hands[side], initialDevice);
+      }
+
+      for (const side of PUNCH_SIDES) {
+        resetPunchCharge(deviceMap.get(getPunchDeviceId(side)));
+      }
+
+      const missileDevice = deviceMap.get('missile');
+      missileDevice.triggerLatched = false;
+      resetMissileArmSwitches(missileArmDevices);
+
+      const gatlingCrank = deviceMap.get('gatlingCrank');
+      gatlingCrank.lastAngle = null;
+      gatlingCrank.rotationAccumulator = 0;
+    }
+
+    resetHands();
+
+    return {
+      resetHands,
+      update(dt, inputState, weaponFeedback = {}) {
+        for (const side of HAND_SIDES) {
+          const otherSide = getOtherSide(side);
+          const motion = inputState[`${side}Motion`];
+          const grip = inputState[`${side}Grip`];
+          hands[side].motion = motion;
+          updateHand(hands[side], motion, grip, hands[otherSide], dt);
+        }
+
+        const engagedMap = new Map();
+        for (const device of devices) {
+          engagedMap.set(device.id, updateDeviceState(device, dt, HAND_SIDES.map((side) => hands[side])));
+        }
+
+        const activeTurnDevice = turnDevices.reduce((best, device) => {
+          if (!engagedMap.get(device.id)) {
+            return best;
+          }
+
+          if (!best) {
+            return device;
+          }
+
+          const deviceMagnitude = Math.max(Math.abs(device.inputX), Math.abs(device.inputY));
+          const bestMagnitude = Math.max(Math.abs(best.inputX), Math.abs(best.inputY));
+          return deviceMagnitude >= bestMagnitude ? device : best;
+        }, null);
+        const turnCommand = activeTurnDevice
+          ? getTurnCommand(activeTurnDevice.inputX, activeTurnDevice.inputY)
+          : EMPTY_TURN_COMMAND;
+
+        const punchOutputs = createPunchOutputs();
+        for (const side of PUNCH_SIDES) {
+          const device = deviceMap.get(getPunchDeviceId(side));
+          const engaged = engagedMap.get(getPunchDeviceId(side));
+          const disabled = weaponFeedback[`${side}PunchDisabled`] === true;
+
+          updatePunchDevice(device, engaged, dt, punchOutputs, side, disabled);
+        }
+
+        missileArmDevices.forEach((device, index) => {
+          updateMissileArmSwitch(device, engagedMap.get(device.id), index);
+        });
+
+        const gatlingReloadAmount = updateGatlingCrank(deviceMap.get('gatlingCrank'), engagedMap.get('gatlingCrank'));
+        const gatlingFiring = engagedMap.get('gatling') && deviceMap.get('gatling').outputY < -0.62;
+
+        for (const device of devices) {
+          const disabled = PUNCH_SIDES.some((side) => getPunchDeviceId(side) === device.id && weaponFeedback[`${side}PunchDisabled`] === true);
+          updateChargeIndicatorLamps(device, dt, disabled);
+        }
+        for (const side of PUNCH_SIDES) {
+          const device = deviceMap.get(getPunchDeviceId(side));
+          updatePunchStaminaLamps(
+            device,
+            weaponFeedback[`${side}PunchStamina`] ?? GAME_TUNING.player.punchStaminaMax,
+            weaponFeedback[`${side}CanPunch`] !== false,
+            weaponFeedback[`${side}PunchDisabled`] === true,
+            dt
+          );
+        }
+
+        let missileFired = false;
+        const missileSwitch = deviceMap.get('missile');
+        const missileArmed = missileArmDevices.every((device) => device.toggleOn === true);
+        if (missileArmed && engagedMap.get('missile') && missileSwitch.outputY < -0.62) {
+          if (!missileSwitch.triggerLatched) {
+            missileFired = true;
+            missileSwitch.triggerLatched = true;
+            resetMissileArmSwitches(missileArmDevices);
+          }
+        } else if (!engagedMap.get('missile') || missileSwitch.outputY > -0.25) {
+          missileSwitch.triggerLatched = false;
+        }
+        updateMissileIndicatorLamps(deviceMap.get('missile'), missileArmDevices, dt);
+        updateGatlingIndicatorLamps(deviceMap.get('gatling'), weaponFeedback.gatlingAmmo ?? 0, dt);
+
+        return {
+          outputs: {
+            moveX: deviceMap.get('move').outputX,
+            moveY: deviceMap.get('move').outputY,
+            turnTargetAngle: turnCommand.turnTargetAngle,
+            turnSpin: turnCommand.turnSpin,
+            ...punchOutputs,
+            gatlingFiring,
+            gatlingReloadAmount,
+            missileFired,
+          },
+          handSummary: buildHandSummary(hands, (hand) => describeHand(hand, deviceMap)),
+          hoverSummary: buildHandSummary(
+            hands,
+            (hand) => (hand.hoverId ? deviceMap.get(hand.hoverId).name : 'none')
+          ),
+          activeDeviceHints: buildActiveDeviceHints(hands, deviceMap),
+        };
+      },
+    };
+  }
+  __bundle['./cockpit.js'] = { createCockpit };
+})();
+
+// ./gameLogic.js
+(() => {
+  const THREE = __bundle.__externals.three;
+  const { GAME_TUNING } = __bundle['./tuning.js'];
+  const {
+    arenaLimit: ARENA_LIMIT,
+    player: PLAYER_TUNING,
+    enemy: ENEMY_TUNING,
+    missile: MISSILE_TUNING,
+    gatling: GATLING_TUNING,
+    combat: COMBAT_TUNING,
+  } = GAME_TUNING;
+
+  const DEBUG_TUNING = GAME_TUNING.debug ?? {};
+  const GUARD_POSE_RESPONSE = 12;
+
+  const PUNCH_SIDES = ['left', 'right'];
+  const ARM_SIDE_CONFIG = {
+    left: {
+      shoulderX: 0.88,
+      armX: -0.06,
+      fistX: -0.08,
+      shoulderYaw: -0.16,
+      shoulderRoll: 0.1,
+    },
+    right: {
+      shoulderX: -0.88,
+      armX: 0.06,
+      fistX: 0.08,
+      shoulderYaw: 0.16,
+      shoulderRoll: -0.1,
+    },
+  };
+
+  function clamp(value, min, max) {
+    return Math.min(max, Math.max(min, value));
+  }
+
+  function getPunchState(robot, side) {
+    return side === 'left' ? robot.leftPunch : robot.rightPunch;
+  }
+
+  function getPunchStamina(robot, side) {
+    return side === 'left' ? robot.leftPunchStamina : robot.rightPunchStamina;
+  }
+
+  function createPunchState() {
+    return { extend: 0, target: 0, hitCooldown: 0, hitCount: 0, attackTimer: 0, damageMultiplier: 1, dashTimer: 0, hitEnabled: false };
+  }
+
+  function createGuardState() {
+    return { value: 0 };
+  }
+
+  function createPunchStaminaState() {
+    return { value: PLAYER_TUNING.punchStaminaMax };
+  }
+
+  function isGuarding(robot) {
+    return robot.leftGuard.value > 0.55 || robot.rightGuard.value > 0.55;
+  }
+
+  function triggerGuardImpact(robot) {
+    for (const side of PUNCH_SIDES) {
+      if (robot[`${side}Guard`].value > 0.55) {
+        robot[`${side}GuardImpactTimer`] = PLAYER_TUNING.guardImpactDuration;
+      }
+    }
+  }
+
+  function cancelEnemyBeamCharge(enemy) {
+    enemy.beamChargeTimer = 0;
+    enemy.beamFireTimer = 0;
+    enemy.beamHitCooldown = 0;
+  }
+
+  function getEnemyDownTotalDuration() {
+    return ENEMY_TUNING.downLaunchDuration + ENEMY_TUNING.downLieDuration + ENEMY_TUNING.downRecoverDuration;
+  }
+
+  function getEnemyDownElapsed(enemy) {
+    return getEnemyDownTotalDuration() - enemy.downTimer;
+  }
+
+  function triggerEnemyReaction(enemy, type, reactionDirection = null) {
+    enemy.activated = true;
+    cancelEnemyBeamCharge(enemy);
+    enemy.gatlingHitCount = 0;
+    if (type === 'down') {
+      enemy.downTimer = getEnemyDownTotalDuration();
+      enemy.smallReactTimer = 0;
+      enemy.downVelocity.copy((reactionDirection ?? forwardVector(enemy.angle)).setY(0).normalize().multiplyScalar(ENEMY_TUNING.downLaunchSpeed));
+      enemy.position.y = 0;
+      enemy.aiMode = 'down';
+      return;
+    }
+
+    enemy.smallReactTimer = ENEMY_TUNING.smallReactDuration;
+    enemy.aiMode = 'react';
+  }
+
+  function setPunchState(robot, side, patch) {
+    Object.assign(getPunchState(robot, side), patch);
+  }
+
+  function getPunchControlKeys(side) {
+    return {
+      fireKey: `${side}PunchFire`,
+      chargedKey: `${side}ChargedPunchFire`,
+    };
+  }
+
+  function setChargedMaterialState(material, charged, colorHex, emissiveHex, emissiveIntensity) {
+    material.color.setHex(charged ? colorHex : material.userData.baseColor);
+    material.emissive.setHex(charged ? emissiveHex : 0x000000);
+    material.emissiveIntensity = charged ? emissiveIntensity : 0;
+  }
+
+  function resetRobotPunchStates(robot) {
+    for (const side of PUNCH_SIDES) {
+      setPunchState(robot, side, createPunchState());
+      robot[`${side}Guard`] = createGuardState();
+    }
+  }
+
+  function makeRobot(palette) {
+    const root = new THREE.Group();
+
+    const bodyMaterial = new THREE.MeshStandardMaterial({ color: palette.body, roughness: 0.42, metalness: 0.22 });
+    const limbMaterial = new THREE.MeshStandardMaterial({ color: palette.limb, roughness: 0.45, metalness: 0.2 });
+    const accentMaterial = new THREE.MeshStandardMaterial({ color: palette.accent, roughness: 0.3, metalness: 0.38 });
+
+    const body = new THREE.Mesh(new THREE.CapsuleGeometry(0.78, 1.5, 8, 16), bodyMaterial);
+    body.position.y = 1.35;
+    root.add(body);
+
+    const head = new THREE.Mesh(new THREE.SphereGeometry(0.34, 18, 18), accentMaterial);
+    head.position.set(0, 2.15, 0.18);
+    root.add(head);
+
+    const torsoPlate = new THREE.Mesh(new THREE.BoxGeometry(1.45, 0.7, 0.4), accentMaterial);
+    torsoPlate.position.set(0, 1.45, 0.72);
+    root.add(torsoPlate);
+
+    const shoulders = {};
+    const fists = {};
+    const arms = {};
+    for (const side of PUNCH_SIDES) {
+      const sideConfig = ARM_SIDE_CONFIG[side];
+      const shoulder = new THREE.Group();
+      shoulder.position.set(sideConfig.shoulderX, 1.56, 0.18);
+
+      const armMaterial = limbMaterial.clone();
+      armMaterial.userData.baseColor = palette.limb;
+      const arm = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.34, 1.08), armMaterial);
+      arm.position.set(sideConfig.armX, 0, 0.54);
+
+      const fistMaterial = accentMaterial.clone();
+      fistMaterial.userData.baseColor = palette.accent;
+      const fist = new THREE.Mesh(new THREE.SphereGeometry(0.22, 16, 16), fistMaterial);
+      fist.position.set(sideConfig.fistX, 0, 1.12);
+
+      shoulder.add(arm, fist);
+      root.add(shoulder);
+
+      shoulders[side] = shoulder;
+      arms[side] = arm;
+      fists[side] = fist;
+    }
+
+    const leftLeg = new THREE.Mesh(new THREE.BoxGeometry(0.35, 1.05, 0.35), limbMaterial);
+    leftLeg.position.set(-0.3, 0.4, 0);
+    root.add(leftLeg);
+
+    const rightLeg = new THREE.Mesh(new THREE.BoxGeometry(0.35, 1.05, 0.35), limbMaterial);
+    rightLeg.position.set(0.3, 0.4, 0);
+    root.add(rightLeg);
+
+    return {
+      root,
+      body,
+      head,
+      shoulders,
+      arms,
+      fists,
+      chargeMaterials: [],
+      hasArms: true,
+    };
+  }
+
+  function makeEnemyRobot(palette) {
+    const root = new THREE.Group();
+    root.scale.setScalar(1.5);
+
+    const bodyMaterial = new THREE.MeshStandardMaterial({ color: palette.body, roughness: 0.58, metalness: 0.18 });
+    bodyMaterial.userData.baseColor = palette.body;
+    const accentMaterial = new THREE.MeshStandardMaterial({ color: palette.accent, roughness: 0.34, metalness: 0.4 });
+    accentMaterial.userData.baseColor = palette.accent;
+    const sensorMaterial = new THREE.MeshStandardMaterial({ color: 0xffc58f, roughness: 0.2, metalness: 0.55, emissive: 0x000000 });
+    sensorMaterial.userData.baseColor = 0xffc58f;
+
+    const body = new THREE.Mesh(new THREE.CylinderGeometry(0.95, 1.1, 2.05, 12), bodyMaterial);
+    body.position.y = 1.62;
+    root.add(body);
+
+    const head = new THREE.Mesh(new THREE.SphereGeometry(0.46, 18, 18), accentMaterial);
+    head.position.set(0, 2.72, 0.12);
+    root.add(head);
+
+    const sensor = new THREE.Mesh(new THREE.BoxGeometry(0.95, 0.2, 0.22), sensorMaterial);
+    sensor.position.set(0, 2.72, 0.66);
+    root.add(sensor);
+
+    const chest = new THREE.Mesh(new THREE.BoxGeometry(1.45, 0.85, 0.5), accentMaterial.clone());
+    chest.material.userData.baseColor = palette.accent;
+    chest.position.set(0, 1.72, 0.78);
+    root.add(chest);
+
+    const leftLeg = new THREE.Mesh(new THREE.BoxGeometry(0.45, 1.1, 0.45), bodyMaterial.clone());
+    leftLeg.material.userData.baseColor = palette.body;
+    leftLeg.position.set(-0.42, 0.55, 0);
+    root.add(leftLeg);
+
+    const rightLeg = new THREE.Mesh(new THREE.BoxGeometry(0.45, 1.1, 0.45), bodyMaterial.clone());
+    rightLeg.material.userData.baseColor = palette.body;
+    rightLeg.position.set(0.42, 0.55, 0);
+    root.add(rightLeg);
+
+    return {
+      root,
+      body,
+      head,
+      shoulders: {},
+      arms: {},
+      fists: {},
+      chargeMaterials: [bodyMaterial, accentMaterial, sensorMaterial, chest.material],
+      hasArms: false,
+    };
+  }
+
+  function makeRobotState(mesh, startPosition, angle, collisionConfig) {
+    return {
+      mesh,
+      position: startPosition.clone(),
+      velocity: new THREE.Vector3(),
+      angle,
+      health: 100,
+      leftPunch: createPunchState(),
+      rightPunch: createPunchState(),
+      leftPunchStamina: createPunchStaminaState(),
+      rightPunchStamina: createPunchStaminaState(),
+      leftGuard: createGuardState(),
+      rightGuard: createGuardState(),
+      leftGuardImpactTimer: 0,
+      rightGuardImpactTimer: 0,
+      missileCooldown: 0,
+      gatlingAmmo: 0,
+      gatlingFireCooldown: 0,
+      hitStunTimer: 0,
+      knockbackVelocity: new THREE.Vector3(),
+      gatlingHitCount: 0,
+      smallReactTimer: 0,
+      downTimer: 0,
+      downVelocity: new THREE.Vector3(),
+      activated: mesh.hasArms,
+      aiMode: 'idle',
+      strafeTimer: 0,
+      strafeDir: 1,
+      attackTimer: 0,
+      attackCooldown: 0,
+      jumpTimer: 0,
+      jumpCooldown: 0,
+      jumpStart: startPosition.clone(),
+      jumpTarget: startPosition.clone(),
+      beamChargeTimer: 0,
+      beamFireTimer: 0,
+      beamCooldown: 0,
+      beamHitCooldown: 0,
+      postBeamIdleTimer: 0,
+      hurtCenterHeight: collisionConfig.hurtCenterHeight,
+      hurtRadius: collisionConfig.hurtRadius,
+      pushRadius: collisionConfig.pushRadius,
+    };
+  }
+
+  function wrapAngle(angle) {
+    return Math.atan2(Math.sin(angle), Math.cos(angle));
+  }
+
+  function rotateTowards(current, target, speed) {
+    const delta = wrapAngle(target - current);
+    const step = clamp(delta, -speed, speed);
+    return wrapAngle(current + step);
+  }
+
+  function forwardVector(angle) {
+    return new THREE.Vector3(Math.sin(angle), 0, -Math.cos(angle));
+  }
+
+  function rightVector(angle) {
+    return new THREE.Vector3(Math.cos(angle), 0, Math.sin(angle));
+  }
+
+  function getFacingBasis(angle) {
+    const forward = forwardVector(angle);
+    const right = rightVector(angle);
+    return {
+      forward,
+      right,
+      meshRotationY: Math.PI - angle,
+    };
+  }
+
+  function getPunchSwingPose(side, extend) {
+    const inwardDirection = side === 'left' ? -1 : 1;
+    const outwardDirection = -inwardDirection;
+    const windup = 1 - extend;
+    const arc = 4 * extend * windup;
+    const baseSweep = inwardDirection * (-0.18 * windup + 0.68 * extend);
+    const endCrossOffset = (side === 'left'
+      ? PLAYER_TUNING.leftPunchEndCrossOffset
+      : -PLAYER_TUNING.rightPunchEndCrossOffset) * extend * extend;
+    return {
+      xOffset: baseSweep + outwardDirection * 0.38 * arc + endCrossOffset,
+      yOffset: 0.42 * extend + 0.08 * arc,
+      zOffset: -0.1 * windup + 1.34 * extend - 0.08 * arc,
+      rotationX: -0.5 + extend * 0.92,
+      rotationY: inwardDirection * (-0.22 * windup + 0.44 * extend) + outwardDirection * 0.26 * arc,
+      rotationZ: (side === 'left' ? 0.78 : -0.78) * extend + (side === 'left' ? 0.22 : -0.22) * arc,
+    };
+  }
+
+  function getPunchGuardPose(side, guardAmount) {
+    const inwardDirection = side === 'left' ? -1 : 1;
+    return {
+      xOffset: inwardDirection * 0.1 * guardAmount,
+      yOffset: -0.08 * guardAmount,
+      zOffset: 0.42 * guardAmount,
+      rotationX: -1.52 * guardAmount,
+      rotationY: inwardDirection * 0.12 * guardAmount,
+      rotationZ: (side === 'left' ? 0.18 : -0.18) * guardAmount,
+    };
+  }
+
+  function blendArmPose(basePose, overlayPose, amount) {
+    return {
+      xOffset: THREE.MathUtils.lerp(basePose.xOffset, overlayPose.xOffset, amount),
+      yOffset: THREE.MathUtils.lerp(basePose.yOffset, overlayPose.yOffset, amount),
+      zOffset: THREE.MathUtils.lerp(basePose.zOffset, overlayPose.zOffset, amount),
+      rotationX: THREE.MathUtils.lerp(basePose.rotationX, overlayPose.rotationX, amount),
+      rotationY: THREE.MathUtils.lerp(basePose.rotationY, overlayPose.rotationY, amount),
+      rotationZ: THREE.MathUtils.lerp(basePose.rotationZ, overlayPose.rotationZ, amount),
+    };
+  }
+
+  function updatePunchState(punchState, inputValue, dt, speedConfig, autoRetract = false, targetOverride = null) {
+    if (targetOverride != null) {
+      punchState.target = targetOverride;
+    } else if (inputValue > 0.35) {
+      punchState.target = 1;
+    } else if (inputValue < -0.12 || autoRetract) {
+      punchState.target = 0;
+    }
+
+    const speed = punchState.target > punchState.extend
+      ? speedConfig.punchExtendSpeed
+      : speedConfig.punchRetractSpeed;
+    punchState.extend = THREE.MathUtils.lerp(
+      punchState.extend,
+      punchState.target,
+      1 - Math.exp(-speed * dt)
+    );
+
+    punchState.hitCooldown = Math.max(0, punchState.hitCooldown - dt);
+
+    if (punchState.attackTimer <= 0) {
+      punchState.damageMultiplier = 1;
+      punchState.hitCount = 0;
+    }
+
+    if (punchState.target <= 0) {
+      punchState.hitEnabled = false;
+    }
+  }
+
+  function getPunchStaminaCost(isCharged) {
+    return isCharged ? PLAYER_TUNING.punchChargedStaminaCost : PLAYER_TUNING.punchStaminaCost;
+  }
+
+  function triggerPunch(punchState, staminaValue, duration, dashDuration, isCharged) {
+    if (punchState.attackTimer > 0.001) {
+      return false;
+    }
+
+    if (staminaValue < getPunchStaminaCost(isCharged)) {
+      return false;
+    }
+
+    punchState.attackTimer = duration;
+    punchState.dashTimer = isCharged ? dashDuration : 0;
+    punchState.damageMultiplier = isCharged ? PLAYER_TUNING.chargedPunchDamageMultiplier : 1;
+    punchState.target = 1;
+    punchState.hitCooldown = 0;
+    punchState.hitCount = 0;
+    return true;
+  }
+
+  function updateTriggeredPunch(punchState, staminaState, attackRequest, dt, duration, dashDuration, speedConfig) {
+    if (attackRequest.fireRequested) {
+      const triggered = triggerPunch(punchState, staminaState.value, duration, dashDuration, attackRequest.isCharged);
+      if (triggered) {
+        staminaState.value = Math.max(0, staminaState.value - getPunchStaminaCost(attackRequest.isCharged));
+      }
+    }
+
+    if (punchState.hitCount > 0 && !attackRequest.holdForward) {
+      retractPunchAfterHit(punchState);
+    }
+
+    punchState.attackTimer = Math.max(0, punchState.attackTimer - dt);
+    punchState.dashTimer = Math.max(0, punchState.dashTimer - dt);
+    const punchActive = punchState.attackTimer > 0 || punchState.hitCount > 0;
+    const previewForwardHold = attackRequest.backPreview && !punchActive;
+    const punchInput = attackRequest.holdBack
+      ? -1
+      : (attackRequest.holdForward && punchActive) || punchState.attackTimer > 0
+        ? 1
+        : -1;
+    updatePunchState(
+      punchState,
+      punchInput,
+      dt,
+      speedConfig,
+      punchState.attackTimer <= 0,
+      previewForwardHold ? 0.1 : null
+    );
+    punchState.hitEnabled = !attackRequest.holdBack && punchState.attackTimer > 0;
+  }
+
+  function getPunchAttackRequest(controls, side) {
+    const keys = getPunchControlKeys(side);
+    return {
+      fireRequested: controls[keys.fireKey],
+      isCharged: controls[keys.chargedKey],
+      backPreview: controls[`${side}PunchBackPreview`] === true,
+      holdForward: controls[`${side}PunchHoldForward`] === true,
+      holdBack: controls[`${side}PunchHoldBack`] === true,
+    };
+  }
+
+  function retractPunchAfterHit(punchState) {
+    punchState.attackTimer = 0;
+    punchState.target = 0;
+    punchState.dashTimer = 0;
+  }
+
+  function interruptPunchs(robot) {
+    for (const side of PUNCH_SIDES) {
+      setPunchState(robot, side, {
+        target: 0,
+        attackTimer: 0,
+        dashTimer: 0,
+        hitEnabled: false,
+        hitCooldown: 0,
+        hitCount: 0,
+        damageMultiplier: 1,
+      });
+    }
+    stopChargedDash(robot);
+  }
+
+  function updateRobotMesh(robot) {
+    const facing = getFacingBasis(robot.angle);
+    const enemyDownElapsed = !robot.mesh.hasArms && robot.downTimer > 0 ? getEnemyDownElapsed(robot) : 0;
+    const downLaunchProgress = enemyDownElapsed > 0
+      ? clamp(enemyDownElapsed / ENEMY_TUNING.downLaunchDuration, 0, 1)
+      : 0;
+    const downRecoverElapsed = Math.max(0, enemyDownElapsed - ENEMY_TUNING.downLaunchDuration - ENEMY_TUNING.downLieDuration);
+    const downRecoverProgress = ENEMY_TUNING.downRecoverDuration > 0
+      ? clamp(downRecoverElapsed / ENEMY_TUNING.downRecoverDuration, 0, 1)
+      : 1;
+    const downPoseAmount = !robot.mesh.hasArms && robot.downTimer > 0
+      ? (enemyDownElapsed < ENEMY_TUNING.downLaunchDuration + ENEMY_TUNING.downLieDuration
+        ? downLaunchProgress
+        : 1 - downRecoverProgress)
+      : 0;
+    const rootXRotation = !robot.mesh.hasArms
+      ? (robot.downTimer > 0
+        ? -1.15 * downPoseAmount
+        : robot.smallReactTimer > 0
+          ? -0.18 * (robot.smallReactTimer / ENEMY_TUNING.smallReactDuration)
+          : 0)
+      : 0;
+    const rootZRotation = !robot.mesh.hasArms && robot.smallReactTimer > 0
+      ? Math.sin(performance.now() * 0.09) * 0.12 * (robot.smallReactTimer / ENEMY_TUNING.smallReactDuration)
+      : 0;
+    const rootYOffset = !robot.mesh.hasArms && robot.downTimer > 0
+      ? -0.52 * downPoseAmount
+      : 0;
+    robot.mesh.root.position.copy(robot.position);
+    robot.mesh.root.position.y += rootYOffset;
+    robot.mesh.root.rotation.set(rootXRotation, facing.meshRotationY, rootZRotation);
+
+    if (robot.mesh.chargeMaterials.length > 0) {
+      const chargeRatio = robot.beamChargeTimer > 0
+        ? 1 - robot.beamChargeTimer / ENEMY_TUNING.beamChargeDuration
+        : 0;
+      const beamActive = robot.beamFireTimer > 0;
+      for (const material of robot.mesh.chargeMaterials) {
+        material.color.setHex(beamActive ? 0xfff0b8 : material.userData.baseColor);
+        material.emissive.setHex(chargeRatio > 0 || beamActive ? 0xff7a2a : 0x000000);
+        material.emissiveIntensity = beamActive ? 1.25 : chargeRatio * 0.95;
+      }
+    }
+
+    if (!robot.mesh.hasArms) {
+      return;
+    }
+
+    for (const side of PUNCH_SIDES) {
+      const punch = getPunchState(robot, side);
+      const sideConfig = ARM_SIDE_CONFIG[side];
+      const swingPose = getPunchSwingPose(side, punch.extend);
+      const guardBlend = punch.extend < 0.08 && punch.attackTimer <= 0 ? robot[`${side}Guard`].value : 0;
+      const armPose = blendArmPose(swingPose, getPunchGuardPose(side, 1), guardBlend);
+      const guardImpactRatio = robot[`${side}GuardImpactTimer`] > 0
+        ? robot[`${side}GuardImpactTimer`] / PLAYER_TUNING.guardImpactDuration
+        : 0;
+      const guardImpactShake = Math.sin(performance.now() * 0.08) * PLAYER_TUNING.guardImpactShake * guardImpactRatio;
+      const shoulder = robot.mesh.shoulders[side];
+      const arm = robot.mesh.arms[side];
+      const fist = robot.mesh.fists[side];
+      const chargedVisual = punch.damageMultiplier > 1 || punch.dashTimer > 0;
+
+      shoulder.position.set(
+        sideConfig.shoulderX + armPose.xOffset + (side === 'left' ? -guardImpactShake : guardImpactShake),
+        1.56 + armPose.yOffset + Math.abs(guardImpactShake) * 0.35,
+        0.18 + armPose.zOffset
+      );
+      shoulder.rotation.x = armPose.rotationX + guardImpactShake * 0.4;
+      shoulder.rotation.y = sideConfig.shoulderYaw + armPose.rotationY;
+      shoulder.rotation.z = sideConfig.shoulderRoll + armPose.rotationZ + guardImpactShake * 0.8;
+
+      setChargedMaterialState(arm.material, chargedVisual, 0xffd36b, 0x6a3a00, 0.85);
+      setChargedMaterialState(fist.material, chargedVisual, 0xfff1b0, 0xff8c1a, 1.2);
+    }
+  }
+
+  function getCockpitCameraState(robot) {
+    const facing = getFacingBasis(robot.angle);
+    const cameraPosition = robot.position.clone()
+      .add(new THREE.Vector3(0, 2.1, 0))
+      .add(facing.forward.clone().multiplyScalar(0.32))
+      .add(facing.right.clone().multiplyScalar(0.02));
+    const cameraLookAt = cameraPosition.clone()
+      .add(facing.forward.clone().multiplyScalar(8))
+      .add(new THREE.Vector3(0, -0.3, 0));
+
+    return {
+      cameraPosition,
+      cameraLookAt,
+      forward: facing.forward,
+    };
+  }
+
+  function getFistWorldPosition(robot, side, targetVector) {
+    const fist = robot.mesh.fists[side];
+    robot.mesh.root.updateWorldMatrix(true, true);
+    fist.getWorldPosition(targetVector);
+    return targetVector;
+  }
+
+  function getRobotHurtPosition(robot, targetVector) {
+    targetVector.copy(robot.position);
+    targetVector.y += robot.hurtCenterHeight;
+    return targetVector;
+  }
+
+  function getChargedDashSpeed(robot) {
+    let chargedDashSpeed = 0;
+    for (const side of PUNCH_SIDES) {
+      if (getPunchState(robot, side).dashTimer > 0) {
+        chargedDashSpeed += PLAYER_TUNING.chargedPunchDashSpeed;
+      }
+    }
+    return chargedDashSpeed;
+  }
+
+  function stopChargedDash(robot) {
+    for (const side of PUNCH_SIDES) {
+      getPunchState(robot, side).dashTimer = 0;
+    }
+  }
+
+  function getChargedDashStep(attacker, defender, facing, dashDistance, scratchVector) {
+    const toDefender = scratchVector.copy(defender.position).sub(attacker.position).setY(0);
+    const forwardDistance = toDefender.dot(facing.forward);
+    const lateralDistance = Math.abs(toDefender.dot(facing.right));
+
+    if (forwardDistance <= 0 || lateralDistance > COMBAT_TUNING.chargedPunchCatchWidth) {
+      return dashDistance;
+    }
+
+    const allowedDistance = Math.max(0, forwardDistance - COMBAT_TUNING.chargedPunchStopDistance);
+    return Math.min(dashDistance, allowedDistance);
+  }
+
+  function createBeamMesh() {
+    const material = new THREE.MeshStandardMaterial({
+      color: 0xffd98a,
+      emissive: 0xff8c2a,
+      emissiveIntensity: 1.1,
+      transparent: true,
+      opacity: 0.85,
+      roughness: 0.2,
+      metalness: 0.1,
+    });
+    const mesh = new THREE.Mesh(new THREE.BoxGeometry(0.9, 0.4, 1), material);
+    mesh.visible = false;
+    return mesh;
+  }
+
+  function createDebugSphere(radius, color) {
+    const mesh = new THREE.Mesh(
+      new THREE.SphereGeometry(1, 16, 16),
+      new THREE.MeshBasicMaterial({ color, wireframe: true, transparent: true, opacity: 0.5 })
+    );
+    mesh.scale.setScalar(radius);
+    mesh.visible = false;
+    return mesh;
+  }
+
+  function createWorld(topScene) {
+    const player = makeRobotState(
+      makeRobot({ body: 0x5ea7ff, limb: 0x293a52, accent: 0xd4f0ff }),
+      new THREE.Vector3(0, 0, 6),
+      0,
+      { hurtCenterHeight: 1.45, hurtRadius: 1.2, pushRadius: 1.05 }
+    );
+
+    const enemy = makeRobotState(
+      makeEnemyRobot({ body: 0x6b2b1d, accent: 0xffa365 }),
+      new THREE.Vector3(0, 0, -6),
+      Math.PI,
+      { hurtCenterHeight: 2.15, hurtRadius: 2.25, pushRadius: 1.6 }
+    );
+
+    const enemyBeam = createBeamMesh();
+    const enemyHurtDebug = createDebugSphere(enemy.hurtRadius, 0xff8c66);
+    const leftFistDebug = createDebugSphere(COMBAT_TUNING.fistHitRadius, 0x66d7ff);
+    const rightFistDebug = createDebugSphere(COMBAT_TUNING.fistHitRadius, 0xffc266);
+
+    topScene.add(player.mesh.root, enemy.mesh.root, enemyBeam, enemyHurtDebug, leftFistDebug, rightFistDebug);
+
+    const missiles = [];
+    const gatlingRounds = [];
+    let hitStopTimer = 0;
+    const scratch = {
+      vectorA: new THREE.Vector3(),
+      vectorB: new THREE.Vector3(),
+      vectorC: new THREE.Vector3(),
+    };
+
+    function spawnMissile(owner) {
+      const missile = new THREE.Mesh(
+        new THREE.CapsuleGeometry(0.12, 0.45, 4, 8),
+        new THREE.MeshStandardMaterial({ color: 0xffe27a, roughness: 0.2, metalness: 0.45, emissive: 0x453300 })
+      );
+      missile.rotation.z = Math.PI * 0.5;
+
+      const facing = getFacingBasis(owner.angle);
+      const spawnPosition = owner.position.clone()
+        .add(facing.forward.clone().multiplyScalar(1.5))
+        .add(new THREE.Vector3(0, 1.4, 0));
+
+      missile.position.copy(spawnPosition);
+      topScene.add(missile);
+
+      missiles.push({
+        mesh: missile,
+        velocity: facing.forward.multiplyScalar(MISSILE_TUNING.speed),
+        ttl: MISSILE_TUNING.ttl,
+      });
+    }
+
+    function spawnGatlingRound(owner) {
+      const round = new THREE.Mesh(
+        new THREE.SphereGeometry(0.07, 10, 10),
+        new THREE.MeshStandardMaterial({ color: 0xbfe9ff, emissive: 0x3d9dff, emissiveIntensity: 0.7, roughness: 0.2, metalness: 0.25 })
+      );
+
+      const facing = getFacingBasis(owner.angle);
+      const spawnPosition = owner.position.clone()
+        .add(facing.forward.clone().multiplyScalar(1.35))
+        .add(facing.right.clone().multiplyScalar(-0.92))
+        .add(new THREE.Vector3(0, 1.52, 0));
+
+      const direction = facing.forward.clone()
+        .add(facing.right.clone().multiplyScalar((Math.random() * 2 - 1) * GATLING_TUNING.spread))
+        .add(new THREE.Vector3(0, (Math.random() * 2 - 1) * GATLING_TUNING.spread * 0.35, 0))
+        .normalize();
+
+      round.position.copy(spawnPosition);
+      topScene.add(round);
+
+      gatlingRounds.push({
+        mesh: round,
+        velocity: direction.multiplyScalar(GATLING_TUNING.speed),
+        ttl: GATLING_TUNING.ttl,
+      });
+    }
+
+    function updateEnemyBeamVisual() {
+      if (enemy.beamFireTimer <= 0) {
+        enemyBeam.visible = false;
+        return;
+      }
+
+      const facing = getFacingBasis(enemy.angle);
+      const beamLength = ENEMY_TUNING.beamRange;
+      const emitterPosition = enemy.position.clone()
+        .add(new THREE.Vector3(0, 2.45, 0))
+        .add(facing.forward.clone().multiplyScalar(0.95));
+
+      enemyBeam.visible = true;
+      enemyBeam.position.copy(emitterPosition).add(facing.forward.clone().multiplyScalar(beamLength * 0.5));
+      enemyBeam.scale.set(1, 1, beamLength);
+      enemyBeam.rotation.y = Math.atan2(facing.forward.x, facing.forward.z);
+      enemyBeam.material.opacity = 0.72 + Math.sin(performance.now() * 0.05) * 0.12;
+    }
+
+    function setPunchDebugVisible(visible) {
+      enemyHurtDebug.visible = visible;
+      leftFistDebug.visible = visible;
+      rightFistDebug.visible = visible;
+    }
+
+    function updatePunchDebugVisuals() {
+      const debugVisible = DEBUG_TUNING.showCombatVolumes === true;
+      setPunchDebugVisible(debugVisible);
+      if (!debugVisible) {
+        return;
+      }
+
+      updateRobotMesh(player);
+      const enemyHurtPosition = getRobotHurtPosition(enemy, scratch.vectorA);
+      enemyHurtDebug.position.copy(enemyHurtPosition);
+
+      leftFistDebug.position.copy(getFistWorldPosition(player, 'left', scratch.vectorB));
+      rightFistDebug.position.copy(getFistWorldPosition(player, 'right', scratch.vectorC));
+    }
+
+    function applyBeamDamage(dt) {
+      enemy.beamHitCooldown = Math.max(0, enemy.beamHitCooldown - dt);
+      if (enemy.beamHitCooldown > 0) {
+        return;
+      }
+
+      const facing = getFacingBasis(enemy.angle);
+      const toPlayer = scratch.vectorA.copy(player.position).sub(enemy.position).setY(0);
+      const forwardDistance = toPlayer.dot(facing.forward);
+      const lateralDistance = Math.abs(toPlayer.dot(facing.right));
+
+      if (forwardDistance <= 0 || forwardDistance > ENEMY_TUNING.beamRange || lateralDistance > ENEMY_TUNING.beamWidth) {
+        return;
+      }
+
+      if (isGuarding(player)) {
+        player.velocity.add(toPlayer.normalize().multiplyScalar(PLAYER_TUNING.guardKnockbackSpeed));
+        triggerGuardImpact(player);
+      } else {
+        player.health = clamp(player.health - ENEMY_TUNING.beamDamage, 0, 100);
+        player.hitStunTimer = PLAYER_TUNING.hitKnockbackDuration;
+        player.knockbackVelocity.copy(toPlayer.normalize().multiplyScalar(PLAYER_TUNING.hitKnockbackSpeed));
+        interruptPunchs(player);
+      }
+      enemy.beamHitCooldown = ENEMY_TUNING.beamHitInterval;
+    }
+
+    function startEnemyJump(direction, distance) {
+      enemy.jumpTimer = ENEMY_TUNING.jumpDuration;
+      enemy.jumpCooldown = ENEMY_TUNING.jumpCooldown;
+      enemy.jumpStart.copy(enemy.position);
+      enemy.jumpStart.y = 0;
+      enemy.jumpTarget.copy(enemy.position).add(direction.multiplyScalar(distance));
+      enemy.jumpTarget.y = 0;
+      enemy.jumpTarget.x = clamp(enemy.jumpTarget.x, -ARENA_LIMIT, ARENA_LIMIT);
+      enemy.jumpTarget.z = clamp(enemy.jumpTarget.z, -ARENA_LIMIT, ARENA_LIMIT);
+    }
+
+    function applyPunchDamage(attacker, defender, side, damage) {
+      const punch = getPunchState(attacker, side);
+      if (!punch.hitEnabled || punch.hitCount >= COMBAT_TUNING.punchMaxHitsPerAttack) {
+        return false;
+      }
+
+      const activeThreshold = COMBAT_TUNING.punchActiveExtendThreshold;
+      if (punch.extend < activeThreshold || punch.hitCooldown > 0) {
+        return false;
+      }
+
+      updateRobotMesh(attacker);
+      const fistPosition = getFistWorldPosition(attacker, side, scratch.vectorA);
+      const targetPosition = getRobotHurtPosition(defender, scratch.vectorB);
+      const horizontalDelta = scratch.vectorC.copy(fistPosition).sub(targetPosition).setY(0);
+      const horizontalDistance = horizontalDelta.length();
+      const verticalDistance = Math.abs(fistPosition.y - targetPosition.y);
+
+      if (
+        horizontalDistance < defender.hurtRadius + COMBAT_TUNING.fistHitRadius
+        && verticalDistance < COMBAT_TUNING.punchVerticalAllowance
+      ) {
+        defender.activated = true;
+        defender.health = clamp(defender.health - damage * punch.damageMultiplier, 0, 100);
+        const knockbackScale = punch.hitCount === 0 ? 1 : COMBAT_TUNING.punchRepeatKnockbackMultiplier;
+        const knockback = defender.position.clone().sub(attacker.position).setY(0).normalize().multiplyScalar(COMBAT_TUNING.knockback * knockbackScale);
+        defender.velocity.add(knockback);
+        punch.hitCooldown = COMBAT_TUNING.punchHitInterval;
+        punch.hitCount += 1;
+        hitStopTimer = Math.max(hitStopTimer, COMBAT_TUNING.punchHitStopSeconds);
+        return true;
+      }
+
+      return false;
+    }
+
+    function clampRobotToArena(robot) {
+      robot.position.x = clamp(robot.position.x, -ARENA_LIMIT, ARENA_LIMIT);
+      robot.position.z = clamp(robot.position.z, -ARENA_LIMIT, ARENA_LIMIT);
+    }
+
+    function resolveRobotOverlap() {
+      const delta = scratch.vectorA.copy(player.position).sub(enemy.position).setY(0);
+      const distance = delta.length();
+      const minimumDistance = player.pushRadius + enemy.pushRadius;
+
+      if (distance >= minimumDistance) {
+        return;
+      }
+
+      const normal = distance > 0.0001 ? delta.multiplyScalar(1 / distance) : scratch.vectorA.set(1, 0, 0);
+      const overlap = minimumDistance - Math.max(distance, 0.0001);
+      const playerShare = COMBAT_TUNING.playerPushShare;
+      const enemyShare = 1 - playerShare;
+
+      player.position.add(normal.clone().multiplyScalar(overlap * playerShare));
+      enemy.position.add(normal.clone().multiplyScalar(-overlap * enemyShare));
+
+      const separatingVelocity = normal.clone().multiplyScalar(0.08);
+      player.velocity.add(separatingVelocity);
+      enemy.velocity.add(separatingVelocity.clone().multiplyScalar(-0.25));
+
+      clampRobotToArena(player);
+      clampRobotToArena(enemy);
+    }
+
+    function updatePlayer(dt, controls) {
+      const move = new THREE.Vector2(controls.moveX, controls.moveY);
+      if (move.length() > 1) {
+        move.normalize();
+      }
+
+      player.hitStunTimer = Math.max(0, player.hitStunTimer - dt);
+      for (const side of PUNCH_SIDES) {
+        player[`${side}GuardImpactTimer`] = Math.max(0, player[`${side}GuardImpactTimer`] - dt);
+      }
+      const punchDisabled = player.hitStunTimer > 0;
+
+      if (!punchDisabled && controls.turnSpin) {
+        player.angle = wrapAngle(player.angle + controls.turnSpin * PLAYER_TUNING.turnSpeed * dt);
+      } else if (!punchDisabled && controls.turnTargetAngle != null) {
+        player.angle = rotateTowards(player.angle, controls.turnTargetAngle, PLAYER_TUNING.turnSpeed * dt);
+      }
+
+      const facing = getFacingBasis(player.angle);
+      if (punchDisabled) {
+        player.velocity.copy(player.knockbackVelocity);
+        player.knockbackVelocity.multiplyScalar(Math.exp(-dt * 6));
+      } else {
+        const desiredVelocity = facing.right.clone().multiplyScalar(move.x * PLAYER_TUNING.moveSpeed)
+          .add(facing.forward.clone().multiplyScalar(move.y * PLAYER_TUNING.moveSpeed));
+        player.velocity.lerp(desiredVelocity, 1 - Math.exp(-dt * PLAYER_TUNING.moveResponse));
+      }
+      player.position.add(player.velocity.clone().multiplyScalar(dt));
+      player.velocity.multiplyScalar(PLAYER_TUNING.velocityDamping);
+
+      for (const side of PUNCH_SIDES) {
+        const staminaState = getPunchStamina(player, side);
+        staminaState.value = clamp(staminaState.value + dt * PLAYER_TUNING.punchStaminaRecoveryPerSecond, 0, PLAYER_TUNING.punchStaminaMax);
+
+        const guardState = player[`${side}Guard`];
+        const guardTarget = controls[`${side}PunchGuard`] === true ? 1 : 0;
+        guardState.value = THREE.MathUtils.lerp(guardState.value, guardTarget, 1 - Math.exp(-GUARD_POSE_RESPONSE * dt));
+
+        if (punchDisabled) {
+          updatePunchState(getPunchState(player, side), -1, dt, PLAYER_TUNING, true);
+        } else {
+          updateTriggeredPunch(
+            getPunchState(player, side),
+            staminaState,
+            getPunchAttackRequest(controls, side),
+            dt,
+            PLAYER_TUNING.punchDuration,
+            PLAYER_TUNING.chargedPunchDashDuration,
+            PLAYER_TUNING
+          );
+        }
+      }
+
+      const chargedDashSpeed = getChargedDashSpeed(player);
+      if (chargedDashSpeed > 0) {
+        const dashDistance = getChargedDashStep(player, enemy, facing, chargedDashSpeed * dt, scratch.vectorC);
+        player.position.add(facing.forward.clone().multiplyScalar(dashDistance));
+        if (dashDistance < chargedDashSpeed * dt - 0.0001) {
+          stopChargedDash(player);
+        }
+      }
+
+      player.gatlingAmmo = clamp(player.gatlingAmmo + (controls.gatlingReloadAmount ?? 0), 0, GATLING_TUNING.maxAmmo);
+      player.gatlingFireCooldown = Math.max(0, player.gatlingFireCooldown - dt);
+      if (controls.gatlingFiring && player.gatlingAmmo > 0 && player.gatlingFireCooldown <= 0) {
+        spawnGatlingRound(player);
+        player.gatlingAmmo -= 1;
+        player.gatlingFireCooldown = GATLING_TUNING.fireInterval;
+      }
+
+      player.missileCooldown = Math.max(0, player.missileCooldown - dt);
+      if (controls.missileFired && player.missileCooldown <= 0) {
+        spawnMissile(player);
+        player.missileCooldown = PLAYER_TUNING.missileCooldown;
+      }
+
+      for (const side of PUNCH_SIDES) {
+        const punch = getPunchState(player, side);
+        const hitApplied = applyPunchDamage(player, enemy, side, PLAYER_TUNING.punchDamage);
+        if (hitApplied) {
+          if (punch.damageMultiplier > 1) {
+            stopChargedDash(player);
+          }
+        }
+      }
+      clampRobotToArena(player);
+    }
+
+    function updateEnemy(dt) {
+      const toPlayer = scratch.vectorB.copy(player.position).sub(enemy.position);
+      const distance = Math.max(toPlayer.length(), 0.001);
+      const moveDirection = toPlayer.clone().normalize();
+      enemy.smallReactTimer = Math.max(0, enemy.smallReactTimer - dt);
+      enemy.downTimer = Math.max(0, enemy.downTimer - dt);
+
+      if (enemy.downTimer <= 0 && enemy.smallReactTimer <= 0) {
+        enemy.angle = rotateTowards(enemy.angle, Math.atan2(toPlayer.x, -toPlayer.z), dt * ENEMY_TUNING.turnSpeed);
+      }
+
+      enemy.beamCooldown = Math.max(0, enemy.beamCooldown - dt);
+      enemy.postBeamIdleTimer = Math.max(0, enemy.postBeamIdleTimer - dt);
+
+      if (enemy.downTimer > 0) {
+        const downElapsed = getEnemyDownElapsed(enemy);
+        if (downElapsed < ENEMY_TUNING.downLaunchDuration) {
+          const launchProgress = clamp(downElapsed / ENEMY_TUNING.downLaunchDuration, 0, 1);
+          enemy.position.add(enemy.downVelocity.clone().multiplyScalar(dt));
+          enemy.position.y = Math.sin(launchProgress * Math.PI) * ENEMY_TUNING.downLaunchHeight;
+          enemy.aiMode = 'down';
+        } else if (downElapsed < ENEMY_TUNING.downLaunchDuration + ENEMY_TUNING.downLieDuration) {
+          enemy.position.y = 0;
+          enemy.aiMode = 'down';
+        } else {
+          enemy.position.y = 0;
+          enemy.aiMode = 'recover';
+        }
+        clampRobotToArena(enemy);
+        return;
+      }
+
+      if (enemy.smallReactTimer > 0) {
+        enemy.aiMode = 'react';
+        clampRobotToArena(enemy);
+        return;
+      }
+
+      if (!enemy.activated) {
+        enemy.position.y = 0;
+        enemy.aiMode = 'idle';
+        clampRobotToArena(enemy);
+        return;
+      }
+
+      if (enemy.jumpTimer > 0) {
+        enemy.jumpTimer = Math.max(0, enemy.jumpTimer - dt);
+        const progress = 1 - enemy.jumpTimer / ENEMY_TUNING.jumpDuration;
+        const eased = THREE.MathUtils.smoothstep(progress, 0, 1);
+        enemy.position.x = THREE.MathUtils.lerp(enemy.jumpStart.x, enemy.jumpTarget.x, eased);
+        enemy.position.z = THREE.MathUtils.lerp(enemy.jumpStart.z, enemy.jumpTarget.z, eased);
+        enemy.position.y = Math.sin(progress * Math.PI) * ENEMY_TUNING.jumpHeight;
+        enemy.aiMode = 'jump';
+      } else {
+        enemy.position.y = 0;
+        enemy.jumpCooldown = Math.max(0, enemy.jumpCooldown - dt);
+
+        if (enemy.beamChargeTimer > 0) {
+          enemy.beamChargeTimer = Math.max(0, enemy.beamChargeTimer - dt);
+          enemy.aiMode = 'charge';
+          if (enemy.beamChargeTimer <= 0) {
+            enemy.beamFireTimer = ENEMY_TUNING.beamFireDuration;
+            enemy.beamHitCooldown = 0;
+          }
+        } else if (enemy.beamFireTimer > 0) {
+          enemy.beamFireTimer = Math.max(0, enemy.beamFireTimer - dt);
+          enemy.aiMode = 'beam';
+          applyBeamDamage(dt);
+          if (enemy.beamFireTimer <= 0) {
+            enemy.postBeamIdleTimer = ENEMY_TUNING.postBeamIdleDuration;
+          }
+        } else if (enemy.postBeamIdleTimer > 0) {
+          enemy.aiMode = 'idle';
+        } else if (distance <= ENEMY_TUNING.beamRange * 0.9 && enemy.beamCooldown <= 0) {
+          enemy.beamChargeTimer = ENEMY_TUNING.beamChargeDuration;
+          enemy.beamCooldown = ENEMY_TUNING.beamCooldown;
+          enemy.aiMode = 'charge';
+        } else if (enemy.jumpCooldown <= 0) {
+          if (distance > ENEMY_TUNING.preferredMaxDistance) {
+            startEnemyJump(moveDirection, ENEMY_TUNING.jumpForwardDistance);
+          } else if (distance < ENEMY_TUNING.preferredMinDistance) {
+            startEnemyJump(moveDirection.multiplyScalar(-1), ENEMY_TUNING.jumpRetreatDistance);
+          } else {
+            enemy.aiMode = 'idle';
+          }
+        } else {
+          enemy.aiMode = 'idle';
+        }
+      }
+
+      clampRobotToArena(enemy);
+    }
+
+    function updateMissiles(dt) {
+      for (let index = missiles.length - 1; index >= 0; index -= 1) {
+        const missile = missiles[index];
+        missile.ttl -= dt;
+        missile.mesh.position.add(missile.velocity.clone().multiplyScalar(dt));
+
+        const targetPosition = getRobotHurtPosition(enemy, scratch.vectorB);
+        if (missile.mesh.position.distanceTo(targetPosition) < enemy.hurtRadius + MISSILE_TUNING.hitRadius) {
+          triggerEnemyReaction(enemy, 'down', enemy.position.clone().sub(player.position).setY(0));
+          topScene.remove(missile.mesh);
+          missiles.splice(index, 1);
+          continue;
+        }
+
+        if (missile.ttl <= 0) {
+          topScene.remove(missile.mesh);
+          missiles.splice(index, 1);
+        }
+      }
+    }
+
+    function updateGatlingRounds(dt) {
+      for (let index = gatlingRounds.length - 1; index >= 0; index -= 1) {
+        const round = gatlingRounds[index];
+        round.ttl -= dt;
+        round.mesh.position.add(round.velocity.clone().multiplyScalar(dt));
+
+        const targetPosition = getRobotHurtPosition(enemy, scratch.vectorB);
+        if (round.mesh.position.distanceTo(targetPosition) < enemy.hurtRadius + GATLING_TUNING.hitRadius) {
+          enemy.gatlingHitCount += 1;
+          if (enemy.gatlingHitCount >= ENEMY_TUNING.smallReactHits) {
+            triggerEnemyReaction(enemy, 'small');
+          }
+          topScene.remove(round.mesh);
+          gatlingRounds.splice(index, 1);
+          continue;
+        }
+
+        if (round.ttl <= 0) {
+          topScene.remove(round.mesh);
+          gatlingRounds.splice(index, 1);
+        }
+      }
+    }
+
+    function recoverRobots(dt) {
+      player.health = clamp(player.health + dt * PLAYER_TUNING.healthRecoveryPerSecond, 0, 100);
+      enemy.health = clamp(enemy.health + dt * ENEMY_TUNING.healthRecoveryPerSecond, 0, 100);
+    }
+
+    function reset() {
+      player.position.set(0, 0, 6);
+      player.velocity.set(0, 0, 0);
+      player.angle = 0;
+      player.health = 100;
+      resetRobotPunchStates(player);
+      player.leftPunchStamina = createPunchStaminaState();
+      player.rightPunchStamina = createPunchStaminaState();
+      player.missileCooldown = 0;
+      player.gatlingAmmo = 0;
+      player.gatlingFireCooldown = 0;
+      player.hitStunTimer = 0;
+      player.knockbackVelocity.set(0, 0, 0);
+      player.leftGuardImpactTimer = 0;
+      player.rightGuardImpactTimer = 0;
+
+      enemy.position.set(0, 0, -6);
+      enemy.velocity.set(0, 0, 0);
+      enemy.angle = Math.PI;
+      enemy.health = 100;
+      resetRobotPunchStates(enemy);
+      enemy.attackTimer = 0;
+      enemy.attackCooldown = 0;
+      enemy.jumpTimer = 0;
+      enemy.jumpCooldown = 0;
+      enemy.jumpStart.copy(enemy.position);
+      enemy.jumpTarget.copy(enemy.position);
+      enemy.beamChargeTimer = 0;
+      enemy.beamFireTimer = 0;
+      enemy.beamCooldown = 0;
+      enemy.beamHitCooldown = 0;
+      enemy.postBeamIdleTimer = 0;
+      enemy.gatlingHitCount = 0;
+      enemy.smallReactTimer = 0;
+      enemy.downTimer = 0;
+      enemy.downVelocity.set(0, 0, 0);
+      enemy.activated = false;
+      enemyBeam.visible = false;
+      setPunchDebugVisible(DEBUG_TUNING.showCombatVolumes === true);
+
+      while (missiles.length > 0) {
+        const missile = missiles.pop();
+        topScene.remove(missile.mesh);
+      }
+
+      while (gatlingRounds.length > 0) {
+        const round = gatlingRounds.pop();
+        topScene.remove(round.mesh);
+      }
+    }
+
+    reset();
+
+    return {
+      getCockpitFeedback() {
+        return {
+          gatlingAmmo: player.gatlingAmmo,
+          leftPunchStamina: player.leftPunchStamina.value,
+          rightPunchStamina: player.rightPunchStamina.value,
+          leftCanPunch: player.hitStunTimer <= 0 && player.leftPunchStamina.value >= PLAYER_TUNING.punchStaminaCost,
+          rightCanPunch: player.hitStunTimer <= 0 && player.rightPunchStamina.value >= PLAYER_TUNING.punchStaminaCost,
+          leftPunchDisabled: player.hitStunTimer > 0,
+          rightPunchDisabled: player.hitStunTimer > 0,
+        };
+      },
+      reset,
+      update(dt, controls) {
+        if (hitStopTimer > 0) {
+          hitStopTimer = Math.max(0, hitStopTimer - dt);
+          updateRobotMesh(player);
+          updateRobotMesh(enemy);
+          updateEnemyBeamVisual();
+          updatePunchDebugVisuals();
+
+          const cameraState = getCockpitCameraState(player);
+
+          return {
+            playerHealth: player.health,
+            enemyHealth: enemy.health,
+            missileCount: missiles.length,
+            gatlingAmmo: player.gatlingAmmo,
+            enemyMode: enemy.aiMode,
+            playerPosition: `${player.position.x.toFixed(1)}, ${player.position.z.toFixed(1)}`,
+            playerPositionVec: player.position.clone(),
+            playerForwardVec: cameraState.forward.clone(),
+            cameraPositionVec: cameraState.cameraPosition,
+            cameraLookAtVec: cameraState.cameraLookAt,
+            ...cameraState,
+          };
+        }
+
+        updatePlayer(dt, controls);
+        updateEnemy(dt);
+        resolveRobotOverlap();
+        updateMissiles(dt);
+        updateGatlingRounds(dt);
+        recoverRobots(dt);
+        updateRobotMesh(player);
+        updateRobotMesh(enemy);
+        updateEnemyBeamVisual();
+        updatePunchDebugVisuals();
+
+        const cameraState = getCockpitCameraState(player);
+
+        return {
+          playerHealth: player.health,
+          enemyHealth: enemy.health,
+          missileCount: missiles.length,
+          gatlingAmmo: player.gatlingAmmo,
+          enemyMode: enemy.aiMode,
+          playerPosition: `${player.position.x.toFixed(1)}, ${player.position.z.toFixed(1)}`,
+          playerPositionVec: player.position.clone(),
+          playerForwardVec: cameraState.forward.clone(),
+          cameraPositionVec: cameraState.cameraPosition,
+          cameraLookAtVec: cameraState.cameraLookAt,
+          ...cameraState,
+        };
+      },
+    };
+  }
+  __bundle['./gameLogic.js'] = { createWorld };
+})();
+
+// ./input.js
+(() => {
+  function makeVector(x, y) {
+    return { x, y };
+  }
+
+  const INPUT_SIDES = ['left', 'right'];
+  const RESET_KEY = 'KeyR';
+  const RESET_GAMEPAD_BUTTON = 8;
+
+  const INPUT_SIDE_CONFIG = {
+    left: {
+      keyboard: { right: 'KeyD', left: 'KeyA', down: 'KeyS', up: 'KeyW' },
+      gripKey: 'KeyF',
+      gamepadAxes: [0, 1],
+      gamepadGripButton: 6,
+    },
+    right: {
+      keyboard: { right: 'KeyL', left: 'KeyJ', down: 'KeyK', up: 'KeyI' },
+      gripKey: 'KeyH',
+      gamepadAxes: [2, 3],
+      gamepadGripButton: 7,
+    },
+  };
+
+  function applyDeadzone(value, deadzone = 0.18) {
+    if (Math.abs(value) <= deadzone) {
+      return 0;
+    }
+    const sign = Math.sign(value);
+    return sign * ((Math.abs(value) - deadzone) / (1 - deadzone));
+  }
+
+  function selectInput(primary, secondary) {
+    const primaryLength = Math.hypot(primary.x, primary.y);
+    const secondaryLength = Math.hypot(secondary.x, secondary.y);
+    return primaryLength >= secondaryLength ? primary : secondary;
+  }
+
+  function createInputManager(targetWindow) {
+    const keyState = new Map();
+    let previousReset = false;
+
+    const trackedKeys = new Set([
+      ...INPUT_SIDES.flatMap((side) => {
+        const { keyboard, gripKey } = INPUT_SIDE_CONFIG[side];
+        return [...Object.values(keyboard), gripKey];
+      }),
+      RESET_KEY,
+    ]);
+
+    targetWindow.addEventListener('keydown', (event) => {
+      if (trackedKeys.has(event.code)) {
+        keyState.set(event.code, true);
+        event.preventDefault();
+      }
+    });
+
+    targetWindow.addEventListener('keyup', (event) => {
+      if (trackedKeys.has(event.code)) {
+        keyState.set(event.code, false);
+        event.preventDefault();
+      }
+    });
+
+    function isDown(code) {
+      return keyState.get(code) === true;
+    }
+
+    function readKeyboardVector(right, left, down, up) {
+      const x = (isDown(right) ? 1 : 0) - (isDown(left) ? 1 : 0);
+      const y = (isDown(up) ? 1 : 0) - (isDown(down) ? 1 : 0);
+      return makeVector(x, y);
+    }
+
+    function readSideKeyboard(side) {
+      const { right, left, down, up } = INPUT_SIDE_CONFIG[side].keyboard;
+      return readKeyboardVector(right, left, down, up);
+    }
+
+    function readSideGamepad(side, gamepad) {
+      const [axisX, axisY] = INPUT_SIDE_CONFIG[side].gamepadAxes;
+      return makeVector(
+        applyDeadzone(gamepad?.axes[axisX] ?? 0),
+        applyDeadzone(-(gamepad?.axes[axisY] ?? 0))
+      );
+    }
+
+    function readSideGrip(side, gamepad) {
+      const config = INPUT_SIDE_CONFIG[side];
+      return isDown(config.gripKey) || (gamepad?.buttons[config.gamepadGripButton]?.value ?? 0) > 0.35;
+    }
+
+    function readGamepad() {
+      const gamepads = navigator.getGamepads ? navigator.getGamepads() : [];
+      return Array.from(gamepads).find(Boolean) || null;
+    }
+
+    return {
+      update() {
+        const gamepad = readGamepad();
+
+        const sideInputs = Object.fromEntries(
+          INPUT_SIDES.map((side) => [
+            side,
+            {
+              keyboard: readSideKeyboard(side),
+              gamepad: readSideGamepad(side, gamepad),
+              grip: readSideGrip(side, gamepad),
+            },
+          ])
+        );
+        let sourceLabel = 'Keyboard fallback';
+
+        if (gamepad) {
+          sourceLabel = gamepad.id || 'Gamepad';
+        }
+
+        const resetDown = isDown(RESET_KEY) || Boolean(gamepad?.buttons[RESET_GAMEPAD_BUTTON]?.pressed);
+        const resetPressed = resetDown && !previousReset;
+        previousReset = resetDown;
+
+        return {
+          leftMotion: selectInput(sideInputs.left.gamepad, sideInputs.left.keyboard),
+          rightMotion: selectInput(sideInputs.right.gamepad, sideInputs.right.keyboard),
+          leftGrip: sideInputs.left.grip,
+          rightGrip: sideInputs.right.grip,
+          resetPressed,
+          sourceLabel,
+        };
+      },
+    };
+  }
+  __bundle['./input.js'] = { createInputManager };
+})();
+
+// ./scene.js
+(() => {
+  const THREE = __bundle.__externals.three;
+  const { VIEW_LAYOUT } = __bundle['./cockpitLayout.js'];
+  const OVERHEAD_CAMERA_HEIGHT = 28;
+  const OVERHEAD_DEFAULT_FORWARD = new THREE.Vector3(0, 0, -1);
+  const OVERHEAD_INSET_LAYOUT = {
+    widthRatio: 0.22,
+    heightRatio: 0.32,
+    minWidth: 160,
+    minHeight: 110,
+    margin: 18,
+  };
+
+  function getViewHeights(height) {
+    const topHeight = Math.max(Math.floor(height * VIEW_LAYOUT.topScreenRatio), 1);
+    const bottomHeight = Math.max(height - topHeight, 1);
+    return { topHeight, bottomHeight };
+  }
+
+  function getOverheadInsetRect(width, height, topHeight) {
+    const insetWidth = Math.max(Math.floor(width * OVERHEAD_INSET_LAYOUT.widthRatio), OVERHEAD_INSET_LAYOUT.minWidth);
+    const insetHeight = Math.max(Math.floor(topHeight * OVERHEAD_INSET_LAYOUT.heightRatio), OVERHEAD_INSET_LAYOUT.minHeight);
+    return {
+      width: insetWidth,
+      height: insetHeight,
+      x: width - insetWidth - OVERHEAD_INSET_LAYOUT.margin,
+      y: height - insetHeight - OVERHEAD_INSET_LAYOUT.margin,
+    };
+  }
+
+  function createSceneBundle(canvas) {
+    const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer.autoClear = false;
+    renderer.outputColorSpace = THREE.SRGBColorSpace;
+
+    const topScene = new THREE.Scene();
+    topScene.background = new THREE.Color(0x09111b);
+
+    const cockpitScene = new THREE.Scene();
+    cockpitScene.background = new THREE.Color(0x0d1216);
+
+    addLights(topScene, cockpitScene);
+    addWorldShell(topScene);
+
+    const topCamera = new THREE.PerspectiveCamera(68, 1, 0.1, 120);
+    topCamera.position.set(0, 2.8, 8.5);
+    topCamera.lookAt(0, 1.8, 0);
+    topScene.add(topCamera);
+
+    const overheadCamera = new THREE.PerspectiveCamera(40, 1, 0.1, 160);
+    overheadCamera.position.set(0, OVERHEAD_CAMERA_HEIGHT, 0);
+    overheadCamera.up.set(0, 0, -1);
+    overheadCamera.lookAt(0, 0, 0);
+    overheadCamera.layers.enable(1);
+    topScene.add(overheadCamera);
+
+    const topCameraFrustum = new THREE.CameraHelper(topCamera);
+    topCameraFrustum.layers.set(1);
+    topScene.add(topCameraFrustum);
+
+    const playerForwardArrow = new THREE.ArrowHelper(
+      new THREE.Vector3(0, 0, -1),
+      new THREE.Vector3(0, 0.3, 0),
+      3.2,
+      0x7df0ff,
+      0.75,
+      0.45
+    );
+    playerForwardArrow.layers.set(1);
+    topScene.add(playerForwardArrow);
+
+    const cockpitCamera = new THREE.PerspectiveCamera(55, 1, 0.1, 100);
+    cockpitCamera.position.set(0, 1.8, 5.8);
+    cockpitCamera.lookAt(0, 0.7, 0);
+    cockpitScene.add(cockpitCamera);
+
+    return {
+      renderer,
+      canvas,
+      topScene,
+      cockpitScene,
+      topCamera,
+      topCameraFrustum,
+      playerForwardArrow,
+      overheadCamera,
+      cockpitCamera,
+    };
+  }
+
+  function addLights(topScene, cockpitScene) {
+    const topAmbient = new THREE.AmbientLight(0x8ba2c9, 1.5);
+    const topDirectional = new THREE.DirectionalLight(0xe9f3ff, 1.45);
+    topDirectional.position.set(10, 18, 4);
+    topScene.add(topAmbient, topDirectional);
+
+    const cockpitAmbient = new THREE.AmbientLight(0x6b7f97, 1.6);
+    const cockpitDirectional = new THREE.DirectionalLight(0xffffff, 0.9);
+    cockpitDirectional.position.set(2, 3, 5);
+    const cockpitAccent = new THREE.PointLight(0x6dc9ff, 10, 18, 2);
+    cockpitAccent.position.set(0, 1.7, 2.3);
+    cockpitScene.add(cockpitAmbient, cockpitDirectional, cockpitAccent);
+  }
+
+  function addWorldShell(topScene) {
+    const floor = new THREE.Mesh(
+      new THREE.BoxGeometry(70, 0.25, 70),
+      new THREE.MeshStandardMaterial({ color: 0x1a2734, roughness: 0.95, metalness: 0.05 })
+    );
+    floor.position.y = -0.18;
+    topScene.add(floor);
+
+    const markerMaterial = new THREE.MeshStandardMaterial({ color: 0x284765, roughness: 0.8 });
+    const markers = [
+      [-16, 0, 0],
+      [16, 0, 0],
+      [0, 0, -16],
+      [0, 0, 16],
+    ];
+
+    for (const [x, y, z] of markers) {
+      const marker = new THREE.Mesh(new THREE.BoxGeometry(1, 0.3, 7), markerMaterial.clone());
+      marker.position.set(x, y, z);
+      if (z !== 0) {
+        marker.rotation.y = Math.PI * 0.5;
+      }
+      topScene.add(marker);
+    }
+  }
+
+  function resizeSceneBundle(bundle) {
+    const width = bundle.canvas.clientWidth;
+    const height = bundle.canvas.clientHeight;
+    if (width === 0 || height === 0) {
+      return;
+    }
+
+    bundle.renderer.setSize(width, height, false);
+    bundle.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+
+    const { topHeight, bottomHeight } = getViewHeights(height);
+    bundle.topCamera.aspect = width / topHeight;
+    bundle.topCamera.updateProjectionMatrix();
+
+    bundle.cockpitCamera.aspect = width / bottomHeight;
+    bundle.cockpitCamera.updateProjectionMatrix();
+  }
+
+  function updateTopCamera(bundle, position, lookAt) {
+    bundle.topCamera.position.copy(position);
+    bundle.topCamera.lookAt(lookAt);
+    bundle.topCameraFrustum.update();
+  }
+
+  function updateOverheadCamera(bundle, worldState) {
+    const focus = worldState.playerPositionVec;
+    const forward = (worldState.playerForwardVec ?? OVERHEAD_DEFAULT_FORWARD).clone().setY(0).normalize();
+
+    bundle.overheadCamera.position.set(focus.x, OVERHEAD_CAMERA_HEIGHT, focus.z);
+    bundle.overheadCamera.lookAt(focus.x, 0, focus.z);
+
+    bundle.playerForwardArrow.position.set(focus.x, 0.3, focus.z);
+    bundle.playerForwardArrow.setDirection(forward.lengthSq() > 0.0001 ? forward : OVERHEAD_DEFAULT_FORWARD);
+  }
+
+  function renderViews(bundle) {
+    const width = bundle.canvas.clientWidth;
+    const height = bundle.canvas.clientHeight;
+    const { topHeight, bottomHeight } = getViewHeights(height);
+
+    bundle.renderer.clear();
+    bundle.renderer.setScissorTest(true);
+
+    bundle.renderer.setViewport(0, bottomHeight, width, topHeight);
+    bundle.renderer.setScissor(0, bottomHeight, width, topHeight);
+    bundle.renderer.render(bundle.topScene, bundle.topCamera);
+
+    const insetRect = getOverheadInsetRect(width, height, topHeight);
+
+    bundle.overheadCamera.aspect = insetRect.width / insetRect.height;
+    bundle.overheadCamera.updateProjectionMatrix();
+
+    bundle.renderer.clearDepth();
+    bundle.renderer.setViewport(insetRect.x, insetRect.y, insetRect.width, insetRect.height);
+    bundle.renderer.setScissor(insetRect.x, insetRect.y, insetRect.width, insetRect.height);
+    bundle.renderer.render(bundle.topScene, bundle.overheadCamera);
+
+    bundle.renderer.setViewport(0, 0, width, bottomHeight);
+    bundle.renderer.setScissor(0, 0, width, bottomHeight);
+    bundle.renderer.render(bundle.cockpitScene, bundle.cockpitCamera);
+
+    bundle.renderer.setScissorTest(false);
+  }
+  __bundle['./scene.js'] = { createSceneBundle, resizeSceneBundle, updateTopCamera, updateOverheadCamera, renderViews };
+})();
+
+// ./main.js
+(() => {
+  const { Clock, Vector3 } = __bundle.__externals.three;
+  const { createCockpit } = __bundle['./cockpit.js'];
+  const { VIEW_LAYOUT } = __bundle['./cockpitLayout.js'];
+  const { createWorld } = __bundle['./gameLogic.js'];
+  const { createInputManager } = __bundle['./input.js'];
+  const { createSceneBundle, renderViews, resizeSceneBundle, updateOverheadCamera, updateTopCamera } = __bundle['./scene.js'];
+  const INITIAL_CAMERA_POSITION = new Vector3(0, 2.1, 0);
+  const INITIAL_CAMERA_LOOK_AT = new Vector3(0, 1.8, -1);
+  const INITIAL_PLAYER_POSITION = new Vector3(0, 0, 0);
+  const INITIAL_PLAYER_FORWARD = new Vector3(0, 0, -1);
+
+  const canvas = document.querySelector('#app');
+  const statusPanel = document.querySelector('#statusPanel');
+  const helpPanel = document.querySelector('#helpPanel');
+  const divider = document.querySelector('#divider');
+  const deviceHintLayer = document.querySelector('#deviceHintLayer');
+  const enemyHpFill = document.querySelector('#enemyHpFill');
+  const enemyHpValue = document.querySelector('#enemyHpValue');
+  const playerHpFill = document.querySelector('#playerHpFill');
+  const playerHpValue = document.querySelector('#playerHpValue');
+
+  document.documentElement.style.setProperty('--top-view-split', `${VIEW_LAYOUT.topScreenRatio * 100}%`);
+  divider.style.top = `var(--top-view-split)`;
+
+  const sceneBundle = createSceneBundle(canvas);
+  const input = createInputManager(window);
+  const cockpit = createCockpit(sceneBundle.cockpitScene);
+  const world = createWorld(sceneBundle.topScene);
+
+  const clock = new Clock();
+
+  function buildStatusText(frameState) {
+    const { sourceLabel, leftHand, rightHand, worldState } = frameState;
+    return [
+      'UPPER VIEW: player cockpit view / LOWER VIEW: control deck',
+      `Input: ${sourceLabel}`,
+      `Player HP ${worldState.playerHealth.toFixed(0)} | Enemy HP ${worldState.enemyHealth.toFixed(0)} | Missiles ${worldState.missileCount} | Gatling ${worldState.gatlingAmmo}`,
+      `Left hand: ${leftHand}`,
+      `Right hand: ${rightHand}`,
+      `Enemy mode: ${worldState.enemyMode}`,
+      `Robot position: ${worldState.playerPosition}`,
+    ].join('\n');
+  }
+
+  function buildHelpText(frameState) {
+    return [
+      'ゲームパッド操作',
+      'Lスティック: 左手のフォーカス移動 / 左手でつかんだ機器の操作',
+      'Rスティック: 右手のフォーカス移動 / 右手でつかんだ機器の操作',
+      'LT / RT: 左手 / 右手でつかむ・離す',
+      '手が空いているとき: 倒した方向の次の機器へ移動',
+      '機器をつかんでいるとき: その場で機器だけを操作',
+      '',
+      `左手フォーカス: ${frameState.leftHover}`,
+      `右手フォーカス: ${frameState.rightHover}`,
+    ].join('\n');
+  }
+
+  function projectCockpitPoint(point) {
+    const width = canvas.clientWidth;
+    const height = canvas.clientHeight;
+    const topHeight = Math.max(Math.floor(height * VIEW_LAYOUT.topScreenRatio), 1);
+    const bottomHeight = Math.max(height - topHeight, 1);
+    const projected = point.clone().project(sceneBundle.cockpitCamera);
+
+    if (projected.z < -1 || projected.z > 1) {
+      return null;
+    }
+
+    return {
+      x: (projected.x * 0.5 + 0.5) * width,
+      y: topHeight + (1 - (projected.y * 0.5 + 0.5)) * bottomHeight,
+    };
+  }
+
+  function renderDeviceHints(activeDeviceHints) {
+    deviceHintLayer.innerHTML = '';
+
+    for (const hint of activeDeviceHints) {
+      const screenPoint = projectCockpitPoint(new Vector3(
+        hint.worldPosition.x,
+        hint.worldPosition.y,
+        hint.worldPosition.z
+      ));
+      if (!screenPoint) {
+        continue;
+      }
+
+      const hintElement = document.createElement('div');
+      hintElement.className = `device-hint ${hint.placement}`;
+      hintElement.style.left = `${screenPoint.x}px`;
+      hintElement.style.top = `${screenPoint.y}px`;
+
+      const instructionLinesHtml = (hint.instructionLines ?? [])
+        .map((line) => {
+          const parts = line.trim().split(/\s+/);
+          if (parts.length < 2) {
+            return `<div class="device-hint-line">${line}</div>`;
+          }
+
+          const [handToken, arrowToken, ...restTokens] = parts;
+          const actionText = restTokens.join(' ');
+          return `
+            <div class="device-hint-line">
+              <span class="inline-icon control-icon">${handToken}</span>
+              <span class="inline-icon arrow-icon">${arrowToken}</span>
+              <span class="line-text">${actionText}</span>
+            </div>
+          `;
+        })
+        .join('');
+
+      hintElement.innerHTML = `
+        <div class="device-hint-title">${hint.title}</div>
+        ${instructionLinesHtml ? `<div class="device-hint-lines">${instructionLinesHtml}</div>` : ''}
+      `;
+      deviceHintLayer.appendChild(hintElement);
+    }
+  }
+
+  function updateHpBars(worldState) {
+    const enemyRatio = Math.max(0, Math.min(worldState.enemyHealth / 100, 1));
+    const playerRatio = Math.max(0, Math.min(worldState.playerHealth / 100, 1));
+
+    enemyHpFill.style.width = `${enemyRatio * 100}%`;
+    enemyHpValue.textContent = `${worldState.enemyHealth.toFixed(0)} / 100`;
+
+    playerHpFill.style.width = `${playerRatio * 100}%`;
+    playerHpValue.textContent = `${worldState.playerHealth.toFixed(0)} / 100`;
+  }
+
+  function animate() {
+    requestAnimationFrame(animate);
+
+    const dt = Math.min(clock.getDelta(), 0.05);
+    resizeSceneBundle(sceneBundle);
+
+    const inputState = input.update();
+    if (inputState.resetPressed) {
+      world.reset();
+      cockpit.resetHands();
+    }
+
+    const cockpitState = cockpit.update(dt, inputState, world.getCockpitFeedback());
+    const worldState = world.update(dt, cockpitState.outputs);
+    renderDeviceHints(cockpitState.activeDeviceHints ?? []);
+    updateHpBars(worldState);
+
+    updateTopCamera(sceneBundle, worldState.cameraPositionVec, worldState.cameraLookAtVec);
+    updateOverheadCamera(sceneBundle, worldState);
+    renderViews(sceneBundle);
+
+    statusPanel.textContent = buildStatusText({
+      sourceLabel: inputState.sourceLabel,
+      leftHand: cockpitState.handSummary.left,
+      rightHand: cockpitState.handSummary.right,
+      worldState,
+    });
+
+    helpPanel.textContent = buildHelpText({
+      leftHover: cockpitState.hoverSummary.left,
+      rightHover: cockpitState.hoverSummary.right,
+      sourceLabel: inputState.sourceLabel,
+    });
+  }
+
+  window.addEventListener('resize', () => resizeSceneBundle(sceneBundle));
+  window.addEventListener('keydown', (event) => {
+    if (event.code === 'Space') {
+      event.preventDefault();
+    }
+  });
+
+  resizeSceneBundle(sceneBundle);
+  updateTopCamera(sceneBundle, INITIAL_CAMERA_POSITION, INITIAL_CAMERA_LOOK_AT);
+  updateOverheadCamera(sceneBundle, {
+    playerPositionVec: INITIAL_PLAYER_POSITION,
+    playerForwardVec: INITIAL_PLAYER_FORWARD,
+    cameraPositionVec: INITIAL_CAMERA_POSITION,
+    cameraLookAtVec: INITIAL_CAMERA_LOOK_AT,
+  });
+  animate();
+  __bundle['./main.js'] = {};
+})();
+</script>
+</body>
+</html>
