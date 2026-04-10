@@ -1,0 +1,244 @@
+<!doctype html>
+<html lang="ja">
+
+<head>
+  <meta charset="utf-8">
+  <title>zenEXE GPU Raycast + Free Camera (three.js)</title>
+  <style>
+    html,
+    body {
+      margin: 0;
+      overflow: hidden;
+      background: #000
+    }
+
+    canvas {
+      display: block
+    }
+
+    #hint {
+      position: fixed;
+      top: 10px;
+      left: 10px;
+      color: #fff;
+      font-family: monospace;
+      opacity: .8;
+      font-size: 13px;
+    }
+  </style>
+</head>
+
+<body>
+  <div id="hint">
+    Click to lock mouse<br>
+    WASD: move / Space: up / Shift: down
+  </div>
+
+  <script src="https://unpkg.com/three@0.160.0/build/three.min.js"></script>
+  <script>
+    /* ===============================
+       Renderer / Scene
+    ================================ */
+    const renderer = new THREE.WebGLRenderer();
+    renderer.setSize(innerWidth, innerHeight);
+    document.body.appendChild(renderer.domElement);
+
+    const scene = new THREE.Scene();
+    const camera = new THREE.Camera();
+
+    /* ===============================
+       Voxel world (zenEXE style)
+    ================================ */
+    const W = 32, H = 16, D = 32;
+    const vox = new Uint8Array(W * H * D);
+
+    // simple terrain
+    for (let z = 0; z < D; z++)for (let x = 0; x < W; x++) {
+      const h = 4 + Math.sin(x * 0.3) * 2 + Math.cos(z * 0.3) * 2;
+      for (let y = 0; y < H; y++) {
+        vox[y * W * D + z * W + x] = (y < h) ? 255 : 0;
+      }
+    }
+
+    // pack to 2D texture
+    const texW = W * D, texH = H;
+    const voxTexData = new Uint8Array(texW * texH * 4);
+
+    for (let y = 0; y < H; y++)
+      for (let z = 0; z < D; z++)
+        for (let x = 0; x < W; x++) {
+          const v = vox[y * W * D + z * W + x];
+          const i = (y * texW + (z * W + x)) * 4;
+          voxTexData[i] = v;
+          voxTexData[i + 3] = 255;
+        }
+
+    const voxelTex = new THREE.DataTexture(
+      voxTexData, texW, texH, THREE.RGBAFormat
+    );
+    voxelTex.magFilter = THREE.NearestFilter;
+    voxelTex.minFilter = THREE.NearestFilter;
+    voxelTex.needsUpdate = true;
+
+    /* ===============================
+       Shader
+    ================================ */
+    const material = new THREE.ShaderMaterial({
+      uniforms: {
+        u_voxel: { value: voxelTex },
+        u_worldSize: { value: new THREE.Vector3(W, H, D) },
+        u_res: { value: new THREE.Vector2(innerWidth, innerHeight) },
+        u_camPos: { value: new THREE.Vector3(16, 8, 28) },
+        u_yaw: { value: 0 },
+        u_pitch: { value: 0 }
+      },
+      vertexShader: `
+    void main(){
+      gl_Position=vec4(position,1.0);
+    }
+  `,
+      fragmentShader: `
+    precision highp float;
+
+uniform sampler2D u_voxel;
+uniform vec3 u_worldSize;
+uniform vec2 u_res;
+uniform vec3 u_camPos;
+uniform float u_yaw;
+uniform float u_pitch;
+
+float voxelAt(ivec3 p){
+  if(any(lessThan(p, ivec3(0))) ||
+     any(greaterThanEqual(p, ivec3(u_worldSize))))
+    return 0.0;
+
+  float idx = float(p.z) * u_worldSize.x + float(p.x);
+  vec2 uv = vec2(
+    (idx + 0.5) / (u_worldSize.x * u_worldSize.z),
+    (float(p.y) + 0.5) / u_worldSize.y
+  );
+  return texture2D(u_voxel, uv).r;
+}
+
+vec3 getRay(vec2 p){
+  vec3 dir = normalize(vec3(p, -1.0));
+
+  float cy = cos(u_yaw), sy = sin(u_yaw);
+  float cp = cos(u_pitch), sp = sin(u_pitch);
+
+  mat3 rotY = mat3(
+    cy, 0.0, -sy,
+    0.0, 1.0, 0.0,
+    sy, 0.0,  cy
+  );
+  mat3 rotX = mat3(
+    1.0, 0.0, 0.0,
+    0.0,  cp,  sp,
+    0.0, -sp,  cp
+  );
+
+  return rotY * rotX * dir;
+}
+
+void main(){
+  vec2 uv = gl_FragCoord.xy / u_res;
+  vec2 p = uv * 2.0 - 1.0;
+  p.x *= u_res.x / u_res.y;
+
+  vec3 ro = u_camPos;
+  vec3 rd = getRay(p);
+
+  vec3 pos = floor(ro);
+  vec3 d = abs(1.0 / rd);
+  ivec3 step = ivec3(sign(rd));
+
+  vec3 side;
+  side.x = (step.x > 0 ? (pos.x + 1.0 - ro.x) : (ro.x - pos.x)) * d.x;
+  side.y = (step.y > 0 ? (pos.y + 1.0 - ro.y) : (ro.y - pos.y)) * d.y;
+  side.z = (step.z > 0 ? (pos.z + 1.0 - ro.z) : (ro.z - pos.z)) * d.z;
+
+  for(int i = 0; i < 128; i++){
+    if(voxelAt(ivec3(pos)) > 0.5){
+      float h = float(pos.y) / u_worldSize.y;
+      gl_FragColor = vec4(vec3(0.3 + h, 0.6*h, 0.9*h), 1.0);
+      return;
+    }
+
+    if(side.x < side.y && side.x < side.z){
+      side.x += d.x;
+      pos.x += float(step.x);
+    }else if(side.y < side.z){
+      side.y += d.y;
+      pos.y += float(step.y);
+    }else{
+      side.z += d.z;
+      pos.z += float(step.z);
+    }
+  }
+
+  gl_FragColor = vec4(0.0, 0.0, 0.0, 1.0);
+}
+  `
+    });
+
+    scene.add(new THREE.Mesh(
+      new THREE.PlaneGeometry(2, 2),
+      material
+    ));
+
+    /* ===============================
+       Camera control (WASD + mouse)
+    ================================ */
+    const camPos = material.uniforms.u_camPos.value;
+    let yaw = 0, pitch = 0;
+
+    const keys = {};
+    window.addEventListener("keydown", e => keys[e.code] = true);
+    window.addEventListener("keyup", e => keys[e.code] = false);
+
+    // pointer lock
+    document.body.addEventListener("click", () => {
+      renderer.domElement.requestPointerLock();
+    });
+
+    document.addEventListener("mousemove", e => {
+      if (document.pointerLockElement !== renderer.domElement) return;
+      yaw -= e.movementX * 0.002;
+      pitch -= e.movementY * 0.002;
+      pitch = Math.max(-1.5, Math.min(1.5, pitch));
+    });
+
+    /* ===============================
+       Loop
+    ================================ */
+    let last = performance.now();
+    function loop(t) {
+      const dt = (t - last) * 0.001;
+      last = t;
+
+      const speed = 8 * dt;
+      const forward = new THREE.Vector3(
+        Math.sin(yaw), 0, -Math.cos(yaw)
+      );
+      const right = new THREE.Vector3(
+        Math.cos(yaw), 0, Math.sin(yaw)
+      );
+
+      if (keys.KeyW) camPos.addScaledVector(forward, speed);
+      if (keys.KeyS) camPos.addScaledVector(forward, -speed);
+      if (keys.KeyA) camPos.addScaledVector(right, -speed);
+      if (keys.KeyD) camPos.addScaledVector(right, speed);
+      if (keys.Space) camPos.y += speed;
+      if (keys.ShiftLeft) camPos.y -= speed;
+
+      material.uniforms.u_yaw.value = yaw;
+      material.uniforms.u_pitch.value = pitch;
+
+      renderer.render(scene, camera);
+      requestAnimationFrame(loop);
+    }
+    loop(last);
+  </script>
+</body>
+
+</html>
