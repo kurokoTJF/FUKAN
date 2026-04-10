@@ -1,0 +1,548 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Three.js CPU Meshed Voxel World</title>
+  <style>
+    html, body {
+      margin: 0;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background: #87b8ff;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    }
+    canvas { display: block; }
+    #hud {
+      position: fixed;
+      left: 12px;
+      top: 12px;
+      color: white;
+      background: rgba(0,0,0,0.35);
+      padding: 10px 12px;
+      border-radius: 8px;
+      line-height: 1.5;
+      font-size: 13px;
+      user-select: none;
+      pointer-events: none;
+      text-shadow: 0 1px 2px rgba(0,0,0,0.5);
+    }
+    #crosshair {
+      position: fixed;
+      left: 50%;
+      top: 50%;
+      width: 14px;
+      height: 14px;
+      margin-left: -7px;
+      margin-top: -7px;
+      pointer-events: none;
+    }
+    #crosshair::before,
+    #crosshair::after {
+      content: "";
+      position: absolute;
+      background: rgba(255,255,255,0.95);
+      box-shadow: 0 0 4px rgba(0,0,0,0.5);
+    }
+    #crosshair::before { left: 6px; top: 0; width: 2px; height: 14px; }
+    #crosshair::after  { left: 0; top: 6px; width: 14px; height: 2px; }
+  </style>
+</head>
+<body>
+  <div id="hud">
+    Click: mouse lock<br>
+    WASD: move / Space: up / Shift: down<br>
+    Terrain: CPU meshing (visible faces only)
+  </div>
+  <div id="crosshair"></div>
+
+  <script type="module">
+    import * as THREE from 'https://unpkg.com/three@0.160.0/build/three.module.js';
+
+    // ================================
+    // Renderer / Scene / Camera
+    // ================================
+    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+    renderer.setSize(innerWidth, innerHeight);
+    renderer.shadowMap.enabled = true;
+    document.body.appendChild(renderer.domElement);
+
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x87b8ff);
+    scene.fog = new THREE.Fog(0x87b8ff, 40, 180);
+
+    const camera = new THREE.PerspectiveCamera(75, innerWidth / innerHeight, 0.1, 500);
+    camera.position.set(20, 18, 20);
+
+    // ================================
+    // Lights
+    // ================================
+    scene.add(new THREE.HemisphereLight(0xbad8ff, 0x50603b, 1.35));
+
+    const sun = new THREE.DirectionalLight(0xffffff, 1.15);
+    sun.position.set(40, 60, 20);
+    sun.castShadow = true;
+    sun.shadow.mapSize.set(2048, 2048);
+    sun.shadow.camera.left = -120;
+    sun.shadow.camera.right = 120;
+    sun.shadow.camera.top = 120;
+    sun.shadow.camera.bottom = -120;
+    sun.shadow.camera.near = 0.5;
+    sun.shadow.camera.far = 200;
+    scene.add(sun);
+
+    // ================================
+    // Constants / Block IDs
+    // ================================
+    const CHUNK_SIZE_X = 16;
+    const CHUNK_SIZE_Y = 32;
+    const CHUNK_SIZE_Z = 16;
+    const WORLD_CHUNKS_X = 4;
+    const WORLD_CHUNKS_Z = 4;
+    const WORLD_SIZE_X = CHUNK_SIZE_X * WORLD_CHUNKS_X;
+    const WORLD_SIZE_Y = CHUNK_SIZE_Y;
+    const WORLD_SIZE_Z = CHUNK_SIZE_Z * WORLD_CHUNKS_Z;
+
+    const AIR = 0;
+    const GRASS = 1;
+    const DIRT = 2;
+    const STONE = 3;
+    const WOOD = 4;
+    const LEAF = 5;
+    const SAND = 6;
+    const WATER = 7;
+
+    const WATER_LEVEL = 8;
+
+    function colorHexToRgb(hex) {
+      return [((hex >> 16) & 255) / 255, ((hex >> 8) & 255) / 255, (hex & 255) / 255];
+    }
+
+    const BLOCK_COLORS = {
+      [GRASS]: {
+        px: colorHexToRgb(0x6cae47), nx: colorHexToRgb(0x6cae47),
+        py: colorHexToRgb(0x74bf4f), ny: colorHexToRgb(0x6d4a2c),
+        pz: colorHexToRgb(0x6cae47), nz: colorHexToRgb(0x6cae47)
+      },
+      [DIRT]: {
+        px: colorHexToRgb(0x7b5230), nx: colorHexToRgb(0x7b5230),
+        py: colorHexToRgb(0x8a603a), ny: colorHexToRgb(0x684325),
+        pz: colorHexToRgb(0x7b5230), nz: colorHexToRgb(0x7b5230)
+      },
+      [STONE]: {
+        px: colorHexToRgb(0x7f858a), nx: colorHexToRgb(0x7f858a),
+        py: colorHexToRgb(0x9ca4aa), ny: colorHexToRgb(0x6f757a),
+        pz: colorHexToRgb(0x7f858a), nz: colorHexToRgb(0x7f858a)
+      },
+      [WOOD]: {
+        px: colorHexToRgb(0x8a5d2f), nx: colorHexToRgb(0x8a5d2f),
+        py: colorHexToRgb(0xbc8b56), ny: colorHexToRgb(0x6b4521),
+        pz: colorHexToRgb(0x8a5d2f), nz: colorHexToRgb(0x8a5d2f)
+      },
+      [LEAF]: {
+        px: colorHexToRgb(0x3f8f46), nx: colorHexToRgb(0x3f8f46),
+        py: colorHexToRgb(0x54a85b), ny: colorHexToRgb(0x2f6e35),
+        pz: colorHexToRgb(0x3f8f46), nz: colorHexToRgb(0x3f8f46)
+      },
+      [SAND]: {
+        px: colorHexToRgb(0xd7c178), nx: colorHexToRgb(0xd7c178),
+        py: colorHexToRgb(0xe2cf8a), ny: colorHexToRgb(0xc2aa62),
+        pz: colorHexToRgb(0xd7c178), nz: colorHexToRgb(0xd7c178)
+      },
+      [WATER]: {
+        px: colorHexToRgb(0x3c76c9), nx: colorHexToRgb(0x3c76c9),
+        py: colorHexToRgb(0x4a8df0), ny: colorHexToRgb(0x2e5da0),
+        pz: colorHexToRgb(0x3c76c9), nz: colorHexToRgb(0x3c76c9)
+      }
+    };
+
+    const DIRS = [
+      { key: 'px', normal: [ 1, 0, 0], corners: [[1,0,0],[1,1,0],[1,1,1],[1,0,1]] },
+      { key: 'nx', normal: [-1, 0, 0], corners: [[0,0,1],[0,1,1],[0,1,0],[0,0,0]] },
+      { key: 'py', normal: [ 0, 1, 0], corners: [[0,1,1],[1,1,1],[1,1,0],[0,1,0]] },
+      { key: 'ny', normal: [ 0,-1, 0], corners: [[0,0,0],[1,0,0],[1,0,1],[0,0,1]] },
+      { key: 'pz', normal: [ 0, 0, 1], corners: [[1,0,1],[1,1,1],[0,1,1],[0,0,1]] },
+      { key: 'nz', normal: [ 0, 0,-1], corners: [[0,0,0],[0,1,0],[1,1,0],[1,0,0]] }
+    ];
+
+    // ================================
+    // Noise helpers
+    // ================================
+    function hash2D(x, z) {
+      let n = x * 374761393 + z * 668265263;
+      n = (n ^ (n >> 13)) * 1274126177;
+      n ^= (n >> 16);
+      return (n >>> 0) / 4294967295;
+    }
+
+    function smoothstep(t) {
+      return t * t * (3 - 2 * t);
+    }
+
+    function valueNoise2D(x, z) {
+      const x0 = Math.floor(x), z0 = Math.floor(z);
+      const x1 = x0 + 1, z1 = z0 + 1;
+      const tx = smoothstep(x - x0);
+      const tz = smoothstep(z - z0);
+
+      const v00 = hash2D(x0, z0);
+      const v10 = hash2D(x1, z0);
+      const v01 = hash2D(x0, z1);
+      const v11 = hash2D(x1, z1);
+
+      const a = THREE.MathUtils.lerp(v00, v10, tx);
+      const b = THREE.MathUtils.lerp(v01, v11, tx);
+      return THREE.MathUtils.lerp(a, b, tz);
+    }
+
+    function fbm2D(x, z, octaves = 4) {
+      let value = 0;
+      let amp = 0.5;
+      let freq = 1;
+      let sum = 0;
+      for (let i = 0; i < octaves; i++) {
+        value += valueNoise2D(x * freq, z * freq) * amp;
+        sum += amp;
+        amp *= 0.5;
+        freq *= 2;
+      }
+      return value / sum;
+    }
+
+    // ================================
+    // World data
+    // ================================
+    class Chunk {
+      constructor(cx, cz) {
+        this.cx = cx;
+        this.cz = cz;
+        this.blocks = new Uint8Array(CHUNK_SIZE_X * CHUNK_SIZE_Y * CHUNK_SIZE_Z);
+      }
+
+      index(x, y, z) {
+        return x + CHUNK_SIZE_X * (z + CHUNK_SIZE_Z * y);
+      }
+
+      getLocal(x, y, z) {
+        if (x < 0 || y < 0 || z < 0 || x >= CHUNK_SIZE_X || y >= CHUNK_SIZE_Y || z >= CHUNK_SIZE_Z) return AIR;
+        return this.blocks[this.index(x, y, z)];
+      }
+
+      setLocal(x, y, z, id) {
+        if (x < 0 || y < 0 || z < 0 || x >= CHUNK_SIZE_X || y >= CHUNK_SIZE_Y || z >= CHUNK_SIZE_Z) return;
+        this.blocks[this.index(x, y, z)] = id;
+      }
+    }
+
+    class World {
+      constructor() {
+        this.chunks = new Map();
+      }
+
+      chunkKey(cx, cz) {
+        return `${cx},${cz}`;
+      }
+
+      addChunk(chunk) {
+        this.chunks.set(this.chunkKey(chunk.cx, chunk.cz), chunk);
+      }
+
+      getChunk(cx, cz) {
+        return this.chunks.get(this.chunkKey(cx, cz)) || null;
+      }
+
+      getBlock(x, y, z) {
+        if (y < 0 || y >= WORLD_SIZE_Y) return AIR;
+        if (x < 0 || z < 0 || x >= WORLD_SIZE_X || z >= WORLD_SIZE_Z) return AIR;
+        const cx = Math.floor(x / CHUNK_SIZE_X);
+        const cz = Math.floor(z / CHUNK_SIZE_Z);
+        const lx = x - cx * CHUNK_SIZE_X;
+        const lz = z - cz * CHUNK_SIZE_Z;
+        const chunk = this.getChunk(cx, cz);
+        return chunk ? chunk.getLocal(lx, y, lz) : AIR;
+      }
+
+      setBlock(x, y, z, id) {
+        if (y < 0 || y >= WORLD_SIZE_Y) return;
+        if (x < 0 || z < 0 || x >= WORLD_SIZE_X || z >= WORLD_SIZE_Z) return;
+        const cx = Math.floor(x / CHUNK_SIZE_X);
+        const cz = Math.floor(z / CHUNK_SIZE_Z);
+        const lx = x - cx * CHUNK_SIZE_X;
+        const lz = z - cz * CHUNK_SIZE_Z;
+        const chunk = this.getChunk(cx, cz);
+        if (chunk) chunk.setLocal(lx, y, lz, id);
+      }
+
+      isOpaque(id) {
+        return id !== AIR && id !== WATER;
+      }
+
+      generate() {
+        for (let cz = 0; cz < WORLD_CHUNKS_Z; cz++) {
+          for (let cx = 0; cx < WORLD_CHUNKS_X; cx++) {
+            const chunk = new Chunk(cx, cz);
+            this.addChunk(chunk);
+          }
+        }
+
+        // base terrain
+        for (let z = 0; z < WORLD_SIZE_Z; z++) {
+          for (let x = 0; x < WORLD_SIZE_X; x++) {
+            const h1 = fbm2D(x * 0.045, z * 0.045, 5);
+            const h2 = fbm2D((x + 100) * 0.09, (z + 100) * 0.09, 3);
+            const height = Math.floor(5 + h1 * 10 + h2 * 5);
+            const beach = height <= WATER_LEVEL + 1;
+
+            for (let y = 0; y < CHUNK_SIZE_Y; y++) {
+              let id = AIR;
+              if (y < height - 4) id = STONE;
+              else if (y < height - 1) id = DIRT;
+              else if (y < height) id = beach ? SAND : GRASS;
+              else if (y <= WATER_LEVEL) id = WATER;
+              this.setBlock(x, y, z, id);
+            }
+          }
+        }
+
+        // simple trees
+        for (let z = 2; z < WORLD_SIZE_Z - 2; z++) {
+          for (let x = 2; x < WORLD_SIZE_X - 2; x++) {
+            const groundY = this.getTopSolidY(x, z);
+            if (groundY < WATER_LEVEL + 1) continue;
+            if (this.getBlock(x, groundY, z) !== GRASS) continue;
+            const n = hash2D(x * 17, z * 31);
+            if (n > 0.985) {
+              const trunkH = 3 + Math.floor(hash2D(x * 73, z * 91) * 3);
+              for (let i = 1; i <= trunkH; i++) {
+                this.setBlock(x, groundY + i, z, WOOD);
+              }
+              const leafBase = groundY + trunkH - 1;
+              for (let oy = 0; oy <= 2; oy++) {
+                const r = oy === 2 ? 1 : 2;
+                for (let oz = -r; oz <= r; oz++) {
+                  for (let ox = -r; ox <= r; ox++) {
+                    if (Math.abs(ox) + Math.abs(oz) > r + 1) continue;
+                    const wx = x + ox;
+                    const wy = leafBase + oy;
+                    const wz = z + oz;
+                    if (this.getBlock(wx, wy, wz) === AIR) {
+                      this.setBlock(wx, wy, wz, LEAF);
+                    }
+                  }
+                }
+              }
+              if (this.getBlock(x, leafBase + 3, z) === AIR) {
+                this.setBlock(x, leafBase + 3, z, LEAF);
+              }
+            }
+          }
+        }
+      }
+
+      getTopSolidY(x, z) {
+        for (let y = CHUNK_SIZE_Y - 1; y >= 0; y--) {
+          const id = this.getBlock(x, y, z);
+          if (id !== AIR && id !== WATER) return y;
+        }
+        return 0;
+      }
+    }
+
+    const world = new World();
+    world.generate();
+
+    // ================================
+    // Meshing
+    // ================================
+    function pushFace(positions, normals, colors, indices, baseIndex, x, y, z, dir, color) {
+      for (const c of dir.corners) {
+        positions.push(x + c[0], y + c[1], z + c[2]);
+        normals.push(dir.normal[0], dir.normal[1], dir.normal[2]);
+        colors.push(color[0], color[1], color[2]);
+      }
+      indices.push(baseIndex, baseIndex + 1, baseIndex + 2, baseIndex, baseIndex + 2, baseIndex + 3);
+    }
+
+    function buildChunkGeometry(world, chunk) {
+      const positions = [];
+      const normals = [];
+      const colors = [];
+      const indices = [];
+      let vCount = 0;
+
+      const worldBaseX = chunk.cx * CHUNK_SIZE_X;
+      const worldBaseZ = chunk.cz * CHUNK_SIZE_Z;
+
+      for (let y = 0; y < CHUNK_SIZE_Y; y++) {
+        for (let z = 0; z < CHUNK_SIZE_Z; z++) {
+          for (let x = 0; x < CHUNK_SIZE_X; x++) {
+            const wx = worldBaseX + x;
+            const wz = worldBaseZ + z;
+            const id = chunk.getLocal(x, y, z);
+            if (id === AIR || id === WATER) continue;
+
+            const palette = BLOCK_COLORS[id];
+            for (const dir of DIRS) {
+              const nx = wx + dir.normal[0];
+              const ny = y + dir.normal[1];
+              const nz = wz + dir.normal[2];
+              const neighbor = world.getBlock(nx, ny, nz);
+              if (world.isOpaque(neighbor)) continue;
+              pushFace(positions, normals, colors, indices, vCount, wx, y, wz, dir, palette[dir.key]);
+              vCount += 4;
+            }
+          }
+        }
+      }
+
+      const geometry = new THREE.BufferGeometry();
+      geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+      geometry.setAttribute('normal', new THREE.Float32BufferAttribute(normals, 3));
+      geometry.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
+      geometry.setIndex(indices);
+      geometry.computeBoundingSphere();
+      return geometry;
+    }
+
+    const worldGroup = new THREE.Group();
+    scene.add(worldGroup);
+
+    const terrainMaterial = new THREE.MeshLambertMaterial({ vertexColors: true });
+
+    for (let cz = 0; cz < WORLD_CHUNKS_Z; cz++) {
+      for (let cx = 0; cx < WORLD_CHUNKS_X; cx++) {
+        const chunk = world.getChunk(cx, cz);
+        const geometry = buildChunkGeometry(world, chunk);
+        const mesh = new THREE.Mesh(geometry, terrainMaterial);
+        mesh.castShadow = false;
+        mesh.receiveShadow = true;
+        worldGroup.add(mesh);
+      }
+    }
+
+    // water plane for readability
+    const waterGeo = new THREE.PlaneGeometry(WORLD_SIZE_X, WORLD_SIZE_Z, 1, 1);
+    const waterMat = new THREE.MeshPhongMaterial({
+      color: 0x3c76c9,
+      transparent: true,
+      opacity: 0.35,
+      shininess: 90
+    });
+    const water = new THREE.Mesh(waterGeo, waterMat);
+    water.rotation.x = -Math.PI / 2;
+    water.position.set(WORLD_SIZE_X / 2, WATER_LEVEL + 0.5, WORLD_SIZE_Z / 2);
+    scene.add(water);
+
+    // ================================
+    // Controls
+    // ================================
+    let yaw = -Math.PI * 0.25;
+    let pitch = -0.35;
+    const keys = Object.create(null);
+
+    function applyCameraRotation() {
+      camera.rotation.order = 'YXZ';
+      camera.rotation.y = yaw;
+      camera.rotation.x = pitch;
+    }
+    applyCameraRotation();
+
+    window.addEventListener('keydown', (e) => {
+      keys[e.code] = true;
+    });
+    window.addEventListener('keyup', (e) => {
+      keys[e.code] = false;
+    });
+
+    document.body.addEventListener('click', () => {
+      renderer.domElement.requestPointerLock();
+    });
+
+    document.addEventListener('mousemove', (e) => {
+      if (document.pointerLockElement !== renderer.domElement) return;
+      yaw -= e.movementX * 0.0022;
+      pitch -= e.movementY * 0.0022;
+      pitch = THREE.MathUtils.clamp(pitch, -Math.PI / 2 + 0.01, Math.PI / 2 - 0.01);
+      applyCameraRotation();
+    });
+
+    // ================================
+    // Debug cursor pick
+    // ================================
+    const raycaster = new THREE.Raycaster();
+    const marker = new THREE.Mesh(
+      new THREE.BoxGeometry(1.03, 1.03, 1.03),
+      new THREE.MeshBasicMaterial({ color: 0xffffff, wireframe: true })
+    );
+    marker.visible = false;
+    scene.add(marker);
+
+    function updateMarker() {
+      raycaster.setFromCamera(new THREE.Vector2(0, 0), camera);
+      const hits = raycaster.intersectObjects(worldGroup.children, false);
+      if (hits.length) {
+        const hit = hits[0];
+        const p = hit.point.clone().addScaledVector(hit.face.normal, -0.01).floor().addScalar(0.5);
+        marker.position.copy(p);
+        marker.visible = true;
+      } else {
+        marker.visible = false;
+      }
+    }
+
+    // ================================
+    // Animate
+    // ================================
+    let lastTime = performance.now();
+    const forward = new THREE.Vector3();
+    const right = new THREE.Vector3();
+    const move = new THREE.Vector3();
+
+    function animate(now) {
+      requestAnimationFrame(animate);
+      const dt = Math.min(0.05, (now - lastTime) * 0.001);
+      lastTime = now;
+
+      camera.getWorldDirection(forward);
+      forward.y = 0;
+      forward.normalize();
+      right.crossVectors(forward, new THREE.Vector3(0, 1, 0)).normalize();
+
+      move.set(0, 0, 0);
+      const speed = keys.ControlLeft ? 24 : 12;
+      if (keys.KeyW) move.add(forward);
+      if (keys.KeyS) move.addScaledVector(forward, -1);
+      if (keys.KeyD) move.add(right);
+      if (keys.KeyA) move.addScaledVector(right, -1);
+      if (keys.Space) move.y += 1;
+      if (keys.ShiftLeft) move.y -= 1;
+
+      if (move.lengthSq() > 0) {
+        move.normalize().multiplyScalar(speed * dt);
+        camera.position.add(move);
+      }
+
+      camera.position.x = THREE.MathUtils.clamp(camera.position.x, -10, WORLD_SIZE_X + 10);
+      camera.position.y = THREE.MathUtils.clamp(camera.position.y, 2, CHUNK_SIZE_Y + 10);
+      camera.position.z = THREE.MathUtils.clamp(camera.position.z, -10, WORLD_SIZE_Z + 10);
+
+      updateMarker();
+      renderer.render(scene, camera);
+    }
+
+    animate(lastTime);
+
+    // ================================
+    // Resize
+    // ================================
+    addEventListener('resize', () => {
+      camera.aspect = innerWidth / innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(innerWidth, innerHeight);
+      renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+    });
+  </script>
+</body>
+</html>
