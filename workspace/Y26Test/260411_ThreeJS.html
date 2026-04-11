@@ -1,548 +1,1099 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="ja">
+
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Three.js CPU Meshed Voxel World</title>
-  <style>
-    html, body {
-      margin: 0;
-      width: 100%;
-      height: 100%;
-      overflow: hidden;
-      background: #87b8ff;
-      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-    }
-    canvas { display: block; }
-    #hud {
-      position: fixed;
-      left: 12px;
-      top: 12px;
-      color: white;
-      background: rgba(0,0,0,0.35);
-      padding: 10px 12px;
-      border-radius: 8px;
-      line-height: 1.5;
-      font-size: 13px;
-      user-select: none;
-      pointer-events: none;
-      text-shadow: 0 1px 2px rgba(0,0,0,0.5);
-    }
-    #crosshair {
-      position: fixed;
-      left: 50%;
-      top: 50%;
-      width: 14px;
-      height: 14px;
-      margin-left: -7px;
-      margin-top: -7px;
-      pointer-events: none;
-    }
-    #crosshair::before,
-    #crosshair::after {
-      content: "";
-      position: absolute;
-      background: rgba(255,255,255,0.95);
-      box-shadow: 0 0 4px rgba(0,0,0,0.5);
-    }
-    #crosshair::before { left: 6px; top: 0; width: 2px; height: 14px; }
-    #crosshair::after  { left: 0; top: 6px; width: 14px; height: 2px; }
-  </style>
+    <meta charset="UTF-8">
+    <title>Zenzero 4 - Restoration</title>
+    <style>
+        body {
+            margin: 0;
+            background: #222;
+            overflow: hidden;
+            font-family: monospace;
+            color: white;
+            -webkit-user-select: none;
+        }
+
+        #container {
+            position: relative;
+            width: 480px;
+            height: 320px;
+            margin: 20px auto;
+            background: black;
+            image-rendering: pixelated;
+            border: 4px solid #444;
+        }
+
+        canvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+            image-rendering: pixelated;
+        }
+
+        #c_ui {
+            position: absolute;
+            top: 0;
+            left: 0;
+            pointer-events: none;
+        }
+
+        #error-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(255, 0, 0, 0.5);
+            display: none;
+            padding: 10px;
+            box-sizing: border-box;
+            font-size: 12px;
+            white-space: pre-wrap;
+            overflow-y: auto;
+        }
+
+        #info {
+            position: absolute;
+            bottom: 5px;
+            left: 5px;
+            font-size: 10px;
+            color: #fff;
+            text-shadow: 1px 1px 0 #000;
+            pointer-events: none;
+        }
+    </style>
 </head>
+
 <body>
-  <div id="hud">
-    Click: mouse lock<br>
-    WASD: move / Space: up / Shift: down<br>
-    Terrain: CPU meshing (visible faces only)
-  </div>
-  <div id="crosshair"></div>
+    <div id="container">
+        <!-- Three.js Canvas will be prepended here -->
+        <canvas id="c_ui" width="480" height="320"></canvas>
+        <div id="error-overlay"></div>
+        <div id="info">WASD: MOVE | ARROWS: CAMERA | SPACE: JUMP</div>
+    </div>
 
-  <script type="module">
+
+</body>
+
+</html>
+<script type="module">
     import * as THREE from 'https://unpkg.com/three@0.160.0/build/three.module.js';
+    import { IndexedImageLibrary, ImageLibrary, grassFloor_32RGB } from './zenzero_assets.js';
 
-    // ================================
-    // Renderer / Scene / Camera
-    // ================================
-    const renderer = new THREE.WebGLRenderer({ antialias: true });
-    renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
-    renderer.setSize(innerWidth, innerHeight);
-    renderer.shadowMap.enabled = true;
-    document.body.appendChild(renderer.domElement);
+    const overlay = document.getElementById('error-overlay');
+    const uiCtx = document.getElementById('c_ui').getContext('2d');
 
-    const scene = new THREE.Scene();
-    scene.background = new THREE.Color(0x87b8ff);
-    scene.fog = new THREE.Fog(0x87b8ff, 40, 180);
-
-    const camera = new THREE.PerspectiveCamera(75, innerWidth / innerHeight, 0.1, 500);
-    camera.position.set(20, 18, 20);
-
-    // ================================
-    // Lights
-    // ================================
-    scene.add(new THREE.HemisphereLight(0xbad8ff, 0x50603b, 1.35));
-
-    const sun = new THREE.DirectionalLight(0xffffff, 1.15);
-    sun.position.set(40, 60, 20);
-    sun.castShadow = true;
-    sun.shadow.mapSize.set(2048, 2048);
-    sun.shadow.camera.left = -120;
-    sun.shadow.camera.right = 120;
-    sun.shadow.camera.top = 120;
-    sun.shadow.camera.bottom = -120;
-    sun.shadow.camera.near = 0.5;
-    sun.shadow.camera.far = 200;
-    scene.add(sun);
-
-    // ================================
-    // Constants / Block IDs
-    // ================================
-    const CHUNK_SIZE_X = 16;
-    const CHUNK_SIZE_Y = 32;
-    const CHUNK_SIZE_Z = 16;
-    const WORLD_CHUNKS_X = 4;
-    const WORLD_CHUNKS_Z = 4;
-    const WORLD_SIZE_X = CHUNK_SIZE_X * WORLD_CHUNKS_X;
-    const WORLD_SIZE_Y = CHUNK_SIZE_Y;
-    const WORLD_SIZE_Z = CHUNK_SIZE_Z * WORLD_CHUNKS_Z;
-
-    const AIR = 0;
-    const GRASS = 1;
-    const DIRT = 2;
-    const STONE = 3;
-    const WOOD = 4;
-    const LEAF = 5;
-    const SAND = 6;
-    const WATER = 7;
-
-    const WATER_LEVEL = 8;
-
-    function colorHexToRgb(hex) {
-      return [((hex >> 16) & 255) / 255, ((hex >> 8) & 255) / 255, (hex & 255) / 255];
-    }
-
-    const BLOCK_COLORS = {
-      [GRASS]: {
-        px: colorHexToRgb(0x6cae47), nx: colorHexToRgb(0x6cae47),
-        py: colorHexToRgb(0x74bf4f), ny: colorHexToRgb(0x6d4a2c),
-        pz: colorHexToRgb(0x6cae47), nz: colorHexToRgb(0x6cae47)
-      },
-      [DIRT]: {
-        px: colorHexToRgb(0x7b5230), nx: colorHexToRgb(0x7b5230),
-        py: colorHexToRgb(0x8a603a), ny: colorHexToRgb(0x684325),
-        pz: colorHexToRgb(0x7b5230), nz: colorHexToRgb(0x7b5230)
-      },
-      [STONE]: {
-        px: colorHexToRgb(0x7f858a), nx: colorHexToRgb(0x7f858a),
-        py: colorHexToRgb(0x9ca4aa), ny: colorHexToRgb(0x6f757a),
-        pz: colorHexToRgb(0x7f858a), nz: colorHexToRgb(0x7f858a)
-      },
-      [WOOD]: {
-        px: colorHexToRgb(0x8a5d2f), nx: colorHexToRgb(0x8a5d2f),
-        py: colorHexToRgb(0xbc8b56), ny: colorHexToRgb(0x6b4521),
-        pz: colorHexToRgb(0x8a5d2f), nz: colorHexToRgb(0x8a5d2f)
-      },
-      [LEAF]: {
-        px: colorHexToRgb(0x3f8f46), nx: colorHexToRgb(0x3f8f46),
-        py: colorHexToRgb(0x54a85b), ny: colorHexToRgb(0x2f6e35),
-        pz: colorHexToRgb(0x3f8f46), nz: colorHexToRgb(0x3f8f46)
-      },
-      [SAND]: {
-        px: colorHexToRgb(0xd7c178), nx: colorHexToRgb(0xd7c178),
-        py: colorHexToRgb(0xe2cf8a), ny: colorHexToRgb(0xc2aa62),
-        pz: colorHexToRgb(0xd7c178), nz: colorHexToRgb(0xd7c178)
-      },
-      [WATER]: {
-        px: colorHexToRgb(0x3c76c9), nx: colorHexToRgb(0x3c76c9),
-        py: colorHexToRgb(0x4a8df0), ny: colorHexToRgb(0x2e5da0),
-        pz: colorHexToRgb(0x3c76c9), nz: colorHexToRgb(0x3c76c9)
-      }
+    const log = (msg) => {
+        console.log(msg);
+        uiCtx.fillStyle = "#fff"; uiCtx.font = "10px monospace";
+        uiCtx.clearRect(0, 300, 480, 20);
+        uiCtx.fillText("[BOOT] " + msg, 10, 310);
+    };
+    const logError = (msg) => {
+        overlay.style.display = 'block';
+        overlay.innerText += msg + "\n";
+        console.error(msg);
     };
 
-    const DIRS = [
-      { key: 'px', normal: [ 1, 0, 0], corners: [[1,0,0],[1,1,0],[1,1,1],[1,0,1]] },
-      { key: 'nx', normal: [-1, 0, 0], corners: [[0,0,1],[0,1,1],[0,1,0],[0,0,0]] },
-      { key: 'py', normal: [ 0, 1, 0], corners: [[0,1,1],[1,1,1],[1,1,0],[0,1,0]] },
-      { key: 'ny', normal: [ 0,-1, 0], corners: [[0,0,0],[1,0,0],[1,0,1],[0,0,1]] },
-      { key: 'pz', normal: [ 0, 0, 1], corners: [[1,0,1],[1,1,1],[0,1,1],[0,0,1]] },
-      { key: 'nz', normal: [ 0, 0,-1], corners: [[0,0,0],[0,1,0],[1,1,0],[1,0,0]] }
-    ];
+    window.addEventListener('error', (e) => logError(e.message));
 
-    // ================================
-    // Noise helpers
-    // ================================
-    function hash2D(x, z) {
-      let n = x * 374761393 + z * 668265263;
-      n = (n ^ (n >> 13)) * 1274126177;
-      n ^= (n >> 16);
-      return (n >>> 0) / 4294967295;
-    }
+    // --- Math & Utils ---
+    const lerp = (a, b, t) => a + (b - a) * t;
+    const clamp = (v, min, max) => Math.max(min, Math.min(max, v));
 
-    function smoothstep(t) {
-      return t * t * (3 - 2 * t);
-    }
-
-    function valueNoise2D(x, z) {
-      const x0 = Math.floor(x), z0 = Math.floor(z);
-      const x1 = x0 + 1, z1 = z0 + 1;
-      const tx = smoothstep(x - x0);
-      const tz = smoothstep(z - z0);
-
-      const v00 = hash2D(x0, z0);
-      const v10 = hash2D(x1, z0);
-      const v01 = hash2D(x0, z1);
-      const v11 = hash2D(x1, z1);
-
-      const a = THREE.MathUtils.lerp(v00, v10, tx);
-      const b = THREE.MathUtils.lerp(v01, v11, tx);
-      return THREE.MathUtils.lerp(a, b, tz);
-    }
-
-    function fbm2D(x, z, octaves = 4) {
-      let value = 0;
-      let amp = 0.5;
-      let freq = 1;
-      let sum = 0;
-      for (let i = 0; i < octaves; i++) {
-        value += valueNoise2D(x * freq, z * freq) * amp;
-        sum += amp;
-        amp *= 0.5;
-        freq *= 2;
-      }
-      return value / sum;
-    }
-
-    // ================================
-    // World data
-    // ================================
-    class Chunk {
-      constructor(cx, cz) {
-        this.cx = cx;
-        this.cz = cz;
-        this.blocks = new Uint8Array(CHUNK_SIZE_X * CHUNK_SIZE_Y * CHUNK_SIZE_Z);
-      }
-
-      index(x, y, z) {
-        return x + CHUNK_SIZE_X * (z + CHUNK_SIZE_Z * y);
-      }
-
-      getLocal(x, y, z) {
-        if (x < 0 || y < 0 || z < 0 || x >= CHUNK_SIZE_X || y >= CHUNK_SIZE_Y || z >= CHUNK_SIZE_Z) return AIR;
-        return this.blocks[this.index(x, y, z)];
-      }
-
-      setLocal(x, y, z, id) {
-        if (x < 0 || y < 0 || z < 0 || x >= CHUNK_SIZE_X || y >= CHUNK_SIZE_Y || z >= CHUNK_SIZE_Z) return;
-        this.blocks[this.index(x, y, z)] = id;
-      }
-    }
-
-    class World {
-      constructor() {
-        this.chunks = new Map();
-      }
-
-      chunkKey(cx, cz) {
-        return `${cx},${cz}`;
-      }
-
-      addChunk(chunk) {
-        this.chunks.set(this.chunkKey(chunk.cx, chunk.cz), chunk);
-      }
-
-      getChunk(cx, cz) {
-        return this.chunks.get(this.chunkKey(cx, cz)) || null;
-      }
-
-      getBlock(x, y, z) {
-        if (y < 0 || y >= WORLD_SIZE_Y) return AIR;
-        if (x < 0 || z < 0 || x >= WORLD_SIZE_X || z >= WORLD_SIZE_Z) return AIR;
-        const cx = Math.floor(x / CHUNK_SIZE_X);
-        const cz = Math.floor(z / CHUNK_SIZE_Z);
-        const lx = x - cx * CHUNK_SIZE_X;
-        const lz = z - cz * CHUNK_SIZE_Z;
-        const chunk = this.getChunk(cx, cz);
-        return chunk ? chunk.getLocal(lx, y, lz) : AIR;
-      }
-
-      setBlock(x, y, z, id) {
-        if (y < 0 || y >= WORLD_SIZE_Y) return;
-        if (x < 0 || z < 0 || x >= WORLD_SIZE_X || z >= WORLD_SIZE_Z) return;
-        const cx = Math.floor(x / CHUNK_SIZE_X);
-        const cz = Math.floor(z / CHUNK_SIZE_Z);
-        const lx = x - cx * CHUNK_SIZE_X;
-        const lz = z - cz * CHUNK_SIZE_Z;
-        const chunk = this.getChunk(cx, cz);
-        if (chunk) chunk.setLocal(lx, y, lz, id);
-      }
-
-      isOpaque(id) {
-        return id !== AIR && id !== WATER;
-      }
-
-      generate() {
-        for (let cz = 0; cz < WORLD_CHUNKS_Z; cz++) {
-          for (let cx = 0; cx < WORLD_CHUNKS_X; cx++) {
-            const chunk = new Chunk(cx, cz);
-            this.addChunk(chunk);
-          }
+    class Vec3 {
+        constructor(x = 0, y = 0, z = 0) { this.x = x; this.y = y; this.z = z; }
+        set(x, y, z) { this.x = x; this.y = y; this.z = z; return this; }
+        copy(v) { this.x = v.x; this.y = v.y; this.z = v.z; return this; }
+        add(v) { this.x += v.x; this.y += v.y; this.z += v.z; return this; }
+        sub(v) { this.x -= v.x; this.y -= v.y; this.z -= v.z; return this; }
+        mul(s) { this.x *= s; this.y *= s; this.z *= s; return this; }
+        len() { return Math.sqrt(this.x * this.x + this.y * this.y + this.z * this.z); }
+        norm() { const l = this.len(); return l > 0 ? (this.x /= l, this.y /= l, this.z /= l, this) : this; }
+        cross(v) { return new Vec3(this.y * v.z - this.z * v.y, this.z * v.x - this.x * v.z, this.x * v.y - this.y * v.z); }
+        clone() { return new Vec3(this.x, this.y, this.z); }
+        static fromYawPitch(yawDeg, pitchDeg) {
+            const yaw = yawDeg * Math.PI / 180, pitch = pitchDeg * Math.PI / 180;
+            const cosP = Math.cos(pitch);
+            // Mirror X (+X Original -> -X Three.js)
+            return new Vec3(-Math.sin(yaw) * cosP, -Math.sin(pitch), Math.cos(yaw) * cosP).norm();
         }
+    }
 
-        // base terrain
-        for (let z = 0; z < WORLD_SIZE_Z; z++) {
-          for (let x = 0; x < WORLD_SIZE_X; x++) {
-            const h1 = fbm2D(x * 0.045, z * 0.045, 5);
-            const h2 = fbm2D((x + 100) * 0.09, (z + 100) * 0.09, 3);
-            const height = Math.floor(5 + h1 * 10 + h2 * 5);
-            const beach = height <= WATER_LEVEL + 1;
+    // --- Component Architecture Foundations ---
+    class GameObject {
+        constructor(name = 'Node', id = 'game_object') {
+            this.name = name;
+            this.id = id;
+            this.deleted = false;
+            this.objectList = [];
+            this.tags = new Set();
+            this.drawPause = false;
+            this.updatePause = false;
+            this.position = new Vec3();
+            this.master = null;
+        }
+        update() {
+            if (this.updatePause) return;
+            this.update_self();
+        }
+        update_self() { }
+        draw() { }
+        onAttach(master) {
+            this.master = master;
+        }
+        addChild(e, wantDraw = true) {
+            this.objectList.push(e);
+            if (this.root) this.root._needsRebuild = true;
+            else if (this._needsRebuild !== undefined) this._needsRebuild = true;
 
-            for (let y = 0; y < CHUNK_SIZE_Y; y++) {
-              let id = AIR;
-              if (y < height - 4) id = STONE;
-              else if (y < height - 1) id = DIRT;
-              else if (y < height) id = beach ? SAND : GRASS;
-              else if (y <= WATER_LEVEL) id = WATER;
-              this.setBlock(x, y, z, id);
+            if (e.onAttach) e.onAttach(this);
+            else e.master = this;
+            e.drawPause = !wantDraw;
+            return e;
+        }
+    }
+
+    class EventHub {
+        constructor() { this.eventQueue = []; }
+        emit(type, sender, data) {
+            this.eventQueue.push({ type, sender, data, consumed: false });
+        }
+        dealEvent(root) {
+            const q = this.eventQueue;
+            this.eventQueue = [];
+            for (const ev of q) {
+                this.broadcast(root, ev);
             }
-          }
         }
-
-        // simple trees
-        for (let z = 2; z < WORLD_SIZE_Z - 2; z++) {
-          for (let x = 2; x < WORLD_SIZE_X - 2; x++) {
-            const groundY = this.getTopSolidY(x, z);
-            if (groundY < WATER_LEVEL + 1) continue;
-            if (this.getBlock(x, groundY, z) !== GRASS) continue;
-            const n = hash2D(x * 17, z * 31);
-            if (n > 0.985) {
-              const trunkH = 3 + Math.floor(hash2D(x * 73, z * 91) * 3);
-              for (let i = 1; i <= trunkH; i++) {
-                this.setBlock(x, groundY + i, z, WOOD);
-              }
-              const leafBase = groundY + trunkH - 1;
-              for (let oy = 0; oy <= 2; oy++) {
-                const r = oy === 2 ? 1 : 2;
-                for (let oz = -r; oz <= r; oz++) {
-                  for (let ox = -r; ox <= r; ox++) {
-                    if (Math.abs(ox) + Math.abs(oz) > r + 1) continue;
-                    const wx = x + ox;
-                    const wy = leafBase + oy;
-                    const wz = z + oz;
-                    if (this.getBlock(wx, wy, wz) === AIR) {
-                      this.setBlock(wx, wy, wz, LEAF);
-                    }
-                  }
+        broadcast(node, ev) {
+            if (!node || ev.consumed) return;
+            node.handleEvent?.(ev);
+            if (ev.consumed) return;
+            if (node.objectList) {
+                for (const child of node.objectList) {
+                    this.broadcast(child, ev);
                 }
-              }
-              if (this.getBlock(x, leafBase + 3, z) === AIR) {
-                this.setBlock(x, leafBase + 3, z, LEAF);
-              }
             }
-          }
         }
-      }
-
-      getTopSolidY(x, z) {
-        for (let y = CHUNK_SIZE_Y - 1; y >= 0; y--) {
-          const id = this.getBlock(x, y, z);
-          if (id !== AIR && id !== WATER) return y;
-        }
-        return 0;
-      }
     }
 
-    const world = new World();
-    world.generate();
-
-    // ================================
-    // Meshing
-    // ================================
-    function pushFace(positions, normals, colors, indices, baseIndex, x, y, z, dir, color) {
-      for (const c of dir.corners) {
-        positions.push(x + c[0], y + c[1], z + c[2]);
-        normals.push(dir.normal[0], dir.normal[1], dir.normal[2]);
-        colors.push(color[0], color[1], color[2]);
-      }
-      indices.push(baseIndex, baseIndex + 1, baseIndex + 2, baseIndex, baseIndex + 2, baseIndex + 3);
+    class GameManager extends GameObject {
+        constructor(name = 'GM') {
+            super(name, 'GM');
+            this.FPS = 60;
+            this.lastTime = 0;
+            this.frameTime = 1000 / this.FPS;
+            this.flatUpdateList = [];
+            this.flatDrawList = [];
+            this._needsRebuild = true;
+            this.eventHub = new EventHub();
+            this.root = this;
+        }
+        update() {
+            if (this._needsRebuild) this._rebuildFlatLists();
+            this.eventHub.dealEvent(this);
+            this.flatUpdateList.forEach(e => e.update());
+        }
+        draw() {
+            this.flatDrawList.forEach(e => e.draw());
+        }
+        _rebuildFlatLists() {
+            this.flatUpdateList = [];
+            this.flatDrawList = [];
+            const traverse = (node) => {
+                if (!node.updatePause) this.flatUpdateList.push(node);
+                if (!node.drawPause) this.flatDrawList.push(node);
+                node.objectList.forEach(traverse);
+            };
+            this.objectList.forEach(traverse);
+            this._needsRebuild = false;
+        }
     }
 
-    function buildChunkGeometry(world, chunk) {
-      const positions = [];
-      const normals = [];
-      const colors = [];
-      const indices = [];
-      let vCount = 0;
+    const BlockDefs = {
+        1: { name: 'stone', solid: true, color: 0x888888 },
+        2: { name: 'dirt', solid: true, color: 0x8b5a2b },
+        3: { name: 'grass', solid: true, color: 0x40e624 },
+        4: { name: 'grate', solid: true, color: 0xd9d9e6 }
+    };
 
-      const worldBaseX = chunk.cx * CHUNK_SIZE_X;
-      const worldBaseZ = chunk.cz * CHUNK_SIZE_Z;
-
-      for (let y = 0; y < CHUNK_SIZE_Y; y++) {
-        for (let z = 0; z < CHUNK_SIZE_Z; z++) {
-          for (let x = 0; x < CHUNK_SIZE_X; x++) {
-            const wx = worldBaseX + x;
-            const wz = worldBaseZ + z;
-            const id = chunk.getLocal(x, y, z);
-            if (id === AIR || id === WATER) continue;
-
-            const palette = BLOCK_COLORS[id];
-            for (const dir of DIRS) {
-              const nx = wx + dir.normal[0];
-              const ny = y + dir.normal[1];
-              const nz = wz + dir.normal[2];
-              const neighbor = world.getBlock(nx, ny, nz);
-              if (world.isOpaque(neighbor)) continue;
-              pushFace(positions, normals, colors, indices, vCount, wx, y, wz, dir, palette[dir.key]);
-              vCount += 4;
+    // --- Core Systems ---
+    class ChunkWorld {
+        constructor() {
+            this.chunks = new Map();
+            this.blockSize = 1;
+        }
+        getChunk(cx, cy, cz) {
+            const k = `${cx},${cy},${cz}`;
+            if (!this.chunks.has(k)) {
+                this.chunks.set(k, { cx, cy, cz, data: new Uint8Array(16 * 16 * 16), isDirty: true });
             }
-          }
+            return this.chunks.get(k);
         }
-      }
+        setBlock(x, y, z, id) {
+            const cx = Math.floor(x / 16), cy = Math.floor(y / 16), cz = Math.floor(z / 16);
+            const chunk = this.getChunk(cx, cy, cz);
+            const lx = ((x % 16) + 16) % 16, ly = ((y % 16) + 16) % 16, lz = ((z % 16) + 16) % 16;
+            chunk.data[lx + ly * 16 + lz * 256] = id;
+            chunk.isDirty = true;
+        }
+        isSolid(x, y, z) {
+            const cx = Math.floor(x / 16), cy = Math.floor(y / 16), cz = Math.floor(z / 16);
+            const chunk = this.chunks.get(`${cx},${cy},${cz}`);
+            if (!chunk) return false;
+            const lx = ((x % 16) + 16) % 16, ly = ((y % 16) + 16) % 16, lz = ((z % 16) + 16) % 16;
+            const id = chunk.data[lx + ly * 16 + lz * 256];
+            return id !== 0 && BlockDefs[id]?.solid;
+        }
+        // Ported from original: moveAxisCheck_CenterType
+        // Precise AABB check with sub-voxel position correction on hit
+        moveAxisCheck_CenterType(position3, axis, delta, size3D) {
+            if (delta === 0) return 0;
+            const eps = 0.001;
+            const np = { x: position3.x, y: position3.y, z: position3.z };
+            np[axis] += delta;
 
-      const geometry = new THREE.BufferGeometry();
-      geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
-      geometry.setAttribute('normal', new THREE.Float32BufferAttribute(normals, 3));
-      geometry.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
-      geometry.setIndex(indices);
-      geometry.computeBoundingSphere();
-      return geometry;
+            const minX = Math.floor((np.x - size3D.x / 2));
+            const maxX = Math.floor((np.x + size3D.x / 2 - eps));
+            const minY = Math.floor((np.y - size3D.y / 2));
+            const maxY = Math.floor((np.y + size3D.y / 2 - eps));
+            const minZ = Math.floor((np.z - size3D.z / 2));
+            const maxZ = Math.floor((np.z + size3D.z / 2 - eps));
+
+            for (let bx = minX; bx <= maxX; bx++) {
+                for (let by = minY; by <= maxY; by++) {
+                    for (let bz = minZ; bz <= maxZ; bz++) {
+                        if (!this.isSolid(bx, by, bz)) continue;
+                        // Position correction on hit
+                        if (axis === 'x') {
+                            position3.x = delta > 0 ? bx - size3D.x / 2 - eps : (bx + 1) + size3D.x / 2 + eps;
+                        } else if (axis === 'y') {
+                            position3.y = delta > 0 ? by - size3D.y / 2 - eps : (by + 1) + size3D.y / 2 + eps;
+                        } else if (axis === 'z') {
+                            position3.z = delta > 0 ? bz - size3D.z / 2 - eps : (bz + 1) + size3D.z / 2 + eps;
+                        }
+                        return 0;
+                    }
+                }
+            }
+            position3[axis] += delta;
+            return delta;
+        }
     }
 
-    const worldGroup = new THREE.Group();
-    scene.add(worldGroup);
+    // --- Physics Simulator (port of PhysicSimulator_BlockWorld) ---
+    class PhysicSimulator extends GameObject {
+        constructor() {
+            super('PhysicSimulator', 'physic');
+            this.bodies = []; // list of entities to simulate
+            this.gravity = 0.006;
+        }
+        // Register an entity for physics simulation.
+        // Entity must have: position (Vec3), delta (Vec3), size3D ({x,y,z}), onGround (bool)
+        register(entity) {
+            this.bodies.push(entity);
+        }
+        update_self() {
+            const world = this.master.v.world.world;
+            for (const t of this.bodies) {
+                // Gravity
+                t.delta.y -= this.gravity;
 
-    const terrainMaterial = new THREE.MeshLambertMaterial({ vertexColors: true });
+                // Resolve each axis using the original precise method
+                t.delta.x = world.moveAxisCheck_CenterType(t.position, 'x', t.delta.x, t.size3D);
+                t.delta.z = world.moveAxisCheck_CenterType(t.position, 'z', t.delta.z, t.size3D);
+                const prevDeltaY = t.delta.y;
+                t.delta.y = world.moveAxisCheck_CenterType(t.position, 'y', t.delta.y, t.size3D);
 
-    for (let cz = 0; cz < WORLD_CHUNKS_Z; cz++) {
-      for (let cx = 0; cx < WORLD_CHUNKS_X; cx++) {
-        const chunk = world.getChunk(cx, cz);
-        const geometry = buildChunkGeometry(world, chunk);
-        const mesh = new THREE.Mesh(geometry, terrainMaterial);
-        mesh.castShadow = false;
-        mesh.receiveShadow = true;
-        worldGroup.add(mesh);
-      }
+                if (t.delta.y === 0 && prevDeltaY < 0) {
+                    t.onGround = true;
+                } else {
+                    t.onGround = false;
+                }
+
+                // Clamp Y so entities can't fall out of the world
+                t.position.y = Math.max(0.5, t.position.y);
+            }
+        }
     }
 
-    // water plane for readability
-    const waterGeo = new THREE.PlaneGeometry(WORLD_SIZE_X, WORLD_SIZE_Z, 1, 1);
-    const waterMat = new THREE.MeshPhongMaterial({
-      color: 0x3c76c9,
-      transparent: true,
-      opacity: 0.35,
-      shininess: 90
-    });
-    const water = new THREE.Mesh(waterGeo, waterMat);
-    water.rotation.x = -Math.PI / 2;
-    water.position.set(WORLD_SIZE_X / 2, WATER_LEVEL + 0.5, WORLD_SIZE_Z / 2);
-    scene.add(water);
+    // --- Asset Factory ---
+    const createIndexedTexture = (key) => {
+        const asset = IndexedImageLibrary[key];
+        if (!asset) return null;
+        const canvas = document.createElement('canvas');
+        canvas.width = asset.width; canvas.height = asset.height;
+        const ctx = canvas.getContext('2d');
+        const img = ctx.createImageData(asset.width, asset.height);
+        for (let i = 0; i < asset.data.length; i++) {
+            const idx = asset.data[i];
+            if (idx === 0) { img.data[i * 4 + 3] = 0; }
+            else {
+                const c = asset.palette[idx];
+                img.data[i * 4] = c[0]; img.data[i * 4 + 1] = c[1]; img.data[i * 4 + 2] = c[2]; img.data[i * 4 + 3] = 255;
+            }
+        }
+        ctx.putImageData(img, 0, 0);
+        const tex = new THREE.CanvasTexture(canvas);
+        tex.magFilter = THREE.NearestFilter;
+        tex.minFilter = THREE.NearestFilter;
+        return tex;
+    };
 
-    // ================================
-    // Controls
-    // ================================
-    let yaw = -Math.PI * 0.25;
-    let pitch = -0.35;
-    const keys = Object.create(null);
+    const createRGBTexture = (data, w, h) => {
+        const texData = new Uint8Array(w * h * 4);
+        for (let i = 0; i < w * h; i++) {
+            texData[i * 4] = data[i * 3]; texData[i * 4 + 1] = data[i * 3 + 1]; texData[i * 4 + 2] = data[i * 3 + 2]; texData[i * 4 + 3] = 255;
+        }
+        const tex = new THREE.DataTexture(texData, w, h, THREE.RGBAFormat);
+        tex.magFilter = THREE.NearestFilter; tex.minFilter = THREE.NearestFilter;
+        tex.needsUpdate = true;
+        return tex;
+    };
 
-    function applyCameraRotation() {
-      camera.rotation.order = 'YXZ';
-      camera.rotation.y = yaw;
-      camera.rotation.x = pitch;
+    class EnemyNode extends GameObject {
+        constructor(x, y, z, tex) {
+            super('Enemy', 'enemy');
+            this.pos = new Vec3(x, y, z);
+            this.hp = 30;
+            this.maxHp = 30;
+            this.hitTimer = 0;
+            this.knockback = new Vec3();
+            this.tex = tex.clone();
+            this.tex.repeat.set(1, 1);
+
+            // combat state (TPSCombatInteractor interface)
+            this.combat = {
+                state: 'idle',
+                timer: 0,
+                attackRange: 1.45,
+                aggroRange: 8.0,
+                strafeDir: Math.random() < 0.5 ? -1 : 1,
+                hitFlash: 0,
+                poise: 0,
+            };
+
+            // screenPos for HUD (updated each frame by CombatSystem)
+            this.screenPos = null;
+            this.sy0 = 0;
+
+            const mat = new THREE.SpriteMaterial({ map: this.tex, transparent: true });
+            this.sprite = new THREE.Sprite(mat);
+            this.sprite.scale.set(2, 2, 1);
+        }
+
+        // position alias (TPSCombatInteractor uses .position)
+        get position() { return this.pos; }
+        set position(v) { this.pos = v; }
+
+        onAttach(master) {
+            super.onAttach(master);
+            this.master.v.three.scene.add(this.sprite);
+        }
+
+        damage(v = 1) {
+            this.hp -= v;
+            this.hitTimer = 6;
+
+            const playerPos = this.master.v.player.position;
+            const dx = this.pos.x - playerPos.x;
+            const dz = this.pos.z - playerPos.z;
+            const len = Math.hypot(dx, dz) || 1;
+            this.knockback.x += (dx / len) * 0.18;
+            this.knockback.z += (dz / len) * 0.18;
+
+            if (this.hp <= 0) {
+                this.tags.add('dead');
+                this.sprite.visible = false;
+            }
+        }
+
+        update_self() {
+            const playerPos = this.master.v.player.position;
+            if (this.hitTimer > 0) {
+                this.hitTimer--;
+                this.pos.x += this.knockback.x;
+                this.pos.z += this.knockback.z;
+                this.knockback.mul(0.8);
+            }
+            // AI movement: skip if CombatSystem is active (it manages movement)
+            // Enemies stay on ground
+            if (this.pos.y > 1.5) this.pos.y -= 0.01;
+            // Flip based on player direction
+            this.tex.repeat.x = (playerPos.x > this.pos.x) ? -1 : 1;
+            this.tex.offset.x = (this.tex.repeat.x < 0) ? 1 : 0;
+
+            this.sprite.position.set(-this.pos.x, this.pos.y + 1.25, this.pos.z);
+
+            // Update screenPos for HUD via Three.js projection
+            const threeCamera = this.master.v.three.camera;
+            const worldPos = new THREE.Vector3(-this.pos.x, this.pos.y + 1.25, this.pos.z);
+            const ndc = worldPos.project(threeCamera);
+            const sx = (ndc.x * 0.5 + 0.5) * 480;
+            const sy = (-ndc.y * 0.5 + 0.5) * 320;
+            this.screenPos = { x: sx, y: sy, z: ndc.z };
+            this.sy0 = sy - 40; // approximate top of sprite
+        }
     }
-    applyCameraRotation();
 
-    window.addEventListener('keydown', (e) => {
-      keys[e.code] = true;
-    });
-    window.addEventListener('keyup', (e) => {
-      keys[e.code] = false;
-    });
+    // --- Combat System (port of TPSCombatInteractor) ---
+    class CombatSystem extends GameObject {
+        constructor() {
+            super('CombatSystem', 'combat');
 
-    document.body.addEventListener('click', () => {
-      renderer.domElement.requestPointerLock();
-    });
+            this.lockedEnemy = null;
+            this.comboStep = 0;
+            this.comboTimer = 0;
+            this.attackTimer = 0;
+            this.attackDuration = 14;
+            this.attackHitDone = false;
 
-    document.addEventListener('mousemove', (e) => {
-      if (document.pointerLockElement !== renderer.domElement) return;
-      yaw -= e.movementX * 0.0022;
-      pitch -= e.movementY * 0.0022;
-      pitch = THREE.MathUtils.clamp(pitch, -Math.PI / 2 + 0.01, Math.PI / 2 - 0.01);
-      applyCameraRotation();
-    });
+            this.dodgeTimer = 0;
+            this.dodgeDuration = 12;
+            this.dodgeCooldown = 0;
+            this.invulnTimer = 0;
+            this.dodgeDistance = 1.6;
+            this.dodgeDir = new Vec3(0, 0, 1);
+            this.dodgeMoved = 0;
 
-    // ================================
-    // Debug cursor pick
-    // ================================
-    const raycaster = new THREE.Raycaster();
-    const marker = new THREE.Mesh(
-      new THREE.BoxGeometry(1.03, 1.03, 1.03),
-      new THREE.MeshBasicMaterial({ color: 0xffffff, wireframe: true })
-    );
-    marker.visible = false;
-    scene.add(marker);
+            this.hitStop = 0;
+            this.globalTimeScale = 1.0;
+            this.bulletTimeTimer = 0;
+            this.slowTimer = 0;
 
-    function updateMarker() {
-      raycaster.setFromCamera(new THREE.Vector2(0, 0), camera);
-      const hits = raycaster.intersectObjects(worldGroup.children, false);
-      if (hits.length) {
-        const hit = hits[0];
-        const p = hit.point.clone().addScaledVector(hit.face.normal, -0.01).floor().addScalar(0.5);
-        marker.position.copy(p);
-        marker.visible = true;
-      } else {
-        marker.visible = false;
-      }
+            this.attackRange = 1.85;
+            this.attackAngleDeg = 70;
+            this.baseDamage = 8;
+            this.moveMulDuringAttack = 0.18;
+            this.moveMulDuringDodge = 1.8;
+
+            this.uiMessage = '';
+            this.uiTimer = 0;
+
+            // track pressed state separately for one-shot actions
+            this._prevAttack = false;
+            this._prevLockon = false;
+            this._prevDodge = false;
+        }
+
+        get player() { return this.master.v.player; }
+        get enemies() { return this.master.objectList.filter(o => o instanceof EnemyNode); }
+        get threeCamera() { return this.master.v.three.camera; }
+
+        easeInOutSine(t) { return -(Math.cos(Math.PI * t) - 1) * 0.5; }
+        distanceXZ(a, b) { return Math.hypot(a.x - b.x, a.z - b.z); }
+
+        update_self() {
+            const keys = this.master.keys;
+
+            // --- One-shot input detection ---
+            const attackNow = !!keys['KeyF'];
+            const lockonNow = !!keys['KeyE'];
+            const dodgeNow = !!keys['Space'];
+
+            if (attackNow && !this._prevAttack) this.Attack_handleEvent();
+            if (lockonNow && !this._prevLockon) this.LockOn_toggle();
+            if (dodgeNow && !this._prevDodge) this.Dodge_handleEvent();
+
+            this._prevAttack = attackNow;
+            this._prevLockon = lockonNow;
+            this._prevDodge = dodgeNow;
+
+            if (this.hitStop > 0) { this.hitStop--; return; }
+
+            const playerTS = 1.0;
+            const enemyTS = this.bulletTimeTimer > 0 ? 0.0 :
+                this.slowTimer > 0 ? 0.25 : 1.0;
+
+            if (this.bulletTimeTimer > 0) this.bulletTimeTimer--;
+            if (this.slowTimer > 0) this.slowTimer--;
+
+            if (this.comboTimer > 0) this.comboTimer -= playerTS;
+            if (this.attackTimer > 0) this.attackTimer -= playerTS;
+            if (this.dodgeTimer > 0) this.dodgeTimer -= playerTS;
+            if (this.dodgeCooldown > 0) this.dodgeCooldown -= playerTS;
+            if (this.invulnTimer > 0) this.invulnTimer -= playerTS;
+            if (this.uiTimer > 0) this.uiTimer--;
+
+            if (this.comboTimer <= 0 && this.attackTimer <= 0) this.comboStep = 0;
+
+            this.LockOn_update();
+            this.PlayerFacing_update();
+            this.Attack_update();
+            this.Dodge_update();
+            this.Enemies_update(enemyTS);
+        }
+
+        draw() {
+            this.drawCombatHUD(uiCtx);
+        }
+
+        // --- Input handlers ---
+        Attack_handleEvent() {
+            if (this.attackTimer > 0 || this.dodgeTimer > 0) return;
+            this.comboStep = (this.comboStep % 3) + 1;
+            this.comboTimer = 24;
+            this.attackTimer = this.attackDuration;
+            this.attackHitDone = false;
+            this.uiMessage = `ATTACK ${this.comboStep}`;
+            this.uiTimer = 20;
+        }
+
+        Dodge_handleEvent() {
+            if (this.dodgeCooldown > 0 || this.attackTimer > 0 || this.dodgeTimer > 0) return;
+            this.dodgeTimer = this.dodgeDuration;
+            this.dodgeCooldown = 20;
+            this.invulnTimer = 10;
+            this.dodgeDir = this.Dodge_getDirection();
+            this.dodgeMoved = 0;
+            this.uiMessage = 'DODGE';
+            this.uiTimer = 14;
+
+            // Perfect dodge check
+            for (const enemy of this.enemies) {
+                if (enemy.tags.has('dead') || !enemy.combat) continue;
+                if (enemy.combat.state === 'attack' && enemy.combat.timer >= 4) {
+                    const d = this.distanceXZ(enemy.position, this.player.position);
+                    if (d < 2.2) {
+                        this.bulletTimeTimer = 300;
+                        this.hitStop = 2;
+                        this.invulnTimer = 30;
+                        enemy.combat.state = 'cooldown';
+                        enemy.combat.timer = 18;
+                        this.uiMessage = 'PERFECT DODGE';
+                        this.uiTimer = 24;
+                    }
+                }
+            }
+        }
+
+        Dodge_getDirection() {
+            const keys = this.master.keys;
+            const yaw = this.player.yaw;
+            const fy = yaw * Math.PI / 180;
+            const forward = new Vec3(Math.sin(fy), 0, Math.cos(fy));
+            const right = new Vec3(Math.cos(fy), 0, -Math.sin(fy));
+
+            let x = 0, z = 0;
+            if (keys['KeyA']) x -= 1;
+            if (keys['KeyD']) x += 1;
+            if (keys['KeyW']) z += 1;
+            if (keys['KeyS']) z -= 1;
+            if (x === 0 && z === 0) return forward;
+            return forward.clone().mul(z).add(right.clone().mul(x)).norm();
+        }
+
+        LockOn_toggle() {
+            const alive = this.enemies.filter(e => !e.tags.has('dead'));
+            if (alive.length === 0) { this.lockedEnemy = null; return; }
+            if (!this.lockedEnemy || this.lockedEnemy.tags.has('dead')) {
+                this.lockedEnemy = this.findNearestEnemy(10); return;
+            }
+            const idx = alive.indexOf(this.lockedEnemy);
+            this.lockedEnemy = alive[(idx + 1) % alive.length];
+        }
+
+        // --- Player combat ---
+        Attack_update() {
+            if (this.attackTimer <= 0) return;
+            this.player.delta.x *= this.moveMulDuringAttack;
+            this.player.delta.z *= this.moveMulDuringAttack;
+            const activeFrame = this.attackDuration - this.attackTimer;
+            if (!this.attackHitDone && activeFrame >= 4) {
+                this.attackHitDone = true;
+                this.Attack_resolveMeleeHit();
+            }
+        }
+
+        Attack_resolveMeleeHit() {
+            const forward = this.PlayerFacing_getPlayerForward();
+            const origin = this.player.position;
+            for (const enemy of this.enemies) {
+                if (enemy.tags.has('dead')) continue;
+                const toEnemy = enemy.position.clone().sub(origin);
+                toEnemy.y = 0;
+                const dist = toEnemy.len();
+                if (dist > this.attackRange) continue;
+                const dir = toEnemy.clone().norm();
+                const dot = forward.x * dir.x + forward.z * dir.z;
+                const ang = Math.acos(Math.max(-1, Math.min(1, dot))) * 180 / Math.PI;
+                if (ang > this.attackAngleDeg * 0.5) continue;
+                const dmg = this.baseDamage + (this.comboStep - 1) * 3;
+                enemy.damage(dmg);
+                if (enemy.combat) {
+                    enemy.combat.hitFlash = 6;
+                    enemy.combat.poise = (enemy.combat.poise || 0) + 1;
+                    if (enemy.combat.poise >= 2) {
+                        enemy.combat.state = 'cooldown';
+                        enemy.combat.timer = 20;
+                        enemy.combat.poise = 0;
+                    }
+                }
+                this.hitStop = 3;
+                this.uiMessage = `HIT ${dmg}`;
+                this.uiTimer = 12;
+                break;
+            }
+        }
+
+        Dodge_update() {
+            if (this.dodgeTimer <= 0) return;
+            const t = 1 - (this.dodgeTimer / this.dodgeDuration);
+            const eased = this.easeInOutSine(t);
+            const targetMoved = this.dodgeDistance * eased;
+            const delta = targetMoved - this.dodgeMoved;
+            this.dodgeMoved = targetMoved;
+            this.player.delta.x += this.dodgeDir.x * delta;
+            this.player.delta.z += this.dodgeDir.z * delta;
+        }
+
+        LockOn_update() {
+            if (this.lockedEnemy && this.lockedEnemy.tags.has('dead')) this.lockedEnemy = null;
+            if (this.lockedEnemy) {
+                const d = this.distanceXZ(this.lockedEnemy.position, this.player.position);
+                if (d > 12) this.lockedEnemy = null;
+            }
+        }
+
+        PlayerFacing_update() {
+            if (!this.lockedEnemy) return;
+            if (this.attackTimer > 0 || this.dodgeTimer > 0) return;
+            const dx = this.lockedEnemy.position.x - this.player.position.x;
+            const dz = this.lockedEnemy.position.z - this.player.position.z;
+            const len = Math.hypot(dx, dz) || 1;
+            this.player.direction.set(dx / len, 0, dz / len);
+        }
+
+        PlayerFacing_getPlayerForward() {
+            if (this.lockedEnemy) {
+                const dx = this.lockedEnemy.position.x - this.player.position.x;
+                const dz = this.lockedEnemy.position.z - this.player.position.z;
+                const len = Math.hypot(dx, dz) || 1;
+                return new Vec3(dx / len, 0, dz / len);
+            }
+            if (this.player.direction && this.player.direction.len() > 0.001)
+                return this.player.direction.clone().norm();
+            const yaw = this.player.yaw;
+            const fy = yaw * Math.PI / 180;
+            return new Vec3(Math.sin(fy), 0, Math.cos(fy)).norm();
+        }
+
+        // --- Enemy combat AI ---
+        Enemies_update(dt) {
+            for (const enemy of this.enemies) {
+                if (enemy.tags.has('dead') || !enemy.combat) continue;
+                if (enemy.combat.hitFlash > 0) enemy.combat.hitFlash -= dt;
+                if (enemy.hitTimer > 0) continue;
+
+                const dist = this.distanceXZ(enemy.position, this.player.position);
+                const c = enemy.combat;
+
+                switch (c.state) {
+                    case 'idle':
+                        if (dist < c.aggroRange) { c.state = 'strafe'; c.timer = 20 + Math.random() * 20; }
+                        break;
+                    case 'strafe':
+                        c.timer -= dt;
+                        this.moveEnemyStrafe(enemy, dist);
+                        if (dist <= c.attackRange) { c.state = 'windup'; c.timer = 22; }
+                        else if (c.timer <= 0) { c.timer = 20 + Math.random() * 20; c.strafeDir *= -1; }
+                        break;
+                    case 'windup':
+                        c.timer -= dt;
+                        this.faceEnemyToPlayer(enemy);
+                        if (dist > c.attackRange + 0.5) { c.state = 'strafe'; c.timer = 16; }
+                        else if (c.timer <= 0) { c.state = 'attack'; c.timer = 10; }
+                        break;
+                    case 'attack':
+                        c.timer -= dt;
+                        this.enemyLunge(enemy);
+                        if (c.timer <= 6 && c.timer > 4) this.tryEnemyHit(enemy);
+                        if (c.timer <= 0) { c.state = 'cooldown'; c.timer = 18; }
+                        break;
+                    case 'cooldown':
+                        c.timer -= dt;
+                        if (c.timer <= 0) { c.state = 'strafe'; c.timer = 20; }
+                        break;
+                }
+            }
+        }
+
+        moveEnemyStrafe(enemy, dist) {
+            const dx = this.player.position.x - enemy.position.x;
+            const dz = this.player.position.z - enemy.position.z;
+            const len = Math.hypot(dx, dz) || 1;
+            const nx = dx / len, nz = dz / len;
+            const tx = -nz * enemy.combat.strafeDir, tz = nx * enemy.combat.strafeDir;
+            const approach = dist > 1.9 ? 0.026 : -0.012;
+            enemy.position.x += nx * approach + tx * 0.022;
+            enemy.position.z += nz * approach + tz * 0.022;
+        }
+
+        enemyLunge(enemy) {
+            const dx = this.player.position.x - enemy.position.x;
+            const dz = this.player.position.z - enemy.position.z;
+            const len = Math.hypot(dx, dz) || 1;
+            enemy.position.x += (dx / len) * 0.05;
+            enemy.position.z += (dz / len) * 0.05;
+        }
+
+        tryEnemyHit(enemy) {
+            if (this.bulletTimeTimer > 0) return;
+            const dist = this.distanceXZ(enemy.position, this.player.position);
+            if (dist > 1.55 || this.invulnTimer > 0) return;
+            this.uiMessage = 'PLAYER HIT';
+            this.uiTimer = 16;
+            this.hitStop = 4;
+            const dx = this.player.position.x - enemy.position.x;
+            const dz = this.player.position.z - enemy.position.z;
+            const len = Math.hypot(dx, dz) || 1;
+            this.player.delta.x += (dx / len) * 0.18;
+            this.player.delta.z += (dz / len) * 0.18;
+        }
+
+        faceEnemyToPlayer(enemy) {
+            const dx = this.player.position.x - enemy.position.x;
+            const dz = this.player.position.z - enemy.position.z;
+            const len = Math.hypot(dx, dz) || 1;
+            if (!enemy.direction) enemy.direction = new Vec3();
+            enemy.direction.set(dx / len, 0, dz / len);
+        }
+
+        findNearestEnemy(maxDist = 999) {
+            let best = null, bestDist = maxDist;
+            for (const e of this.enemies) {
+                if (e.tags.has('dead')) continue;
+                const d = this.distanceXZ(e.position, this.player.position);
+                if (d < bestDist) { best = e; bestDist = d; }
+            }
+            return best;
+        }
+
+        getEnemyStateLabel(enemy) {
+            if (enemy.tags.has('dead')) return 'dead';
+            const s = enemy.combat?.state;
+            const map = { idle: 'IDLE', strafe: 'STRAFE', windup: 'WINDUP', attack: 'ATTACK', cooldown: 'COOLDOWN' };
+            return map[s] || String(s).toUpperCase();
+        }
+
+        // --- HUD ---
+        drawCombatHUD(ctx) {
+            ctx.save();
+            const W = 480, H = 320;
+
+            // Lock-on reticle
+            if (this.lockedEnemy && !this.lockedEnemy.tags.has('dead') && this.lockedEnemy.screenPos) {
+                const sp = this.lockedEnemy.screenPos;
+                ctx.strokeStyle = '#ff4d6d';
+                ctx.lineWidth = 2;
+                ctx.strokeRect(sp.x - 20, sp.y - 20, 40, 40);
+            }
+
+            // Player combat state
+            ctx.fillStyle = 'white';
+            ctx.font = 'bold 11px monospace';
+            ctx.fillText(`combo:${this.comboStep}`, 10, 38);
+            ctx.fillText(`atk:${Math.ceil(this.attackTimer)}`, 10, 51);
+            ctx.fillText(`dodgeCD:${Math.ceil(this.dodgeCooldown)}`, 10, 64);
+            if (this.bulletTimeTimer > 0) {
+                ctx.fillStyle = '#7df9ff';
+                ctx.font = 'bold 13px monospace';
+                ctx.fillText(`BULLET TIME ${Math.ceil(this.bulletTimeTimer)}`, 10, 79);
+            }
+
+            // Action message
+            if (this.uiTimer > 0) {
+                ctx.fillStyle = '#ffd166';
+                ctx.font = 'bold 18px monospace';
+                ctx.fillText(this.uiMessage, 12, 100);
+            }
+
+            // Enemy telegraph labels & bars
+            for (const e of this.enemies) {
+                if (e.tags.has('dead') || !e.screenPos || e.screenPos.z >= 1.0) continue;
+                if (!e.combat) continue;
+
+                const label = `${this.getEnemyStateLabel(e)} ${Math.ceil(e.combat.timer)}`;
+                const tx = e.screenPos.x;
+                const ty = e.sy0 - 8;
+
+                ctx.save();
+                ctx.font = 'bold 11px monospace';
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'bottom';
+
+                let color = '#ffffff';
+                if (e.combat.state === 'windup') color = '#ffb347';
+                else if (e.combat.state === 'attack') color = '#ff4d4d';
+                else if (e.combat.state === 'cooldown') color = '#7fd1ff';
+                else if (e.combat.state === 'strafe') color = '#b8ffb0';
+
+                ctx.strokeStyle = 'rgba(0,0,0,0.9)';
+                ctx.lineWidth = 3;
+                ctx.strokeText(label, tx, ty);
+                ctx.fillStyle = color;
+                ctx.fillText(label, tx, ty);
+                ctx.restore();
+
+                // HP bar
+                const bw = 36, bh = 4;
+                const bx = tx - bw / 2, by = e.sy0 - 4;
+                const ratio = Math.max(0, e.hp / e.maxHp);
+                ctx.fillStyle = '#400';
+                ctx.fillRect(bx, by, bw, bh);
+                ctx.fillStyle = ratio > 0.5 ? '#0f0' : ratio > 0.25 ? '#ff0' : '#f00';
+                ctx.fillRect(bx, by, bw * ratio, bh);
+
+                // Telegraph bars
+                if (e.combat.state === 'windup') {
+                    ctx.fillStyle = 'rgba(255,120,120,0.85)';
+                    ctx.fillRect(tx - 18, e.sy0 - 14, 36, 6);
+                } else if (e.combat.state === 'attack') {
+                    ctx.fillStyle = 'rgba(255,0,0,0.9)';
+                    ctx.fillRect(tx - 20, e.sy0 - 14, 40, 8);
+                }
+            }
+
+            // Controls hint
+            ctx.fillStyle = 'rgba(255,255,255,0.5)';
+            ctx.font = '9px monospace';
+            ctx.textAlign = 'left';
+            ctx.fillText('F:ATTACK  E:LOCKON  SPC:DODGE', 10, H - 8);
+
+            ctx.restore();
+        }
     }
 
-    // ================================
-    // Animate
-    // ================================
-    let lastTime = performance.now();
-    const forward = new THREE.Vector3();
-    const right = new THREE.Vector3();
-    const move = new THREE.Vector3();
+    class ThreeRenderer extends GameObject {
+        constructor() {
+            super('ThreeRenderer', 'renderer');
+            this.scene = new THREE.Scene();
+            this.camera = new THREE.PerspectiveCamera(70, 480 / 320, 0.1, 1000);
+            this.renderer = new THREE.WebGLRenderer({ antialias: false, preserveDrawingBuffer: true });
+            this.renderer.setSize(480, 320);
+            this.renderer.domElement.id = 'webgl-canvas';
+            document.getElementById('container').prepend(this.renderer.domElement);
 
-    function animate(now) {
-      requestAnimationFrame(animate);
-      const dt = Math.min(0.05, (now - lastTime) * 0.001);
-      lastTime = now;
-
-      camera.getWorldDirection(forward);
-      forward.y = 0;
-      forward.normalize();
-      right.crossVectors(forward, new THREE.Vector3(0, 1, 0)).normalize();
-
-      move.set(0, 0, 0);
-      const speed = keys.ControlLeft ? 24 : 12;
-      if (keys.KeyW) move.add(forward);
-      if (keys.KeyS) move.addScaledVector(forward, -1);
-      if (keys.KeyD) move.add(right);
-      if (keys.KeyA) move.addScaledVector(right, -1);
-      if (keys.Space) move.y += 1;
-      if (keys.ShiftLeft) move.y -= 1;
-
-      if (move.lengthSq() > 0) {
-        move.normalize().multiplyScalar(speed * dt);
-        camera.position.add(move);
-      }
-
-      camera.position.x = THREE.MathUtils.clamp(camera.position.x, -10, WORLD_SIZE_X + 10);
-      camera.position.y = THREE.MathUtils.clamp(camera.position.y, 2, CHUNK_SIZE_Y + 10);
-      camera.position.z = THREE.MathUtils.clamp(camera.position.z, -10, WORLD_SIZE_Z + 10);
-
-      updateMarker();
-      renderer.render(scene, camera);
+            this.scene.background = new THREE.Color(0xff8c59);
+            this.scene.fog = new THREE.Fog(0xff8c59, 5, 80);
+            this.scene.add(new THREE.AmbientLight(0xffffff, 0.6));
+            this.sun = new THREE.DirectionalLight(0xffffff, 1.0);
+            this.sun.position.set(10, 20, 10);
+            this.scene.add(this.sun);
+        }
+        draw() {
+            this.renderer.render(this.scene, this.camera);
+        }
     }
 
-    animate(lastTime);
+    class WorldComponent extends GameObject {
+        constructor() {
+            super('World', 'world');
+            this.world = new ChunkWorld();
+            this.meshes = new Map();
+            this.boxGeo = new THREE.BoxGeometry(0.999, 0.999, 0.999);
+            this.grassTex = null;
+        }
+        onAttach(master) {
+            super.onAttach(master);
+            this.grassTex = createRGBTexture(grassFloor_32RGB, 32, 32);
+        }
+        update_self() {
+            // Chunk Meshing
+            for (const [k, chunk] of this.world.chunks) {
+                if (chunk.isDirty) {
+                    if (this.meshes.has(k)) {
+                        const old = this.meshes.get(k);
+                        this.master.v.three.scene.remove(old);
+                        old.geometry.dispose(); old.material.dispose();
+                    }
+                    const group = new THREE.Group();
+                    const grassMat = new THREE.MeshLambertMaterial({ map: this.grassTex });
+                    const stoneMat = new THREE.MeshLambertMaterial({ color: 0x888888 });
 
-    // ================================
-    // Resize
-    // ================================
-    addEventListener('resize', () => {
-      camera.aspect = innerWidth / innerHeight;
-      camera.updateProjectionMatrix();
-      renderer.setSize(innerWidth, innerHeight);
-      renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
-    });
-  </script>
-</body>
-</html>
+                    for (let i = 0; i < 4096; i++) {
+                        const id = chunk.data[i]; if (id === 0) continue;
+                        const lx = i % 16, ly = Math.floor(i / 16) % 16, lz = Math.floor(i / 256);
+                        const mat = id === 3 ? grassMat : stoneMat;
+                        const m = new THREE.Mesh(this.boxGeo, mat);
+                        m.position.set(-(chunk.cx * 16 + lx), chunk.cy * 16 + ly, chunk.cz * 16 + lz);
+                        group.add(m);
+                    }
+                    this.meshes.set(k, group);
+                    this.master.v.three.scene.add(group);
+                    chunk.isDirty = false;
+                }
+            }
+        }
+    }
+
+    class PlayerComponent extends GameObject {
+        constructor() {
+            super('Player', 'player');
+            // position & delta are the standard PhysicSimulator interface
+            this.position = new Vec3(10.5, 6, 12);
+            this.delta = new Vec3();
+            this.direction = new Vec3(0, 0, 1); // facing direction (used by CombatSystem)
+            this.size3D = { x: 0.4, y: 1.6, z: 0.4 }; // PhysicSimulator interface
+            this.yaw = 0; this.pitch = 12;
+            this.onGround = false;
+            this.sprite = null;
+            this.tex = null;
+        }
+        onAttach(master) {
+            super.onAttach(master);
+            this.tex = createIndexedTexture('Blues');
+            const spriteMat = new THREE.SpriteMaterial({ map: this.tex, transparent: true });
+            this.sprite = new THREE.Sprite(spriteMat);
+            this.sprite.scale.set(2, 2, 1);
+            this.master.v.three.scene.add(this.sprite);
+        }
+        update_self() {
+            // Input & rotation only — physics resolved by PhysicSimulator
+            const moveSpeed = 0.08, rotSpeed = 2.0;
+            const keys = this.master.keys;
+            const combat = this.master.v.combat;
+            const lockedEnemy = combat ? combat.lockedEnemy : null;
+
+            // --- Camera Rotation ---
+            // When locked on, auto-rotate yaw toward the enemy
+            if (lockedEnemy && !lockedEnemy.tags.has('dead')) {
+                const dx = lockedEnemy.position.x - this.position.x;
+                const dz = lockedEnemy.position.z - this.position.z;
+                const targetYaw = Math.atan2(dx, dz) * 180 / Math.PI;
+                // Smooth lerp toward target yaw (handle wrapping)
+                let diff = targetYaw - this.yaw;
+                while (diff > 180) diff -= 360;
+                while (diff < -180) diff += 360;
+                this.yaw += diff * 0.12;
+                // Gently pull pitch toward neutral
+                this.pitch = lerp(this.pitch, 12, 0.08);
+            } else {
+                if (keys['ArrowLeft']) this.yaw -= rotSpeed;
+                if (keys['ArrowRight']) this.yaw += rotSpeed;
+                if (keys['ArrowUp']) this.pitch = clamp(this.pitch - rotSpeed, -50, 70);
+                if (keys['ArrowDown']) this.pitch = clamp(this.pitch + rotSpeed, -50, 70);
+            }
+
+            let forward = 0, side = 0;
+            if (keys['KeyW']) forward += 1; if (keys['KeyS']) forward -= 1;
+            if (keys['KeyA']) side -= 1; if (keys['KeyD']) side += 1;
+
+            const fy = this.yaw * Math.PI / 180;
+            const fx = Math.sin(fy), fz = Math.cos(fy);
+            const rx = Math.cos(fy), rz = -Math.sin(fy);
+
+            this.delta.x = (fx * forward + rx * side) * moveSpeed;
+            this.delta.z = (fz * forward + rz * side) * moveSpeed;
+            // NOTE: delta.y is NOT set here — gravity is applied by PhysicSimulator
+
+            // Jump: suppress during dodge so Space doesn't conflict
+            const isDodging = combat && combat.dodgeTimer > 0;
+            if (keys['Space'] && this.onGround && !isDodging) {
+                this.delta.y = 0.15;
+                this.onGround = false;
+            }
+
+            // Static Sprite update (position set by PhysicSimulator)
+            if (this.delta.x < -0.001) { this.tex.repeat.x = -1; this.tex.offset.x = 1; }
+            else if (this.delta.x > 0.001) { this.tex.repeat.x = 1; this.tex.offset.x = 0; }
+
+            this.sprite.position.set(-this.position.x, this.position.y + 0.9, this.position.z);
+
+            // --- Camera Follow ---
+            const three = this.master.v.three;
+            const playerLookAt = new THREE.Vector3(-this.position.x, this.position.y + 0.5, this.position.z);
+
+            if (lockedEnemy && !lockedEnemy.tags.has('dead')) {
+                // Lock-on camera: pull back behind player, look between player and enemy
+                const enemyWorldPos = new THREE.Vector3(-lockedEnemy.position.x, lockedEnemy.position.y + 0.8, lockedEnemy.position.z);
+                const midPoint = playerLookAt.clone().lerp(enemyWorldPos, 0.35);
+
+                const toPlayer = playerLookAt.clone().sub(enemyWorldPos).normalize();
+                const camHeight = 1.8;
+                const camDist = 3.2;
+                const sideOffset = toPlayer.clone().cross(new THREE.Vector3(0, 1, 0)).normalize().multiplyScalar(0.4);
+
+                const desiredCamPos = playerLookAt.clone()
+                    .add(toPlayer.clone().multiplyScalar(camDist))
+                    .add(new THREE.Vector3(0, camHeight, 0))
+                    .add(sideOffset);
+
+                three.camera.position.lerp(desiredCamPos, 0.1);
+                three.camera.lookAt(midPoint);
+            } else {
+                // Free camera
+                const dist = 4.0;
+                const camFwd = Vec3.fromYawPitch(this.yaw, this.pitch);
+                const targetCamPos = playerLookAt.clone().add(new THREE.Vector3(camFwd.x, camFwd.y, camFwd.z).multiplyScalar(-dist));
+                three.camera.position.lerp(targetCamPos, 0.2);
+                three.camera.lookAt(playerLookAt);
+            }
+        }
+    }
+
+    // --- Managed Game Instance ---
+    const GM = new GameManager();
+    GM.v = {};
+    GM.keys = {};
+
+    const setup = () => {
+        log("Initializing Component System...");
+
+        // Core Components (order matters: PhysicSimulator must update AFTER PlayerComponent sets delta)
+        GM.v.three = GM.addChild(new ThreeRenderer());
+        GM.v.world = GM.addChild(new WorldComponent());
+        GM.v.player = GM.addChild(new PlayerComponent());
+        GM.v.physic = GM.addChild(new PhysicSimulator());
+
+        GM.v.physic.register(GM.v.player); // player is a physics body
+
+        // World Gen
+        for (let x = 0; x < 48; x++) for (let z = 0; z < 48; z++) {
+            GM.v.world.world.setBlock(x, 0, z, 3);
+            if (Math.random() > 0.95) GM.v.world.world.setBlock(x, 1, z, 1);
+        }
+
+        // Enemies
+        const spawns = [[15, 1, 15], [20, 1, 12], [25, 1, 18]];
+        const enemyTex = createIndexedTexture('Blues2');
+        for (const s of spawns) {
+            GM.addChild(new EnemyNode(s[0], s[1], s[2], enemyTex));
+        }
+
+        // Combat System
+        GM.v.combat = GM.addChild(new CombatSystem());
+
+        // Controls
+        window.addEventListener('keydown', e => GM.keys[e.code] = true);
+        window.addEventListener('keyup', e => GM.keys[e.code] = false);
+
+        log("Modular setup complete.");
+    };
+
+    const gameLoop = (now) => {
+        requestAnimationFrame(gameLoop);
+
+        const delta = now - GM.lastTime;
+        if (delta < GM.frameTime) return;
+        GM.lastTime = now - (delta % GM.frameTime);
+
+        GM.update();
+        GM.draw();
+
+        // UI Refresh (Procedural overlay for now)
+        uiCtx.clearRect(0, 0, 480, 320);
+        uiCtx.fillStyle = "rgba(255,255,255,0.8)";
+        uiCtx.font = "bold 12px monospace";
+        uiCtx.fillText("ZENZERO 4 RESTORED", 10, 20);
+    };
+
+    try {
+        setup();
+        requestAnimationFrame(gameLoop);
+    } catch (e) {
+        logError(e.stack);
+    }
+</script>
