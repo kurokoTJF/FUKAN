@@ -63,6 +63,8 @@
             pointer-events: none;
         }
     </style>
+    <script src="https://unpkg.com/three@0.160.0/build/three.min.js"></script>
+    <script src="./zenzero_assets.js"></script>
 </head>
 
 <body>
@@ -72,14 +74,13 @@
         <div id="error-overlay"></div>
         <div id="info">WASD: MOVE | ARROWS: CAMERA | SPACE: JUMP</div>
     </div>
-
-
 </body>
 
 </html>
-<script type="module">
-    import * as THREE from 'https://unpkg.com/three@0.160.0/build/three.module.js';
-    import { IndexedImageLibrary, ImageLibrary, grassFloor_32RGB } from './zenzero_assets.js';
+<script>
+    // Asset variables are now global via zenzero_assets.js
+    const { IndexedImageLibrary, ImageLibrary, grassFloor_32RGB } = window;
+
 
     const overlay = document.getElementById('error-overlay');
     const uiCtx = document.getElementById('c_ui').getContext('2d');
