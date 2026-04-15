@@ -1,0 +1,1875 @@
+<!DOCTYPE html>
+<html lang="ja">
+
+<head>
+    <meta charset="UTF-8">
+    <title>Zenzero 4 - Restoration</title>
+    <style>
+        body {
+            margin: 0;
+            background: #222;
+            overflow: hidden;
+            font-family: monospace;
+            color: white;
+            -webkit-user-select: none;
+            user-select: none;
+        }
+
+        #container {
+            position: relative;
+            width: 480px;
+            height: 320px;
+            margin: 20px auto;
+            background: black;
+            image-rendering: pixelated;
+            border: 4px solid #444;
+        }
+
+        canvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+            image-rendering: pixelated;
+        }
+
+        #c_ui {
+            position: absolute;
+            top: 0;
+            left: 0;
+            pointer-events: none;
+        }
+
+        #error-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(255, 0, 0, 0.5);
+            display: none;
+            padding: 10px;
+            box-sizing: border-box;
+            font-size: 12px;
+            white-space: pre-wrap;
+            overflow-y: auto;
+        }
+
+        #info {
+            position: absolute;
+            bottom: 5px;
+            left: 5px;
+            font-size: 10px;
+            color: #fff;
+            text-shadow: 1px 1px 0 #000;
+            pointer-events: none;
+        }
+
+        #hitstop-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: radial-gradient(circle, rgba(255, 255, 255, 0.8) 0%, rgba(255, 255, 255, 0.2) 60%, transparent 100%);
+            display: none;
+            pointer-events: none;
+            mix-blend-mode: overlay;
+            z-index: 100;
+        }
+    </style>
+    <script src="https://unpkg.com/three@0.149.0/build/three.min.js"></script>
+</head>
+
+<body>
+    <div id="container">
+        <!-- Three.js Canvas will be prepended here -->
+        <canvas id="c_ui" width="480" height="320"></canvas>
+        <div id="error-overlay"></div>
+        <div id="hitstop-overlay"></div>
+        <div id="info">WASD: MOVE | ARROWS: CAMERA | SPACE: JUMP</div>
+    </div>
+</body>
+
+</html>
+<script src='./zenzero_assets.js'></script>
+
+<script>
+    // Asset variables are now global via zenzero_assets.js
+
+
+
+
+    const overlay = document.getElementById('error-overlay');
+    const uiCanvas = document.getElementById('c_ui');
+    const uiCtx = uiCanvas ? uiCanvas.getContext('2d') : null;
+    const hitstopOverlay = document.getElementById('hitstop-overlay');
+    const gameContainer = document.getElementById('container');
+
+    const log = (msg) => {
+        console.log(msg);
+        uiCtx.fillStyle = "#fff"; uiCtx.font = "10px monospace";
+        uiCtx.clearRect(0, 300, 480, 20);
+        uiCtx.fillText("[BOOT] " + msg, 10, 310);
+    };
+    const logError = (msg) => {
+        overlay.style.display = 'block';
+        overlay.innerText += msg + "\n";
+        console.error(msg);
+    };
+
+    window.addEventListener('error', (e) => logError(e.message));
+
+    // --- Math & Utils ---
+    const lerp = (a, b, t) => a + (b - a) * t;
+    const clamp = (v, min, max) => Math.max(min, Math.min(max, v));
+
+    class Vec3 {
+        constructor(x = 0, y = 0, z = 0) { this.x = x; this.y = y; this.z = z; }
+        set(x, y, z) { this.x = x; this.y = y; this.z = z; return this; }
+        copy(v) { this.x = v.x; this.y = v.y; this.z = v.z; return this; }
+        add(v) { this.x += v.x; this.y += v.y; this.z += v.z; return this; }
+        sub(v) { this.x -= v.x; this.y -= v.y; this.z -= v.z; return this; }
+        mul(s) { this.x *= s; this.y *= s; this.z *= s; return this; }
+        len() { return Math.sqrt(this.x * this.x + this.y * this.y + this.z * this.z); }
+        norm() { const l = this.len(); return l > 0 ? (this.x /= l, this.y /= l, this.z /= l, this) : this; }
+        cross(v) { return new Vec3(this.y * v.z - this.z * v.y, this.z * v.x - this.x * v.z, this.x * v.y - this.y * v.z); }
+        clone() { return new Vec3(this.x, this.y, this.z); }
+        static fromYawPitch(yawDeg, pitchDeg) {
+            const yaw = yawDeg * Math.PI / 180, pitch = pitchDeg * Math.PI / 180;
+            const cosP = Math.cos(pitch);
+            // Standard Right-Handed Vector calculation
+            return new Vec3(Math.sin(yaw) * cosP, -Math.sin(pitch), Math.cos(yaw) * cosP).norm();
+        }
+    }
+
+
+    class Signal {
+        constructor() { this.listeners = []; }
+        connect(callback, _this = null) {
+            const _listener = { callback, _this };
+            this.listeners.push(_listener);
+            return () => this.disconnect(callback);
+        }
+        disconnect(callback) {
+            this.listeners = this.listeners.filter(l => l.callback !== callback);
+        }
+        emit(...args) {
+            for (const l of this.listeners) l.callback.apply(l._this, args);
+        }
+    }
+
+    // --- Component Architecture Foundations ---
+    class GameObject {
+        constructor(name = 'Node', id = 'game_object') {
+            this.name = name;
+            this.id = id;
+            this.deleted = false;
+            this.objectList = [];
+            this.tags = new Set([id]);
+            this.drawPause = false;
+            this.updatePause = false;
+            this.position = new Vec3();
+            this.master = null;
+            this.signals = {
+                attached: new Signal(),
+                detached: new Signal(),
+                died: new Signal()
+            };
+        }
+
+        die() {
+            if (this.tags.has('dead')) return;
+            this.tags.add('dead');
+            this.signals.died.emit(this);
+        }
+        update() {
+            if (this.updatePause) return;
+            this.update_self();
+        }
+        update_self() { }
+        draw() { }
+        onAttach(master) {
+            this.master = master;
+        }
+        getComponentByTag(tag) {
+            if (this.tags.has(tag)) return this;
+            for (const child of this.objectList) {
+                const found = child.getComponentByTag(tag);
+                if (found) return found;
+            }
+            return null;
+        }
+        addChild(e, wantDraw = true) {
+            this.objectList.push(e);
+            if (this.root) this.root._needsRebuild = true;
+            else if (this._needsRebuild !== undefined) this._needsRebuild = true;
+
+            if (e.onAttach) e.onAttach(this);
+            else e.master = this;
+            e.drawPause = !wantDraw;
+            e.signals.attached.emit(e);
+            return e;
+        }
+
+        removeChild(e) {
+            const index = this.objectList.indexOf(e);
+            if (index > -1) {
+                this.objectList.splice(index, 1);
+                e.master = null;
+                e.signals.detached.emit(e);
+                if (this.root) this.root._needsRebuild = true;
+                else if (this._needsRebuild !== undefined) this._needsRebuild = true;
+            }
+        }
+    }
+
+    class EventHub {
+        constructor() { this.eventQueue = []; }
+        emit(type, sender, data) {
+            this.eventQueue.push({ type, sender, data, consumed: false });
+        }
+        dealEvent(root) {
+            const q = this.eventQueue;
+            this.eventQueue = [];
+            for (const ev of q) {
+                this.broadcast(root, ev);
+            }
+        }
+        broadcast(node, ev) {
+            if (!node || ev.consumed) return;
+            node.handleEvent?.(ev);
+            if (ev.consumed) return;
+            if (node.objectList) {
+                for (const child of node.objectList) {
+                    this.broadcast(child, ev);
+                }
+            }
+        }
+    }
+
+    // --- Advanced Input System (Action-based) ---
+    const keyMap = {
+        'KeyW': 'forward', 'KeyS': 'backward', 'KeyA': 'left', 'KeyD': 'right',
+        'KeyF': 'attack', 'KeyE': 'lockon', 'Space': 'dodge', 'ShiftLeft': 'jump',
+        'ArrowUp': 'camUp', 'ArrowDown': 'camDown', 'ArrowLeft': 'camLeft', 'ArrowRight': 'camRight'
+    };
+    const onPressHandlers = {};
+    const onReleaseHandlers = {};
+    const actions = {}; // current logical state
+
+    window.addEventListener('keydown', e => {
+        const action = keyMap[e.code];
+        if (action) {
+            if (!actions[action]) {
+                actions[action] = true;
+                if (onPressHandlers[action]) onPressHandlers[action]();
+            }
+        }
+        if (GM.keys) GM.keys[e.code] = true;
+    });
+
+    window.addEventListener('keyup', e => {
+        const action = keyMap[e.code];
+        if (action) {
+            actions[action] = false;
+            if (onReleaseHandlers[action]) onReleaseHandlers[action]();
+        }
+        if (GM.keys) GM.keys[e.code] = false;
+    });
+
+    class GameManager extends GameObject {
+        constructor(uiCtx, name = 'GM') {
+            super(name, 'GM');
+            this.uiCtx = uiCtx;
+            this.v = {}; // Container for specific component shortcuts
+            this.FPS = 60;
+            this.lastTime = 0;
+            this.frameTime = 1000 / this.FPS;
+            this.flatUpdateList = [];
+            this.flatDrawList = [];
+            this._needsRebuild = true;
+            this.eventHub = new EventHub();
+            this.root = this;
+        }
+        update() {
+            if (this._needsRebuild) this._rebuildFlatLists();
+            this.eventHub.dealEvent(this);
+            this.flatUpdateList.forEach(e => e.update());
+        }
+        handleEvent(ev) { }
+        draw() {
+            this.flatDrawList.forEach(e => e.draw());
+        }
+        _rebuildFlatLists() {
+            this.flatUpdateList = [];
+            this.flatDrawList = [];
+            const traverse = (node) => {
+                if (!node.updatePause) this.flatUpdateList.push(node);
+                if (!node.drawPause) this.flatDrawList.push(node);
+                node.objectList.forEach(traverse);
+            };
+            this.objectList.forEach(traverse);
+            this._needsRebuild = false;
+        }
+
+        traverse(list, action) {
+            for (const node of list) {
+                action(node);
+                if (node.objectList) this.traverse(node.objectList, action);
+            }
+        }
+
+        switchPauseByTag(tag, pause = true) {
+            this.traverse(this.objectList, (node) => {
+                if (node.tags && node.tags.has(tag)) {
+                    node.updatePause = pause;
+                }
+            });
+            this._needsRebuild = true;
+        }
+    }
+
+    // --- World Data Systems ---
+    class Brick8 {
+        constructor(fill = 0) {
+            this.size = 8;
+            this.data = new Uint8Array(8 * 8 * 8);
+            if (fill != 0) this.data.fill(fill);
+        }
+        index(x, y, z) { return x + y * 8 + z * 64; }
+        get(x, y, z) { return this.data[this.index(x, y, z)]; }
+        set(x, y, z, v) { this.data[this.index(x, y, z)] = v; }
+    }
+
+    class BrickPool {
+        constructor() { this.items = []; }
+        add(brick) {
+            const id = this.items.length;
+            this.items.push(brick);
+            return id;
+        }
+        get(id) { return this.items[id] ?? null; }
+
+        static forEach8x8BrickVoxel(brick, fn) {
+            for (let z = 0; z < 8; z++) for (let y = 0; y < 8; y++) for (let x = 0; x < 8; x++) fn(brick, x, y, z);
+        }
+
+        static Function8x8Brick = {
+            0: { // Sphere
+                f: (brick, x, y, z) => {
+                    const dx = x - 3.5, dy = y - 3.5, dz = z - 3.5;
+                    if (dx * dx + dy * dy + dz * dz <= 12) brick.set(x, y, z, 1);
+                }
+            },
+            1: { // Chair-like
+                f: (brick, x, y, z) => {
+                    const leg = ((x === 1 || x === 6) && (z === 1 || z === 6) && y <= 3);
+                    const seat = (x >= 1 && x <= 6) && (z >= 1 && z <= 6) && y === 3;
+                    const back = (z >= 5 && z <= 6) && (x >= 1 && x <= 6) && (y >= 4 && y <= 7);
+                    if (leg || seat || back) brick.set(x, y, z, 1);
+                }
+            }
+        };
+
+        static createRandom8x8Brick() {
+            const brick = new Brick8(0);
+            const seed = Math.random() < 0.5 ? 0 : 1;
+            BrickPool.forEach8x8BrickVoxel(brick, BrickPool.Function8x8Brick[seed].f);
+            return brick;
+        }
+    }
+
+
+    const BlockDefs = {
+        0: { name: 'air', solid: false, renderMode: 'empty' },
+        1: { name: 'wood', solid: true, renderMode: 'cube', color: 0x8b5a2b },
+        2: { name: 'stone', solid: true, renderMode: 'cube', color: 0x888888 },
+        3: { name: 'grass', solid: true, renderMode: 'cube', color: 0x40e624 },
+        4: { name: 'special', solid: true, renderMode: 'brickOnly', color: 0xffffff }
+    };
+
+    const BlockDefs_ByName = { WOOD: 1, STONE: 2, GRASS: 3, SP: 4 };
+
+    class Chunk {
+        constructor(cx, cy, cz, chunkSize = 16) {
+            this.cx = cx; this.cy = cy; this.cz = cz;
+            this.chunkSize = chunkSize;
+            this.data = new Uint8Array(chunkSize ** 3);
+            this.state = 'empty';
+            this.coarseSize = 4;
+            this.coarseGrid = chunkSize / this.coarseSize;
+            this.coarseMask = new Uint8Array(this.coarseGrid ** 3);
+            this.isDirty = false;
+        }
+        index(lx, ly, lz) { return lx + ly * this.chunkSize + lz * (this.chunkSize ** 2); }
+        get(lx, ly, lz) { return this.data[this.index(lx, ly, lz)]; }
+        set(lx, ly, lz, id) {
+            this.data[this.index(lx, ly, lz)] = id;
+            this.isDirty = true;
+        }
+        rebuildSpatialCache() {
+            const s = this.chunkSize, cs = this.coarseSize, cg = this.coarseGrid;
+            this.coarseMask.fill(0);
+            let solidCount = 0;
+            for (let z = 0; z < s; z++) {
+                for (let y = 0; y < s; y++) {
+                    for (let x = 0; x < s; x++) {
+                        const id = this.get(x, y, z);
+                        if (id === 0) continue;
+                        solidCount++;
+                        const idx = ((x / cs) | 0) + ((y / cs) | 0) * cg + ((z / cs) | 0) * cg * cg;
+                        this.coarseMask[idx] = 1;
+                    }
+                }
+            }
+            this.state = solidCount === 0 ? 'empty' : (solidCount === s ** 3 ? 'full' : 'mixed');
+        }
+    }
+
+    class ChunkWorld {
+        constructor({ chunkSize = 16, minY = -16, maxY = 32, seed = 12345 } = {}) {
+            this.chunks = new Map();
+            this.chunkSize = chunkSize;
+            this.minY = minY;
+            this.maxY = maxY;
+            this.seed = seed;
+            this.brickRefs = new Map();
+            this.brickPool = new BrickPool();
+            this.pillarCellSize = 24;
+            this.blockSize = 1;
+        }
+        getChunkKey(cx, cy, cz) { return `${cx},${cy},${cz}`; }
+        worldToChunk(x, y, z) { return { cx: Math.floor(x / this.chunkSize), cy: Math.floor(y / this.chunkSize), cz: Math.floor(z / this.chunkSize) }; }
+        worldToLocal(x, y, z) { return { lx: ((x % this.chunkSize) + this.chunkSize) % this.chunkSize, ly: ((y % this.chunkSize) + this.chunkSize) % this.chunkSize, lz: ((z % this.chunkSize) + this.chunkSize) % this.chunkSize }; }
+        inBounds(x, y, z) { return y >= this.minY && y <= this.maxY; }
+        getChunk(cx, cy, cz) {
+            const key = this.getChunkKey(cx, cy, cz);
+            if (!this.chunks.has(key)) {
+                if (!this.inBounds(0, cy * this.chunkSize, 0)) return null;
+                const chunk = this.generateChunk(cx, cy, cz);
+                this.chunks.set(key, chunk);
+                return chunk;
+            }
+            return this.chunks.get(key);
+        }
+        generateChunk(cx, cy, cz) {
+            const chunk = new Chunk(cx, cy, cz, this.chunkSize);
+            const minX = cx * this.chunkSize, maxX = minX + this.chunkSize, minZ = cz * this.chunkSize, maxZ = minZ + this.chunkSize, minY = cy * this.chunkSize, maxY = minY + this.chunkSize;
+            const minCellX = Math.floor(minX / this.pillarCellSize), maxCellX = Math.floor((maxX - 1) / this.pillarCellSize), minCellZ = Math.floor(minZ / this.pillarCellSize), maxCellZ = Math.floor((maxZ - 1) / this.pillarCellSize);
+            for (let cellX = minCellX; cellX <= maxCellX; cellX++) {
+                for (let cellZ = minCellZ; cellZ <= maxCellZ; cellZ++) {
+                    const pillar = this.getPillarForCell(cellX, cellZ);
+                    if (pillar.topY < minY || pillar.baseY > maxY - 1) continue;
+                    for (let x = Math.max(minX, Math.floor(pillar.px - pillar.radius)); x < Math.min(maxX, Math.ceil(pillar.px + pillar.radius)); x++) {
+                        for (let z = Math.max(minZ, Math.floor(pillar.pz - pillar.radius)); z < Math.min(maxZ, Math.ceil(pillar.pz + pillar.radius)); z++) {
+                            const dx = x - pillar.px, dz = z - pillar.pz;
+                            if (dx * dx + dz * dz > pillar.radius * pillar.radius) continue;
+                            for (let y = Math.max(minY, pillar.baseY); y <= Math.min(maxY - 1, pillar.topY); y++) {
+                                const id = (y === pillar.topY) ? 3 : 2;
+                                const { lx, ly, lz } = this.worldToLocal(x, y, z);
+                                chunk.set(lx, ly, lz, id);
+                            }
+                        }
+                    }
+                }
+            }
+            chunk.rebuildSpatialCache();
+            return chunk;
+        }
+        getPillarForCell(cellX, cellZ) {
+            const hash = (n) => { n = (n ^ 61) ^ (n >>> 16); n += (n << 3); n ^= (n >>> 4); return Math.imul(n, 0x27d4eb2d) ^ (n >>> 15); };
+            const h1 = hash(cellX * 73856093 ^ cellZ * 19349663 ^ this.seed), h2 = hash(h1 ^ this.seed + 17);
+            return { px: cellX * this.pillarCellSize + 4 + (Math.abs(h1) % (this.pillarCellSize - 8)), pz: cellZ * this.pillarCellSize + 4 + (Math.abs(h2) % (this.pillarCellSize - 8)), radius: 4 + (Math.abs(h1) % 4), baseY: -3, topY: 10 + (Math.abs(h2) % 20) };
+        }
+        get(x, y, z) {
+            if (!this.inBounds(x, y, z)) return 0;
+            const { cx, cy, cz } = this.worldToChunk(x, y, z);
+            const chunk = this.getChunk(cx, cy, cz);
+            if (!chunk) return 0;
+            const { lx, ly, lz } = this.worldToLocal(x, y, z);
+            return chunk.get(lx, ly, lz);
+        }
+        setBlock(x, y, z, id) {
+            if (!this.inBounds(x, y, z)) return;
+            const { cx, cy, cz } = this.worldToChunk(x, y, z);
+            const chunk = this.getChunk(cx, cy, cz);
+            if (!chunk) return;
+            const { lx, ly, lz } = this.worldToLocal(x, y, z);
+            chunk.set(lx, ly, lz, id);
+            chunk.rebuildSpatialCache();
+        }
+        isSolid(x, y, z) { const id = this.get(x, y, z); return id !== 0 && BlockDefs[id]?.solid; }
+        moveAxisCheck_CenterType(position3, axis, delta, size3D) {
+            if (delta === 0) return 0;
+            const eps = 0.001, np = { x: position3.x, y: position3.y, z: position3.z };
+            np[axis] += delta;
+            const minX = Math.floor(np.x - size3D.x / 2), maxX = Math.floor(np.x + size3D.x / 2 - eps), minY = Math.floor(np.y - size3D.y / 2), maxY = Math.floor(np.y + size3D.y / 2 - eps), minZ = Math.floor(np.z - size3D.z / 2), maxZ = Math.floor(np.z + size3D.z / 2 - eps);
+            for (let bx = minX; bx <= maxX; bx++) {
+                for (let by = minY; by <= maxY; by++) {
+                    for (let bz = minZ; bz <= maxZ; bz++) {
+                        if (this.isSolid(bx, by, bz)) {
+                            if (axis === 'x') position3.x = delta > 0 ? bx - size3D.x / 2 - eps : (bx + 1) + size3D.x / 2 + eps;
+                            else if (axis === 'y') position3.y = delta > 0 ? by - size3D.y / 2 - eps : (by + 1) + size3D.y / 2 + eps;
+                            else if (axis === 'z') position3.z = delta > 0 ? bz - size3D.z / 2 - eps : (bz + 1) + size3D.z / 2 + eps;
+                            return 0;
+                        }
+                    }
+                }
+            }
+            position3[axis] += delta;
+            return delta;
+        }
+
+        getBrickRef(x, y, z) {
+            if (!this.inBounds(x, y, z)) return -1;
+            return this.brickRefs.get(`${x},${y},${z}`) ?? -1;
+        }
+
+        getBrick(x, y, z) {
+            const ref = this.getBrickRef(x, y, z);
+            return ref < 0 ? null : this.brickPool.get(ref);
+        }
+
+        setSpecialBlock(x, y, z, blockId, brick) {
+            this.setBlock(x, y, z, blockId);
+            const ref = this.brickPool.add(brick);
+            this.brickRefs.set(`${x},${y},${z}`, ref);
+        }
+
+        // Raycasting (DDA)
+        raycastVoxel(origin, dir, maxDist = 64) {
+            const stepX = Math.sign(dir.x), stepY = Math.sign(dir.y), stepZ = Math.sign(dir.z);
+            const tDeltaX = Math.abs(1 / dir.x), tDeltaY = Math.abs(1 / dir.y), tDeltaZ = Math.abs(1 / dir.z);
+
+            let vx = Math.floor(origin.x), vy = Math.floor(origin.y), vz = Math.floor(origin.z);
+            let tMaxX = stepX > 0 ? (Math.floor(origin.x) + 1 - origin.x) * tDeltaX : (origin.x - Math.floor(origin.x)) * tDeltaX;
+            let tMaxY = stepY > 0 ? (Math.floor(origin.y) + 1 - origin.y) * tDeltaY : (origin.y - Math.floor(origin.y)) * tDeltaY;
+            let tMaxZ = stepZ > 0 ? (Math.floor(origin.z) + 1 - origin.z) * tDeltaZ : (origin.z - Math.floor(origin.z)) * tDeltaZ;
+
+            let t = 0;
+            while (t < maxDist) {
+                if (this.isSolid(vx, vy, vz)) {
+                    const id = this.get(vx, vy, vz);
+                    const hitPos = { x: origin.x + dir.x * t, y: origin.y + dir.y * t, z: origin.z + dir.z * t };
+                    return { hit: true, t, vox: { x: vx, y: vy, z: vz }, id, hitPos };
+                }
+                if (tMaxX < tMaxY) {
+                    if (tMaxX < tMaxZ) { vx += stepX; t = tMaxX; tMaxX += tDeltaX; }
+                    else { vz += stepZ; t = tMaxZ; tMaxZ += tDeltaZ; }
+                } else {
+                    if (tMaxY < tMaxZ) { vy += stepY; t = tMaxY; tMaxY += tDeltaY; }
+                    else { vz += stepZ; t = tMaxZ; tMaxZ += tDeltaZ; }
+                }
+            }
+            return { hit: false };
+        }
+
+        fillTestGround(world, maxX = 48, maxZ = 48) {
+            for (let x = 0; x < maxX; x++) {
+                for (let z = 0; z < maxZ; z++) {
+                    this.setBlock(x, -2, z, BlockDefs_ByName.STONE);
+                    if (x > 4 && x < maxX - 4 && z > 4 && z < maxZ - 4) {
+                        this.setBlock(x, -1, z, BlockDefs_ByName.GRASS);
+                    }
+                }
+            }
+            // Add a special block as a test
+            const testBrick = BrickPool.createRandom8x8Brick();
+            this.setSpecialBlock(20, 0, 20, BlockDefs_ByName.SP, testBrick);
+        }
+    }
+
+
+
+
+
+
+    // --- Physics Simulator (port of PhysicSimulator_BlockWorld) ---
+    class PhysicSimulator extends GameObject {
+        constructor(world, timeManager) {
+            super('PhysicSimulator', 'physic');
+            this.tags.add('physics');
+            this.world = world;
+            this.timeManager = timeManager;
+            this.bodies = []; // list of entities to simulate
+            this.gravity = 0.006;
+        }
+        // Register an entity for physics simulation.
+        register(entity) {
+            this.bodies.push(entity);
+            // Signal bindings for immediate dynamic cleanup
+            entity.signals.detached.connect(() => { this.bodies = this.bodies.filter(t => t !== entity); });
+            entity.signals.died.connect(() => { this.bodies = this.bodies.filter(t => t !== entity); });
+        }
+        update_self() {
+            const world = this.world;
+            for (const t of this.bodies) {
+                const ts = t.timeScale !== undefined ? t.timeScale : 1.0;
+                if (ts <= 0) continue; // HitStop freeze
+
+                // Gravity
+                t.delta.y -= this.gravity * ts;
+
+                // Resolve each axis
+                t.delta.x = world.moveAxisCheck_CenterType(t.position, 'x', t.delta.x * ts, t.size3D) / ts;
+                t.delta.z = world.moveAxisCheck_CenterType(t.position, 'z', t.delta.z * ts, t.size3D) / ts;
+                const prevDeltaY = t.delta.y;
+                t.delta.y = world.moveAxisCheck_CenterType(t.position, 'y', t.delta.y * ts, t.size3D) / ts;
+
+                // Refined onGround logic
+                if (t.delta.y === 0 && prevDeltaY < 0) {
+                    t.onGround = true;
+                } else if (t.delta.y > 0) {
+                    t.onGround = false;
+                }
+
+                // Clamp Y
+                t.position.y = Math.max(-10, t.position.y);
+            }
+        }
+    }
+
+    // --- Asset Factory ---
+    const createIndexedTexture = (key) => {
+        const asset = IndexedImageLibrary[key];
+        if (!asset) return null;
+        const canvas = document.createElement('canvas');
+        canvas.width = asset.width; canvas.height = asset.height;
+        const ctx = canvas.getContext('2d');
+        const img = ctx.createImageData(asset.width, asset.height);
+        for (let i = 0; i < asset.data.length; i++) {
+            const idx = asset.data[i];
+            if (idx === 0) { img.data[i * 4 + 3] = 0; }
+            else {
+                const c = asset.palette[idx];
+                img.data[i * 4] = c[0]; img.data[i * 4 + 1] = c[1]; img.data[i * 4 + 2] = c[2]; img.data[i * 4 + 3] = 255;
+            }
+        }
+        ctx.putImageData(img, 0, 0);
+        const tex = new THREE.CanvasTexture(canvas);
+        tex.magFilter = THREE.NearestFilter;
+        tex.minFilter = THREE.NearestFilter;
+        return tex;
+    };
+
+    const createRGBTexture = (data, w, h) => {
+        const texData = new Uint8Array(w * h * 4);
+        for (let i = 0; i < w * h; i++) {
+            texData[i * 4] = data[i * 3]; texData[i * 4 + 1] = data[i * 3 + 1]; texData[i * 4 + 2] = data[i * 3 + 2]; texData[i * 4 + 3] = 255;
+        }
+        const tex = new THREE.DataTexture(texData, w, h, THREE.RGBAFormat);
+        tex.magFilter = THREE.NearestFilter; tex.minFilter = THREE.NearestFilter;
+        tex.needsUpdate = true;
+        return tex;
+    };
+
+    const createTextureSet = (baseKey) => {
+        const t = (suffix) => createIndexedTexture(suffix ? `${baseKey}_${suffix}` : baseKey);
+        const front = t('');
+        const back = t('back');
+        const side = t('side');
+        const side1 = t('side1');
+        const side2 = t('side2');
+        // Fallback: first available texture so no direction is ever null
+        const any = front || side || side1 || side2 || back;
+        return {
+            front: front || side1 || side || any,
+            back: back || side2 || side || any,
+            side: side || side1 || side2 || front || any,
+            side1: side1 || side || front || any,
+            side2: side2 || side || back || any
+        };
+    };
+
+    // --- Actor System ---
+    class ActorNode extends GameObject {
+        constructor(id, tag, x, y, z) {
+            super(id, tag);
+            this.position = new Vec3(x, y, z);
+            this.pos = this.position; // Alias
+            this.delta = new Vec3();
+            this.direction = new Vec3(0, 0, 1);
+            this.size3D = { x: 0.6, y: 1.0, z: 0.6 };
+            this.onGround = false;
+            this.hp = 100;
+            this.maxHp = 100;
+            this.hitStun = 0;
+            this.timeScale = 1.0;
+        }
+
+        update_self() {
+            if (this.timeScale <= 0) return;
+
+            // Common friction for all actors
+            this.delta.x *= 0.85;
+            this.delta.z *= 0.85;
+
+            if (this.hitStun > 0) {
+                this.hitStun -= this.timeScale;
+            }
+        }
+
+        damage(v = 1, attacker = null, force = 0.6) {
+            this.hp -= v;
+            this.hitStun = 6;
+
+            if (attacker) {
+                const dx = this.pos.x - attacker.position.x;
+                const dz = this.pos.z - attacker.position.z;
+                const len = Math.hypot(dx, dz) || 1;
+                // Common knockback impulse
+                this.delta.x += (dx / len) * force;
+                this.delta.z += (dz / len) * force;
+            }
+
+            if (this.hp <= 0) {
+                this.die(); // Signals death to all connected subscribers (e.g. PhysicSimulator, TimeManager)
+                this.hp = 0;
+            }
+        }
+    }
+
+    class EnemyNode extends ActorNode {
+        constructor(x, y, z, player, renderer, timeManager) {
+            super('Enemy', 'enemy', x, y, z, timeManager);
+            this.player = player;
+            this.renderer = renderer;
+
+            this.tags.add('actor');
+            this.tags.add('enemy');
+
+            this.combat = {
+                state: 'idle',
+                timer: 0,
+                attackRange: 1.45,
+                aggroRange: 8.0,
+                attackCooldown: 120,
+                strafeDir: Math.random() < 0.5 ? -1 : 1,
+                hitFlash: 0
+            };
+            this.screenPos = null;
+            this.sy0 = 0;
+        }
+
+        update_self() {
+            super.update_self(); // Friction & HitStun
+            // AI logic continues in CombatSystem.Enemies_update
+        }
+
+        damage(v = 1, force = 0.6) {
+            super.damage(v, this.player, force);
+        }
+    }
+
+    class TimeManager extends GameObject {
+        constructor(hitstopOverlay) {
+            super('TimeManager', 'time');
+            this.hitstopOverlay = hitstopOverlay;
+            this.hitstopTimer = 0;
+            this.bulletTimeTimer = 0;
+            this.slowTimer = 0;
+            this.parryFreezeActive = false;
+            this.managedNodes = [];
+        }
+
+        manage(node) {
+            this.managedNodes.push(node);
+            // Dynamic decoupling using Signal Pattern
+            node.signals.detached.connect(() => { this.managedNodes = this.managedNodes.filter(n => n !== node) });
+            node.signals.died.connect(() => { this.managedNodes = this.managedNodes.filter(n => n !== node) });
+        }
+
+        update_self() {
+            if (this.hitstopTimer > 0) {
+                this.hitstopTimer--;
+
+                // Dynamic Opacity for "fade-out" effect during hitstop
+                if (this.hitstopOverlay) {
+                    const alpha = Math.min(0.6, (this.hitstopTimer / 10));
+                    this.hitstopOverlay.style.opacity = alpha;
+                    if (this.hitstopTimer <= 0) {
+                        this.hitstopOverlay.style.display = 'none';
+                    }
+                }
+            }
+            if (this.bulletTimeTimer > 0) this.bulletTimeTimer--;
+            if (this.slowTimer > 0) this.slowTimer--;
+
+            // Push continuous timeScale directly to managed nodes for smooth physics scaling
+            for (const node of this.managedNodes) {
+                node.timeScale = this.getEffectiveTimeScale(node);
+            }
+        }
+
+        requestHitStop(frames) {
+            this.hitstopTimer = frames;
+            if (this.hitstopOverlay) {
+                this.hitstopOverlay.style.display = 'block';
+                this.hitstopOverlay.style.opacity = '0.6';
+            }
+        }
+
+        requestBulletTime(frames) { this.bulletTimeTimer = frames; }
+        requestSlow(frames) { this.slowTimer = frames; }
+
+        getEffectiveTimeScale(node) {
+            // parryFreezeActive will be updated by CombatSystem externally for decoupling
+            if (this.parryFreezeActive) {
+                if (node.tags.has('player')) return 3.0;
+                return 0.0;
+            }
+            if (this.hitstopTimer > 0) {
+                if (node.tags.has('player')) return 0.15;
+                if (node.tags.has('vfx')) return 0.2; // Linger during hitstop
+                return 0.0;
+            }
+            let scale = 1.0;
+            if (this.bulletTimeTimer > 0) scale = 0.1;
+            else if (this.slowTimer > 0) scale = 0.25;
+
+            if (node.tags.has('vfx') || node.tags.has('ui')) return 1.0;
+            return scale;
+        }
+    }
+
+    class VFXManager extends GameObject {
+        constructor(uiCtx) {
+            super('VFXManager', 'vfx');
+            this.uiCtx = uiCtx;
+            this.vfxList = [];
+        }
+
+        spawnSlash(x, y, comboStep, isHeavy = false) {
+            this.vfxList.push({
+                x, y,
+                angle: (Math.random() - 0.5) * 1.5 + (comboStep % 2 === 0 ? 0.8 : -0.8),
+                len: isHeavy ? (60 + Math.random() * 80) : (35 + Math.random() * 25),
+                timer: isHeavy ? 12 : 8,
+                maxTimer: isHeavy ? 12 : 8,
+                isHeavy: isHeavy
+            });
+            if (isHeavy) {
+                this.spawnSpark(x, y);
+            }
+        }
+
+        spawnSpark(x, y) {
+            this.vfxList.push({ x, y, type: 'spark', timer: 8, maxTimer: 8 });
+        }
+
+        update_self() {
+            const ts = this.timeScale !== undefined ? this.timeScale : 1.0;
+            this.vfxList = this.vfxList.filter(v => v.timer > 0);
+            for (const v of this.vfxList) {
+                v.timer -= ts;
+            }
+        }
+
+        draw() {
+            const ctx = this.uiCtx;
+            if (!ctx) return;
+            for (const v of this.vfxList) {
+                const prg = Math.max(0, v.timer / v.maxTimer);
+                const alpha = Math.pow(prg, 1.5);
+
+                if (v.type === 'spark') {
+                    ctx.strokeStyle = `rgba(255, 255, 255, ${alpha})`;
+                    ctx.lineWidth = 2 * prg;
+                    ctx.beginPath();
+                    ctx.moveTo(v.x - 15 * prg, v.y); ctx.lineTo(v.x + 15 * prg, v.y);
+                    ctx.moveTo(v.x, v.y - 15 * prg); ctx.lineTo(v.x, v.y + 15 * prg);
+                    ctx.stroke();
+                } else {
+                    ctx.save();
+                    if (v.isHeavy) {
+                        ctx.shadowBlur = 15 * prg;
+                        ctx.shadowColor = '#f200ff';
+                        ctx.strokeStyle = `rgba(242, 0, 255, ${alpha * 0.5})`;
+                        ctx.lineWidth = 12 * prg;
+                    } else {
+                        ctx.shadowBlur = 0;
+                        ctx.strokeStyle = `rgba(255, 255, 255, ${alpha * 0.3})`;
+                        ctx.lineWidth = 5 * prg;
+                    }
+                    const dx = Math.cos(v.angle) * v.len * 0.5, dy = Math.sin(v.angle) * v.len * 0.5;
+                    ctx.beginPath(); ctx.moveTo(v.x - dx, v.y - dy); ctx.lineTo(v.x + dx, v.y + dy); ctx.stroke();
+
+                    ctx.shadowBlur = 0;
+                    ctx.strokeStyle = `rgba(255, 255, 255, ${alpha})`;
+                    ctx.lineWidth = v.isHeavy ? 3 * prg : 2 * prg;
+                    ctx.stroke();
+                    ctx.restore();
+                }
+            }
+        }
+    }
+
+    // --- Combat System (port of TPSCombatInteractor) ---
+    class CombatSystem extends GameObject {
+        constructor(player, playerController, cameraController, timeManager, vfxManager, scene, camera, uiCtx) {
+            super('CombatSystem', 'combat');
+            this.player = player;
+            this.playerController = playerController;
+            this.cameraController = cameraController;
+            this.timeManager = timeManager;
+            this.vfxManager = vfxManager;
+            this.scene = scene;
+            this.camera = camera;
+            this.uiCtx = uiCtx;
+
+            this.lockedEnemy = null;
+            this.comboStep = 0;
+            this.comboTimer = 0;
+            this.attackTimer = 0;
+            this.attackHitDone = false;
+
+            this.attackRange = 1.85;
+            this.attackAngleDeg = 70;
+            this.baseDamage = 8;
+
+            this.uiMessage = '';
+            this.uiTimer = 0;
+
+            this._enemyList = [];
+            this.parryCounterTimer = 0;
+            this.parryTarget = null;
+        }
+
+        onAttach(master) {
+            super.onAttach(master);
+            onPressHandlers.attack = () => this.Attack_handleEvent();
+            onPressHandlers.lockon = () => this.LockOn_toggle();
+            onPressHandlers.dodge = () => this.Dodge_handleEvent();
+        }
+
+        registerEnemy(e) { this._enemyList.push(e); }
+        get enemies() { return this._enemyList; }
+
+        requestHitStop(frames, shake = 0.15) {
+            if (this.timeManager) this.timeManager.requestHitStop(frames);
+            if (this.cameraController) this.cameraController.requestShake(frames + 3, shake);
+        }
+
+        update_self() {
+            // Central time state updates
+            if (this.timeManager) {
+                this.timeManager.parryFreezeActive = this.parryCounterTimer > 0;
+            }
+
+            const pTS = this.player && this.player.timeScale !== undefined ? this.player.timeScale : 1.0;
+            if (this.uiTimer > 0) this.uiTimer--;
+
+            if (this.comboTimer > 0) this.comboTimer -= pTS;
+            if (this.attackTimer > 0) this.attackTimer -= pTS;
+            if (this.comboTimer <= 0 && this.attackTimer <= 0) this.comboStep = 0;
+
+            if (this.parryCounterTimer > 0) {
+                this.parryCounterTimer -= pTS;
+                this.ParryCounter_update();
+                if (this.parryCounterTimer <= 0) this.Parry_finish();
+            }
+
+            if (this.playerController) {
+                this.playerController.moveScale = (this.attackTimer > 0) ? 0.18 : 1.0;
+                if (this.parryCounterTimer > 0) this.playerController.inputEnabled = false;
+                else this.playerController.inputEnabled = true;
+            }
+
+            if (this.cameraController) {
+                const isLocked = !!(this.lockedEnemy && !this.lockedEnemy.tags.has('dead'));
+                this.cameraController.setLockOnMode(isLocked || this.parryCounterTimer > 0);
+            }
+
+            this.LockOn_update();
+            this.PlayerFacing_update();
+            this.Attack_update();
+            this.Enemies_update();
+        }
+
+        Attack_handleEvent() {
+            if (this.playerController && this.playerController.stunTimer > 0) return;
+            if (this.attackTimer > 0) return;
+
+            for (const enemy of this.enemies) {
+                if (enemy.tags.has('dead') || !enemy.combat) continue;
+                if (enemy.glint) {
+                    if (Math.hypot(enemy.position.x - this.player.position.x, enemy.position.z - this.player.position.z) < 2.5) {
+                        this.Parry_trigger(enemy);
+                        return;
+                    }
+                }
+            }
+
+            if (this.comboTimer <= 0) {
+                this.comboStep = 1;
+            } else {
+                this.comboStep = (this.comboStep % 4) + 1;
+            }
+            this.MeleeAttack_trigger();
+        }
+
+        MeleeAttack_trigger() {
+            this.attackTimer = 16;
+            this.comboTimer = 30;
+            this.attackHitDone = false;
+            this.uiMessage = `ATTACK ${this.comboStep}`;
+            this.uiTimer = 20;
+        }
+
+        Parry_trigger(enemy) {
+            this.parryCounterTimer = 35;
+            this.parryTarget = enemy;
+            if (this.timeManager) this.timeManager.requestSlow(40);
+            this.uiMessage = 'PARRY COUNTER!!';
+            this.uiTimer = 35;
+            enemy.combat.state = 'hurt';
+            enemy.combat.timer = 60;
+
+            const dx = this.player.position.x - enemy.position.x;
+            const dz = this.player.position.z - enemy.position.z;
+            this.parryRadius = Math.hypot(dx, dz) || 2.0;
+            this.parryStartAngle = Math.atan2(dx, dz);
+            this.parryEndAngle = Math.atan2(-enemy.direction.x, -enemy.direction.z);
+            while (this.parryEndAngle - this.parryStartAngle > Math.PI) this.parryEndAngle -= Math.PI * 2;
+            while (this.parryEndAngle - this.parryStartAngle < -Math.PI) this.parryEndAngle += Math.PI * 2;
+            this.parryLastPos = { x: this.player.position.x, z: this.player.position.z };
+        }
+
+        ParryCounter_update() {
+            if (!this.parryTarget) return;
+            const enemy = this.parryTarget;
+            const t = 1.0 - (Math.max(0, this.parryCounterTimer) / 35.0);
+            const ang = lerp(this.parryStartAngle, this.parryEndAngle, t);
+            const targetX = enemy.position.x + Math.sin(ang) * this.parryRadius;
+            const targetZ = enemy.position.z + Math.cos(ang) * this.parryRadius;
+
+            this.player.position.x = targetX;
+            this.player.position.z = targetZ;
+            this.player.delta.x = targetX - this.parryLastPos.x;
+            this.player.delta.z = targetZ - this.parryLastPos.z;
+            this.parryLastPos.x = targetX;
+            this.parryLastPos.z = targetZ;
+
+            const fdx = enemy.position.x - this.player.position.x;
+            const fdz = enemy.position.z - this.player.position.z;
+            const flen = Math.hypot(fdx, fdz) || 1;
+            this.player.direction.set(fdx / flen, 0, fdz / flen);
+        }
+
+        Parry_finish() {
+            const enemy = this.parryTarget;
+            if (!enemy || enemy.tags.has('dead')) return;
+            this.requestHitStop(80, 0.4);
+            enemy.damage(40);
+            this.uiMessage = 'FINISHER!!';
+            this.uiTimer = 20;
+            this.MeleeAttack_trigger();
+            const dx = enemy.position.x - this.player.position.x;
+            const dz = enemy.position.z - this.player.position.z;
+            const len = Math.hypot(dx, dz) || 1;
+            enemy.delta.x += (dx / len) * 0.4;
+            enemy.delta.z += (dz / len) * 0.4;
+        }
+
+        Dodge_handleEvent() {
+            if (this.playerController && this.playerController.dodge_trigger()) {
+                this.uiMessage = 'DODGE';
+                this.uiTimer = 14;
+                for (const enemy of this.enemies) {
+                    if (enemy.tags.has('dead') || enemy.combat.state !== 'attack') continue;
+                    if (Math.hypot(enemy.position.x - this.player.position.x, enemy.position.z - this.player.position.z) < 2.2) {
+                        if (this.timeManager) {
+                            this.timeManager.requestBulletTime(300);
+                            this.timeManager.requestHitStop(2);
+                        }
+                        this.uiMessage = 'PERFECT DODGE';
+                        this.uiTimer = 24;
+                    }
+                }
+            }
+        }
+
+        LockOn_toggle() {
+            const alive = this.enemies.filter(e => !e.tags.has('dead'));
+            if (alive.length === 0) { this.lockedEnemy = null; return; }
+            if (!this.lockedEnemy || this.lockedEnemy.tags.has('dead')) {
+                this.lockedEnemy = this.findNearestEnemy(10); return;
+            }
+            const idx = alive.indexOf(this.lockedEnemy);
+            this.lockedEnemy = alive[(idx + 1) % alive.length];
+        }
+
+        Attack_update() {
+            if (this.attackTimer <= 0) return;
+            const frame = 16 - this.attackTimer;
+            if (!this.attackHitDone && frame > 4) {
+                this.attackHitDone = true;
+                this.Attack_resolveMeleeHit();
+            }
+        }
+
+        Attack_resolveMeleeHit() {
+            const yaw = this.player.yaw * Math.PI / 180;
+            const forward = new Vec3(Math.sin(yaw), 0, Math.cos(yaw));
+            for (const enemy of this.enemies) {
+                if (enemy.tags.has('dead')) continue;
+                const toEnemy = enemy.position.clone().sub(this.player.position);
+                toEnemy.y = 0;
+                const dist = toEnemy.len();
+                if (dist > this.attackRange) continue;
+                const dir = toEnemy.clone().norm();
+                const dot = forward.x * dir.x + forward.z * dir.z;
+                if (dot < Math.cos(this.attackAngleDeg * Math.PI / 180)) continue;
+
+                const dmg = this.baseDamage + (this.comboStep - 1) * 3;
+                const knockbackForce = this.comboStep === 3 ? 0.6 : 0.15;
+                enemy.damage(dmg, knockbackForce);
+                enemy.combat.state = 'hurt';
+                enemy.combat.timer = 15;
+                enemy.combat.hitFlash = 6;
+
+                if (this.comboStep === 3) {
+                    this.requestHitStop(100, 0.4);
+                    if (this.timeManager) this.timeManager.requestSlow(20);
+                } else {
+                    this.requestHitStop(12, 0.1);
+                }
+
+                // Signal pattern: Broadcast that a hit occurred, so anyone (VFX, Audio, UI) can react to it Decoupled!
+                this.player.signals.slashHit.emit(enemy, this.comboStep);
+                break;
+            }
+        }
+
+        LockOn_update() {
+            if (this.lockedEnemy && (this.lockedEnemy.tags.has('dead') || Math.hypot(this.lockedEnemy.position.x - this.player.position.x, this.lockedEnemy.position.z - this.player.position.z) > 12)) {
+                this.lockedEnemy = null;
+            }
+            if (this.lockedEnemy && this.cameraController) {
+                const mid = new THREE.Vector3().lerpVectors(this.player.position, this.lockedEnemy.position, 0.5);
+                this.cameraController.setLookAtTarget(mid);
+            } else if (this.cameraController) {
+                this.cameraController.setLookAtTarget(null);
+            }
+        }
+
+        PlayerFacing_update() {
+            if (!this.lockedEnemy) return;
+            if (this.attackTimer > 0) return;
+            const dx = this.lockedEnemy.position.x - this.player.position.x;
+            const dz = this.lockedEnemy.position.z - this.player.position.z;
+            const targetYaw = Math.atan2(dx, dz) * 180 / Math.PI;
+            let diff = targetYaw - this.player.yaw;
+            while (diff > 180) diff -= 360; while (diff < -180) diff += 360;
+            this.player.yaw += diff * 0.12;
+        }
+
+        Enemies_update() {
+            for (const enemy of this.enemies) {
+                if (enemy.tags.has('dead')) continue;
+                const ts = enemy.timeScale !== undefined ? enemy.timeScale : 1.0;
+                if (ts <= 0) continue;
+
+                if (enemy.combat.hitFlash > 0) enemy.combat.hitFlash -= ts;
+                if (enemy.hitStun > 0) continue;
+
+                const dist = Math.hypot(enemy.pos.x - this.player.pos.x, enemy.pos.z - this.player.pos.z);
+                const c = enemy.combat;
+                switch (c.state) {
+                    case 'hurt': enemy.glint = false; c.timer -= ts; if (c.timer <= 0) c.state = 'strafe'; break;
+                    case 'idle': if (dist < c.aggroRange) c.state = 'strafe'; break;
+                    case 'strafe':
+                        c.timer -= ts;
+                        this.faceEnemyToPlayer(enemy);
+                        const nx = (this.player.pos.x - enemy.pos.x) / dist, nz = (this.player.pos.z - enemy.pos.z) / dist;
+                        const tx = -nz * c.strafeDir, tz = nx * c.strafeDir;
+                        enemy.pos.x += (nx * (dist > 1.9 ? 0.026 : -0.012) + tx * 0.022) * ts;
+                        enemy.pos.z += (nz * (dist > 1.9 ? 0.026 : -0.012) + tz * 0.022) * ts;
+                        if (dist <= c.attackRange) { c.state = 'windup'; c.timer = 22; }
+                        else if (c.timer <= 0) { c.timer = 20 + Math.random() * 20; c.strafeDir *= -1; }
+                        break;
+                    case 'windup':
+                        c.timer -= ts; enemy.glint = (c.timer <= 12);
+                        if (c.timer <= 0) { c.state = 'attack'; c.timer = 10; enemy.glint = false; }
+                        break;
+                    case 'attack':
+                        c.timer -= ts;
+                        const dx = (this.player.pos.x - enemy.pos.x) / dist, dz = (this.player.pos.z - enemy.pos.z) / dist;
+                        enemy.pos.x += dx * 0.05 * ts; enemy.pos.z += dz * 0.05 * ts;
+                        if (c.timer <= 6 && c.timer > 4) this.tryEnemyHit(enemy);
+                        if (c.timer <= 0) { c.state = 'cooldown'; c.timer = 18; }
+                        break;
+                    case 'cooldown': c.timer -= ts; if (c.timer <= 0) c.state = 'strafe'; break;
+                }
+            }
+        }
+
+        tryEnemyHit(enemy) {
+            if (this.player.hp <= 0) return;
+            const dist = Math.hypot(this.player.pos.x - enemy.pos.x, this.player.pos.z - enemy.pos.z);
+            if (dist > 1.6 || (this.playerController && this.playerController.invulnTimer > 0)) return;
+
+            this.player.damage(20, enemy, 0.4);
+            if (this.playerController && this.player.hp > 0) {
+                this.playerController.stunTimer = 25;
+                this.playerController.invulnTimer = 45;
+            }
+
+            this.uiMessage = 'PLAYER HIT'; this.uiTimer = 16;
+            this.requestHitStop(20, 0.2);
+        }
+
+        faceEnemyToPlayer(enemy) {
+            const dx = this.player.pos.x - enemy.pos.x, dz = this.player.pos.z - enemy.pos.z, len = Math.hypot(dx, dz) || 1;
+            enemy.direction.set(dx / len, 0, dz / len);
+        }
+
+        findNearestEnemy(maxDist) {
+            let best = null, bestDist = maxDist;
+            for (const e of this.enemies) {
+                if (e.tags.has('dead')) continue;
+                const d = Math.hypot(e.pos.x - this.player.pos.x, e.pos.z - this.player.pos.z);
+                if (d < bestDist) { best = e; bestDist = d; }
+            }
+            return best;
+        }
+
+        getEnemyStateLabel(enemy) {
+            if (enemy.tags.has('dead')) return 'DEAD';
+            const s = enemy.combat?.state;
+            const map = { idle: 'IDLE', strafe: 'STRAFE', windup: 'WINDUP', attack: 'ATTACK', cooldown: 'COOLDOWN', hurt: 'HURT' };
+            return map[s] || String(s).toUpperCase();
+        }
+
+        draw() {
+            const ctx = this.uiCtx;
+            if (!ctx) return;
+            ctx.save();
+            const W = 480, H = 320;
+
+            // Lock-on reticle
+            if (this.lockedEnemy && !this.lockedEnemy.tags.has('dead') && this.lockedEnemy.screenPos) {
+                const sp = this.lockedEnemy.screenPos; ctx.strokeStyle = '#ff4d6d'; ctx.lineWidth = 2;
+                ctx.strokeRect(sp.x - 20, sp.y - 20, 40, 40);
+            }
+
+            // Action message
+            if (this.uiTimer > 0) {
+                ctx.textAlign = 'left';
+                ctx.fillStyle = '#ffd166';
+                ctx.font = 'bold 18px monospace';
+                ctx.fillText(this.uiMessage, 12, 100);
+            }
+
+            // Enemy HUD
+            for (const e of this.enemies) {
+                if (e.tags.has('dead') || !e.screenPos || e.screenPos.z >= 1.0 || !e.combat) continue;
+                const tx = e.screenPos.x, ty = e.sy0 - 8;
+                const label = `${this.getEnemyStateLabel(e)} ${Math.ceil(e.combat.timer)}`;
+
+                ctx.save();
+                ctx.font = 'bold 11px monospace'; ctx.textAlign = 'center'; ctx.textBaseline = 'bottom';
+                ctx.strokeStyle = 'rgba(0,0,0,0.9)'; ctx.lineWidth = 3; ctx.strokeText(label, tx, ty);
+                ctx.fillStyle = (e.combat.state === 'windup' || e.combat.state === 'attack') ? '#ff4d4d' : '#fff';
+                ctx.fillText(label, tx, ty);
+                ctx.restore();
+
+                // HP bar
+                ctx.fillStyle = '#400'; ctx.fillRect(tx - 18, e.sy0 - 4, 36, 4);
+                ctx.fillStyle = '#0f0'; ctx.fillRect(tx - 18, e.sy0 - 4, 36 * (e.hp / e.maxHp), 4);
+
+                // Glint
+                if (e.glint) {
+                    ctx.save(); ctx.translate(tx, ty - 15); ctx.rotate(Date.now() * 0.01); ctx.fillStyle = '#fff700';
+                    for (let i = 0; i < 4; i++) { ctx.rotate(Math.PI / 2); ctx.fillRect(-1, -12, 2, 24); ctx.fillRect(-12, -1, 24, 2); }
+                    ctx.restore();
+                }
+            }
+
+            // Player Info
+            ctx.fillStyle = 'rgba(255,255,255,0.7)'; ctx.font = '10px monospace';
+            ctx.textAlign = 'left';
+            ctx.fillText(`COMBO: ${this.comboStep}`, 10, H - 20);
+
+            // Player HP
+            const hpW = 100;
+            const curHpW = (Math.max(0, this.player.hp) / this.player.maxHp) * hpW;
+            ctx.fillStyle = 'rgba(0,0,0,0.5)';
+            ctx.fillRect(W - hpW - 10, 10, hpW, 10);
+            ctx.fillStyle = this.player.hp > 30 ? '#00ff88' : '#ff3333';
+            ctx.fillRect(W - hpW - 10, 10, curHpW, 10);
+            ctx.strokeStyle = '#fff'; ctx.lineWidth = 1;
+            ctx.strokeRect(W - hpW - 10, 10, hpW, 10);
+            ctx.fillStyle = '#fff'; ctx.font = 'bold 10px monospace'; ctx.textAlign = 'right';
+            ctx.fillText('PLAYER HP', W - 10, 8);
+
+            ctx.restore();
+
+            if (this.player.hp <= 0) {
+                ctx.fillStyle = 'rgba(255,0,0,0.5)'; ctx.fillRect(0, 0, W, H);
+                ctx.fillStyle = '#fff'; ctx.font = 'bold 36px monospace'; ctx.textAlign = 'center';
+                ctx.fillText('DEFEATED', W / 2, H / 2);
+            }
+        }
+    }
+
+    class ThreeRenderer extends GameObject {
+        constructor(container) {
+            super('Renderer', 'renderer');
+            this.scene = new THREE.Scene();
+            this.camera = new THREE.PerspectiveCamera(60, 480 / 320, 0.1, 1000);
+            this.renderer = new THREE.WebGLRenderer({ antialias: false });
+            this.renderer.setSize(480, 320);
+            this.renderer.setClearColor(0x88ccff);
+
+            if (container) {
+                container.prepend(this.renderer.domElement);
+            }
+
+            this.scene.background = new THREE.Color(0xff8c59);
+            this.scene.fog = new THREE.Fog(0xff8c59, 5, 80);
+            this.scene.add(new THREE.AmbientLight(0xffffff, 0.6));
+            this.sun = new THREE.DirectionalLight(0xffffff, 1.0);
+            this.sun.position.set(10, 20, 10);
+            this.scene.add(this.sun);
+        }
+        draw() {
+            this.renderer.render(this.scene, this.camera);
+        }
+    }
+
+    class WorldComponent extends GameObject {
+        constructor(scene) {
+            super('World', 'world');
+            this.scene = scene;
+            this.world = new ChunkWorld({ seed: 999 });
+            this.meshes = new Map();
+            this.boxGeo = new THREE.BoxGeometry(0.999, 0.999, 0.999);
+            this.mats = new Map();
+        }
+        onAttach(master) {
+            super.onAttach(master);
+            const grassTex = createRGBTexture(grassFloor_32RGB, 32, 32);
+
+            for (const id in BlockDefs) {
+                const def = BlockDefs[id];
+                if (def.renderMode === 'empty') continue;
+
+                if (parseInt(id) === 3) {
+                    // ID 3: Grass block. Multi-material.
+                    // Array of 6 materials: +x, -x, +y, -y, +z, -z
+                    const dirtMat = new THREE.MeshLambertMaterial({ color: 0x8b5a2b });
+                    const grassMat = new THREE.MeshLambertMaterial({ color: def.color, map: grassTex });
+                    this.mats.set(3, [
+                        dirtMat,  // +x Right
+                        dirtMat,  // -x Left
+                        grassMat, // +y Top
+                        dirtMat,  // -y Bottom
+                        dirtMat,  // +z Front
+                        dirtMat   // -z Back
+                    ]);
+                } else {
+                    // Standard uniform block
+                    this.mats.set(parseInt(id), new THREE.MeshLambertMaterial({
+                        color: def.color
+                    }));
+                }
+            }
+        }
+        update_self() {
+            for (const [k, chunk] of this.world.chunks) {
+                if (chunk.isDirty) {
+                    if (this.meshes.has(k)) {
+                        const old = this.meshes.get(k);
+                        this.scene.remove(old);
+                    }
+                    const group = new THREE.Group();
+                    const s = chunk.chunkSize;
+                    for (let lz = 0; lz < s; lz++) {
+                        for (let ly = 0; ly < s; ly++) {
+                            for (let lx = 0; lx < s; lx++) {
+                                const id = chunk.get(lx, ly, lz);
+                                if (id === 0) continue;
+                                const mat = this.mats.get(id) || this.mats.get(2);
+                                const m = new THREE.Mesh(this.boxGeo, mat);
+                                m.position.set((chunk.cx * s + lx + 0.5), chunk.cy * s + ly + 0.5, chunk.cz * s + lz + 0.5);
+                                group.add(m);
+                            }
+                        }
+                    }
+                    this.meshes.set(k, group);
+                    this.scene.add(group);
+                    chunk.isDirty = false;
+                }
+            }
+        }
+    }
+
+
+    class SpriteComponent extends GameObject {
+        constructor(target, textureSet, scene, camera, offsetY = 0) {
+            super('SpriteVisual', 'sprite_visual');
+            this.target = target;
+            this.texSet = textureSet;
+            this.scene = scene;
+            this.camera = camera;
+            this.offsetY = offsetY;
+
+            const mat = new THREE.MeshBasicMaterial({
+                transparent: true,
+                alphaTest: 0.5,
+                side: THREE.DoubleSide
+            });
+            const geom = new THREE.PlaneGeometry(1, 1);
+            this.mesh = new THREE.Mesh(geom, mat);
+            this.mesh.scale.set(2, 2, 1);
+        }
+
+        onAttach(master) {
+            super.onAttach(master);
+            this.scene.add(this.mesh);
+        }
+
+        update_self() {
+            const t = this.target;
+            if (!t) return;
+
+            this.mesh.position.set(t.position.x, t.position.y + this.offsetY, t.position.z);
+            if (t.tags && t.tags.has('dead')) { this.mesh.visible = false; return; }
+            this.mesh.visible = true;
+
+            // Billboarding
+            if (this.camera) this.mesh.quaternion.copy(this.camera.quaternion);
+
+            // 8-direction selection
+            let eYaw = 0;
+            if (t.direction && t.direction.len() > 0.001) {
+                eYaw = Math.atan2(t.direction.x, t.direction.z);
+            }
+            let cYaw = 0;
+            if (this.camera) {
+                const cFwd = new THREE.Vector3(0, 0, -1).applyQuaternion(this.camera.quaternion);
+                cYaw = Math.atan2(cFwd.x, cFwd.z);
+            }
+
+            let diff = eYaw - cYaw;
+            while (diff > Math.PI) diff -= Math.PI * 2;
+            while (diff < -Math.PI) diff += Math.PI * 2;
+
+            const absDiff = Math.abs(diff);
+            const pi8 = Math.PI / 8;
+            let currentTex = this.texSet.front;
+
+            if (absDiff <= pi8) currentTex = this.texSet.back;
+            else if (absDiff <= 3 * pi8) currentTex = this.texSet.side2;
+            else if (absDiff <= 5 * pi8) currentTex = this.texSet.side;
+            else if (absDiff <= 7 * pi8) currentTex = this.texSet.side1;
+            else currentTex = this.texSet.front;
+
+            if (currentTex) {
+                this.mesh.material.map = currentTex;
+                // Flipping
+                if (diff < -0.05) {
+                    currentTex.repeat.x = 1; currentTex.offset.x = 0;
+                } else if (diff > 0.05) {
+                    currentTex.repeat.x = -1; currentTex.offset.x = 1;
+                }
+            }
+
+            // Screen Projection for HUD
+            if (this.camera && t.hp !== undefined) {
+                const ndc = new THREE.Vector3(t.position.x, t.position.y + this.offsetY, t.position.z).project(this.camera);
+                t.screenPos = { x: (ndc.x * 0.5 + 0.5) * 480, y: (-ndc.y * 0.5 + 0.5) * 320, z: ndc.z };
+                t.sy0 = t.screenPos.y - 40;
+            }
+        }
+    }
+
+    // --- MotionBridge: State-driven texSet swapper ---
+    // Watches a combat source and swaps the SpriteComponent's texSet.
+    // Each "motion" entry is either:
+    //   - A single texSet (8-dir): used as a static pose
+    //   - An array of texSets: frames played sequentially based on the timer
+    //
+    // stateResolver(combat) => { state: string, progress: 0..1 }
+    //   If not provided, defaults to reading CombatSystem timers (player).
+    class MotionBridge extends GameObject {
+        constructor(targetSprite, sourceCombat, motionsMap, stateResolver) {
+            super('MotionBridge', 'motion_bridge');
+            this.sprite = targetSprite;   // SpriteComponent to control
+            this.combat = sourceCombat;   // combat source (CombatSystem or plain object)
+            this.motions = motionsMap;     // { 'idle': texSet, 'attack': [texSet0, texSet1, ...], ... }
+            this.resolve = stateResolver || MotionBridge.defaultPlayerResolver;
+        }
+
+        // Default resolver: reads CombatSystem timers (player)
+        static defaultPlayerResolver(c) {
+            let state = 'idle';
+            if (c.player && c.player.hp <= 0) {
+                state = 'defeat';
+            } else if (c.playerController && c.playerController.stunTimer > 0) {
+                state = 'hurt';
+            } else if (c.attackTimer > 0) {
+                state = 'attack';
+            } else if (c.playerController && c.playerController.dodgeTimer > 0) {
+                state = 'dodge';
+            } else if (c.comboTimer > 0) {
+                state = 'ready';
+            }
+
+            let progress = 0;
+            if (state === 'attack') progress = 1.0 - (c.attackTimer / 16);
+            else if (state === 'dodge') progress = 1.0 - (c.playerController.dodgeTimer / 12);
+            else if (state === 'hurt') progress = 1.0 - (c.playerController.stunTimer / 25);
+            return { state, progress };
+        }
+
+        // Enemy resolver: reads plain { state, timer } objects
+        static enemyResolver(c) {
+            const state = c.state || 'idle';
+            // Duration lookup per state (for animation frame calc)
+            const durations = { windup: 22, attack: 10, cooldown: 18, hurt: 15 };
+            const dur = durations[state] || 1;
+            const progress = 1.0 - (Math.max(c.timer || 0, 0) / dur);
+            return { state, progress };
+        }
+
+        update_self() {
+            const { state, progress } = this.resolve(this.combat);
+            const motion = this.motions[state] || this.motions['idle'];
+            if (!motion) return;
+
+            if (Array.isArray(motion)) {
+                const frameIdx = Math.min(Math.floor(progress * motion.length), motion.length - 1);
+                this.sprite.texSet = motion[frameIdx];
+            } else {
+                this.sprite.texSet = motion;
+            }
+        }
+    }
+
+
+    class CameraController extends GameObject {
+        constructor(camera, target, timeManager) {
+            super('CameraCtrl', 'camera_ctrl');
+            this.camera = camera;
+            this.target = target;
+            this.timeManager = timeManager;
+            this.lookAtTarget = null;
+            this.lockOnMode = false;
+
+            this.shakeTimer = 0;
+            this.shakeAmount = 0;
+        }
+
+        setLookAtTarget(v) { this.lookAtTarget = v; }
+        setLockOnMode(active) { this.lockOnMode = active; }
+        requestShake(frames, amount) {
+            this.shakeTimer = frames;
+            this.shakeAmount = amount;
+        }
+
+        update_self() {
+            const t = this.target;
+            if (!t) return;
+
+            const ts = t.timeScale !== undefined ? t.timeScale : 1.0;
+            const rotSpeed = 2.0 * ts;
+
+            if (!this.lockOnMode) {
+                if (actions['camLeft']) t.yaw += rotSpeed;
+                if (actions['camRight']) t.yaw -= rotSpeed;
+                if (actions['camUp']) t.pitch = Math.max(-60, t.pitch - rotSpeed);
+                if (actions['camDown']) t.pitch = Math.min(60, t.pitch + rotSpeed);
+            }
+
+            const playerPos = new THREE.Vector3(t.position.x, t.position.y + 0.5, t.position.z);
+            let desiredCamPos;
+
+            if (this.lockOnMode && this.lookAtTarget) {
+                const toTarget = new THREE.Vector3().subVectors(this.lookAtTarget, playerPos).normalize();
+                toTarget.y = 0; toTarget.normalize();
+                const camDist = 3.5;
+                const camHeight = 1.8;
+                desiredCamPos = playerPos.clone().add(toTarget.clone().multiplyScalar(-camDist)).add(new THREE.Vector3(0, camHeight, 0));
+            } else {
+                let camFwd = Vec3.fromYawPitch(t.yaw, t.pitch);
+                desiredCamPos = playerPos.clone().add(new THREE.Vector3(camFwd.x, camFwd.y, camFwd.z).multiplyScalar(-4.0));
+            }
+
+            if (this.lockOnMode && this.lookAtTarget) {
+                this.camera.position.lerp(desiredCamPos, 0.1);
+                this.camera.lookAt(this.lookAtTarget);
+            } else {
+                this.camera.position.lerp(desiredCamPos, 0.2);
+                this.camera.lookAt(playerPos);
+            }
+
+            // Apply Screenshake AFTER lerp so it's not smoothed out
+            if (this.shakeTimer > 0) {
+                this.shakeTimer--;
+                const s = this.shakeAmount * (this.shakeTimer / 10);
+                this.camera.position.x += (Math.random() - 0.5) * s;
+                this.camera.position.y += (Math.random() - 0.5) * s;
+                this.camera.position.z += (Math.random() - 0.5) * s;
+                this.shakeAmount *= 0.92;
+            }
+        }
+    }
+
+    class PlayerController extends GameObject {
+        constructor(target, renderer, timeManager) {
+            super('PlayerCtrl', 'player_ctrl');
+            this.target = target;
+            this.renderer = renderer;
+            this.timeManager = timeManager;
+            this.inputEnabled = true;
+            this.moveScale = 1.0;
+            this.stunTimer = 0;
+            this.dodgeTimer = 0;
+            this.dodgeCooldown = 0;
+            this.invulnTimer = 0;
+            this.dodgeMoved = 0;
+            this.dodgeDir = new Vec3();
+        }
+
+        update_self() {
+            const t = this.target;
+            if (!t) return;
+            if (t.hp <= 0) return;
+
+            const ts = t.timeScale !== undefined ? t.timeScale : 1.0;
+
+            if (this.stunTimer > 0) {
+                this.stunTimer -= ts;
+                t.delta.x *= 0.9; t.delta.z *= 0.9;
+                return;
+            }
+
+            if (this.dodgeTimer > 0) {
+                this.Update_Dodge(ts);
+                return;
+            }
+
+            if (this.dodgeCooldown > 0) this.dodgeCooldown -= ts;
+            if (this.invulnTimer > 0) this.invulnTimer -= ts;
+
+            if (!this.inputEnabled) return;
+
+            const moveSpeed = 0.08 * ts * this.moveScale;
+            let forward = 0, side = 0;
+            if (actions['forward']) forward += 1;
+            if (actions['backward']) forward -= 1;
+            if (actions['left']) side -= 1;
+            if (actions['right']) side += 1;
+
+            if (forward !== 0 || side !== 0) {
+                // Resolution of the Orientation Reference (Camera direction)
+                const cam = this.renderer ? this.renderer.camera : null;
+
+                let moveVec = new THREE.Vector3();
+                if (cam) {
+                    const camDir = new THREE.Vector3(0, 0, -1).applyQuaternion(cam.quaternion);
+                    camDir.y = 0; camDir.normalize();
+                    const camRight = new THREE.Vector3(1, 0, 0).applyQuaternion(cam.quaternion);
+                    camRight.y = 0; camRight.normalize();
+                    moveVec = camDir.multiplyScalar(forward).add(camRight.multiplyScalar(side));
+                } else {
+                    // Fallback to world-space if no camera
+                    moveVec.set(side, 0, forward).normalize();
+                }
+
+                const targetX = moveVec.x * moveSpeed;
+                const targetZ = moveVec.z * moveSpeed;
+                t.delta.x = lerp(t.delta.x, targetX, 0.5);
+                t.delta.z = lerp(t.delta.z, targetZ, 0.5);
+
+                if (!t.direction) t.direction = new Vec3(0, 0, 1);
+                const targetAng = Math.atan2(moveVec.x, moveVec.z);
+                const currentAng = Math.atan2(t.direction.x, t.direction.z);
+                let angDiff = targetAng - currentAng;
+                while (angDiff > Math.PI) angDiff -= Math.PI * 2;
+                while (angDiff < -Math.PI) angDiff += Math.PI * 2;
+                const newAng = currentAng + angDiff * 0.18;
+                t.direction.x = Math.sin(newAng); t.direction.z = Math.cos(newAng);
+            } else {
+                // Smoothly stop if no input
+                t.delta.x = lerp(t.delta.x, 0, 0.2);
+                t.delta.z = lerp(t.delta.z, 0, 0.2);
+            }
+
+            if (actions['jump'] && t.onGround) {
+                t.delta.y = 0.15 * ts;
+                t.onGround = false;
+            }
+        }
+
+        dodge_trigger() {
+            if (this.dodgeCooldown > 0 || this.stunTimer > 0 || (this.target && this.target.hp <= 0)) return false;
+            this.dodgeTimer = 12; this.dodgeCooldown = 20; this.invulnTimer = 10;
+            this.dodgeMoved = 0;
+            this.dodgeDir = this.Get_InputMoveDir();
+            return true;
+        }
+
+        Get_InputMoveDir() {
+            const fy = this.target.yaw * Math.PI / 180;
+            const fwd = new Vec3(Math.sin(fy), 0, Math.cos(fy));
+            const rgt = new Vec3(Math.cos(fy), 0, -Math.sin(fy));
+            let x = 0, z = 0;
+            if (actions['left']) x += 1; if (actions['right']) x -= 1;
+            if (actions['forward']) z += 1; if (actions['backward']) z -= 1;
+            if (x === 0 && z === 0) return fwd;
+            return fwd.clone().mul(z).add(rgt.clone().mul(x)).norm();
+        }
+
+        Update_Dodge(ts) {
+            this.dodgeTimer -= ts;
+            const t = 1.0 - (this.dodgeTimer / 12);
+            const eased = -(Math.cos(Math.PI * t) - 1) * 0.5;
+            const dist = 1.6 * eased;
+            const delta = dist - this.dodgeMoved;
+            this.dodgeMoved = dist;
+            this.target.delta.x = this.dodgeDir.x * delta;
+            this.target.delta.z = this.dodgeDir.z * delta;
+            this.target.delta.y = Math.min(this.target.delta.y, 0);
+        }
+    }
+
+    class PlayerNode extends ActorNode {
+        constructor(x, y, z, timeManager) {
+            super('Player', 'player', x, y, z, timeManager);
+            this.tags.add('actor');
+            this.tags.add('player');
+            this.size3D = { x: 0.6, y: 1.6, z: 0.6 };
+            this.yaw = 0;
+            this.pitch = 12;
+            this.hp = 100;
+            this.maxHp = 100;
+            this.signals.slashHit = new Signal();
+        }
+    }
+
+    class DebugDirectionComponent extends GameObject {
+        constructor(target, scene) {
+            super('DebugDir', 'debug_dir');
+            this.target = target;
+            this.scene = scene;
+            this.arrow = new THREE.ArrowHelper(new THREE.Vector3(0, 0, 1), new THREE.Vector3(), 2.0, 0xff0000, 0.5, 0.3);
+        }
+        onAttach(master) {
+            super.onAttach(master);
+            this.scene.add(this.arrow);
+        }
+        update_self() {
+            if (!this.target) return;
+            const t = this.target;
+            this.arrow.position.set(t.position.x, t.position.y + 0.8, t.position.z);
+            if (t.direction && t.direction.len() > 0.001) {
+                // Map the internal engine direction back to Three.js space
+                const dir3D = new THREE.Vector3(t.direction.x, 0, t.direction.z).normalize();
+                this.arrow.setDirection(dir3D);
+                this.arrow.visible = true;
+            } else {
+                this.arrow.visible = false;
+            }
+        }
+    }
+
+
+    // --- Managed Game Instance ---
+    const GM = new GameManager(uiCtx);
+    GM.keys = {};
+
+    const setup = () => {
+        log("Initializing Component System...");
+        GM.v.three = GM.addChild(new ThreeRenderer(gameContainer));
+        GM.v.time = GM.addChild(new TimeManager(hitstopOverlay));
+        GM.v.world = GM.addChild(new WorldComponent(GM.v.three.scene));
+        GM.v.player = GM.addChild(new PlayerNode(10.5, 3, 12));
+
+        GM.v.visual = GM.addChild(new SpriteComponent(GM.v.player, createTextureSet('Blues'), GM.v.three.scene, GM.v.three.camera, -0.2));
+        GM.v.visual.tags.add('actor');
+        GM.v.visual.tags.add('player');
+
+        GM.v.camera_ctrl = GM.addChild(new CameraController(GM.v.three.camera, GM.v.player));
+        GM.v.vfx = GM.addChild(new VFXManager(uiCtx));
+        GM.v.player_ctrl = GM.addChild(new PlayerController(GM.v.player, GM.v.three));
+        GM.v.combat = GM.addChild(new CombatSystem(GM.v.player, GM.v.player_ctrl, GM.v.camera_ctrl, GM.v.time, GM.v.vfx, GM.v.three.scene, GM.v.three.camera, uiCtx));
+
+        // Let's wire the Signals together! VFXManager listens to Player's hit events totally decoupled from CombatSystem.
+        const vfxRef = GM.v.vfx;
+        GM.v.player.signals.slashHit.connect((enemy, comboStep) => {
+            if (enemy && enemy.screenPos && vfxRef) {
+                vfxRef.spawnSlash(enemy.screenPos.x, enemy.screenPos.y, comboStep, comboStep === 3);
+            }
+        });
+
+        GM.v.mb = GM.addChild(new MotionBridge(GM.v.visual, GM.v.combat, {
+            'idle': createTextureSet('Blues'),
+            'ready': createTextureSet('Blues'),
+            'dodge': createTextureSet('Blues_dash'),
+            'attack': [createTextureSet('Blues_atk0'), createTextureSet('Blues_atk1'), createTextureSet('Blues_atk2'), createTextureSet('Blues_atk3')],
+            'hurt': createTextureSet('Blues_hurt'),
+            'defeat': createTextureSet('Blues_hurt'),
+        }))
+        GM.v.mb.tags.add('actor');
+
+        GM.v.physic = GM.addChild(new PhysicSimulator(GM.v.world.world));
+        GM.v.physic.register(GM.v.player);
+
+        GM.v.world.world.fillTestGround(GM.v.world.world);
+
+        const spawns = [[15, 1, 15], [20, 1, 12], [25, 1, 18]];
+        const enemyMotions = {
+            'idle': createTextureSet('Blues2'),
+            'strafe': createTextureSet('Blues'),
+            'windup': createTextureSet('Blues2'),
+            'attack': [createTextureSet('Blues_atk0'), createTextureSet('Blues_atk1'), createTextureSet('Blues_atk2'), createTextureSet('Blues_atk3')],
+            'cooldown': createTextureSet('Blues2'),
+            'hurt': createTextureSet('Blues_hurt'),
+        };
+
+        for (const s of spawns) {
+            const enemy = GM.addChild(new EnemyNode(s[0], s[1], s[2], GM.v.player, GM.v.three));
+            const enemySprite = GM.addChild(new SpriteComponent(enemy, createTextureSet('Blues2'), GM.v.three.scene, GM.v.three.camera, 0.5));
+            GM.addChild(new MotionBridge(enemySprite, enemy.combat, enemyMotions, MotionBridge.enemyResolver));
+            GM.v.physic.register(enemy);
+            GM.v.combat.registerEnemy(enemy);
+            GM.v.time.manage(enemy); // TimeManager assumes responsibility over this effect layer
+        }
+
+        // Subject players and effects to the TimeManager simulation layer
+        GM.v.time.manage(GM.v.player);
+        GM.v.time.manage(GM.v.player_ctrl);
+        GM.v.time.manage(GM.v.vfx);
+
+        log("Modular setup complete.");
+        GM.v = null;
+    };
+
+    const gameLoop = (now) => {
+        requestAnimationFrame(gameLoop);
+
+        const delta = now - GM.lastTime;
+        if (delta < GM.frameTime) return;
+        GM.lastTime = now - (delta % GM.frameTime);
+
+        GM.update();
+
+
+        // UI Refresh (Clear before children draw to uiCtx)
+        uiCtx.clearRect(0, 0, 480, 320);
+        GM.draw();
+        uiCtx.fillStyle = "rgba(255,255,255,0.8)";
+        uiCtx.font = "bold 12px monospace";
+        uiCtx.fillText("ZENZERO 4 RESTORED", 10, 20);
+    };
+
+    try {
+        setup();
+        requestAnimationFrame(gameLoop);
+    } catch (e) {
+        logError(e.stack);
+    }
+</script>
